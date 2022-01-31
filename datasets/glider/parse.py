@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import pathlib
+import sys
+
 import pandas as pd
 
-output_file = pathlib.Path(__file__).parent.joinpath("parsed", "glider_labels.csv")
-raw_labels_dir = pathlib.Path(__file__).parent.joinpath("raw").absolute()
-mammal_detections_path = raw_labels_dir.joinpath("INANIN_Deployment2_MM_Detections.xlsx")
-impulsive_noise_detections_path = raw_labels_dir.joinpath("INANIN_Impulsive_Noise_Sources.xlsx")
+config_path = pathlib.Path(__file__).parent.joinpath("config.py").absolute()
+sys.path.insert(0, str(config_path))
+import config
+
+output_file = config.PARSED_LABELS_PATH
+mammal_detections_path = config.MAMMAL_DETECTIONS_PATH
+impulsive_noise_detections_path = config.IMPULSIVE_NOISE_PATH
 
 positive_detection_minutes = pd.read_excel(mammal_detections_path, sheet_name="Positive_Detection_Minutes")
 baleen_whale_encounters = pd.read_excel(mammal_detections_path, sheet_name="Baleen_Whale_Encounters", dtype=object)
