@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
+from cmath import inf
 from fileinput import filename
 import pathlib
 import subprocess
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
 config_path = pathlib.Path(__file__).parent.joinpath("config.py").absolute()
 sys.path.insert(0, str(config_path))
 import config
+
+def format_datetime(dt):
+    return dt.strftime(config.DATETIME_FORMAT)
 
 def get_wav_info(wav_filepath):
     output = subprocess.run(["ffprobe", "-i", str(wav_filepath), "-show_streams"], capture_output=True)
@@ -26,10 +30,15 @@ def get_wav_info(wav_filepath):
 
     filename_information = re.search(r"([^_]+)_([0-9]{3})_([0-9]{6}_[0-9]{6})\.wav", wav_filepath.name)
     
-    idk_what_this_is = filename_information.group(1)
-    idk_what_this_is_2 = filename_information.group(2)
+    dive_number = filename_information.group(1)
+    identification_number = filename_information.group(2)
+
     timestring = filename_information.group(3)
-    timestamp = datetime.strptime(timestring, "%y%m%d_%H%M%S") # "%H%M%S_%d%m%y"
+    try:
+        timestamp = datetime.strptime(timestring, "%y%m%d_%H%M%S")
+    except Exception as ex:
+        print(ex)
+        timestamp = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     
     metadata = {
         "filename": wav_filepath.relative_to(config.DATASET_DIRECTORY), 
@@ -37,14 +46,15 @@ def get_wav_info(wav_filepath):
         "sampling_rate": sampling_rate, 
         "num_samples": num_samples, 
         "duration_seconds": duration_seconds,
-        "timestamp": timestamp,
+        "start_time": format_datetime(timestamp),
+        "end_time": format_datetime(timestamp + timedelta(seconds=duration_seconds))
     }
     return metadata
 
-def main():
+def main(dev=False):
     data = {}
     for index, file in enumerate(config._AUDIO_FILE_LIST):
-        print(index, len(config._AUDIO_FILE_LIST))
+        print(index, len(config._AUDIO_FILE_LIST), file.name)
         info = get_wav_info(file)
 
         for key in info.keys():
@@ -53,12 +63,11 @@ def main():
             else:
                 data[key].append(info[key])
 
-
-        if index >= 100:
+        if dev and index >= 100:
             break
 
     df = pd.DataFrame(data=data)
     df.to_csv(config.AUDIO_FILE_CSV_PATH, index=False)
 
 if __name__ == "__main__":
-    main()
+    main(dev = False)
