@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 import pathlib
-import subprocess
-import re
-
-import pandas as pd
 
 _GLIDER_DATASET_LABELS_DIRECTORY = pathlib.Path(__file__).parent.absolute()
 
@@ -22,3 +18,5 @@ DATASET_DIRECTORY = pathlib.Path("/cluster/work/martimoa/hdd_copy/").absolute()
 
 _AUDIO_FILE_LIST = list(DATASET_DIRECTORY.glob("**/*.wav"))
 AUDIO_FILE_CSV_PATH = _PARSED_DIRECTORY.joinpath("glider_wav_metadata.csv")
+
+DATETIME_FORMAT = "%Y.%m.%dT%H:%M:%S.%f"
