@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import json
 
 import pandas as pd
+import numpy as np
 
 config_path = pathlib.Path(__file__).parent.joinpath("config.py").absolute()
 sys.path.insert(0, str(config_path))
@@ -26,39 +28,45 @@ def _parse_timestamps(df, time_col, date_col="Date"):
     return dt
 
 def parse_baleen_whale_encounter(detection_events):
+    baleen_whale_encounters["source_sheet"] = "Baleen_Whale_Encounters"
+    baleen_whale_encounters["sheet_row_id"] = baleen_whale_encounters.index + 2
+    baleen_whale_encounters["source_file"] = mammal_detections_path.name
+    
     baleen_whale_encounters["start_time"] = _parse_timestamps(baleen_whale_encounters, "Start time", date_col="Date")
     baleen_whale_encounters["end_time"] = _parse_timestamps(baleen_whale_encounters, "End time", date_col="Date")
 
     biophonic_idx = baleen_whale_encounters["Anthr. noise interference"].isna()
-    biophonic = baleen_whale_encounters[biophonic_idx][["start_time", "end_time", "Delta time", "Detection method", "Species", "Extra observations", "Note:"]]
-    anthropogenic = baleen_whale_encounters[~biophonic_idx][["start_time", "end_time", "Delta time", "Detection method", "Anthr. noise interference", "Extra observations", "Note:"]]
     
-    anthropogenic["source_class"] = "Anthropogenic"
-    biophonic["source_class"] = "Biophonic"
+    baleen_whale_encounters.loc[biophonic_idx, "source_class"] = "Biophonic"
+    baleen_whale_encounters.loc[~biophonic_idx, "source_class"] = "Anthropogenic"
 
-    detection_events.append(anthropogenic)
-    detection_events.append(biophonic)
+    detection_events.append(baleen_whale_encounters)
 
     return detection_events
 
 
 def parse_toothed_whale_encounters(detection_events):
+    toothed_whale_encounters["source_sheet"] = "Toothed_Whale_Encounters"
+    toothed_whale_encounters["sheet_row_id"] = toothed_whale_encounters.index + 2
+    toothed_whale_encounters["source_file"] = mammal_detections_path.name
+    
     toothed_whale_encounters["start_time"] = _parse_timestamps(toothed_whale_encounters, "Start time", date_col="Date")
     toothed_whale_encounters["end_time"] = _parse_timestamps(toothed_whale_encounters, "End time", date_col="Date")
 
     biophonic_idx = toothed_whale_encounters["Anthr. noise interference"].isna()
-    biophonic = toothed_whale_encounters[biophonic_idx][["start_time", "end_time", "Delta time", "Detection method", "Species", "Extra observations"]]
-    anthropogenic = toothed_whale_encounters[~biophonic_idx][["start_time", "end_time", "Delta time", "Detection method", "Anthr. noise interference", "Extra observations"]]
 
-    anthropogenic["source_class"] = "Anthropogenic"
-    biophonic["source_class"] = "Biophonic"
+    toothed_whale_encounters.loc[biophonic_idx, "source_class"] = "Anthropogenic"
+    toothed_whale_encounters.loc[~biophonic_idx, "source_class"] = "Biophonic"
 
-    detection_events.append(anthropogenic)
-    detection_events.append(biophonic)    
+    detection_events.append(toothed_whale_encounters)
      
     return detection_events
 
 def parse_impulsive_noise(detection_events):
+    toothed_whale_encounters["source_sheet"] = "Toothed_Whale_Encounters"
+    toothed_whale_encounters["sheet_row_id"] = toothed_whale_encounters.index + 2
+    toothed_whale_encounters["source_file"] = mammal_detections_path.name
+    
     date_as_string = impulsive_noise["Date"].astype(str)
     starttime_as_string = "T" + impulsive_noise["StartTime"].astype(str)
     start_datetime_as_string = date_as_string.str.cat(starttime_as_string)
@@ -71,6 +79,11 @@ def parse_impulsive_noise(detection_events):
     parsed = pd.DataFrame(data={"start_time": start_datetime, "end_time": endtime_datetime})
     parsed["source_class"] = "Anthropogenic"
     parsed["Potential source"] = impulsive_noise["Potential source"]
+    
+    parsed["source_sheet"] = "ImpulsiveNoise"
+    parsed["sheet_row_id"] = impulsive_noise.index + 2
+    parsed["source_file"] = impulsive_noise_detections_path.name
+
     detection_events.append(parsed)
     return detection_events
     
@@ -80,11 +93,24 @@ def combine_data(detection_events):
     combined = pd.DataFrame(columns=output_cols)
 
     for df in detection_events:
+        if not all(col in df.columns for col in ["source_file", "source_sheet", "sheet_row_id"]):
+            print("Df is missing columns")
+            print(df.columns.values)
+
         metadata_df = df.loc[:, list(set(df.columns) - set(required_columns))]
+        for col in metadata_df.columns:
+            if metadata_df[col].dtype == "datetime64[ns]":
+                metadata_df[col] = metadata_df[col].dt.strftime(config.DATETIME_FORMAT)
+            elif metadata_df[col].dtype == "int64":
+                metadata_df[col] = metadata_df[col].astype(str)
+            else: # metadata_df[col].dtype == "object":
+                metadata_df[col] = metadata_df[col].astype(str)
+        
         metadata = []
         for i in range(len(metadata_df)):
             row = metadata_df.iloc[i]
-            meta = {col: row[col] for col in metadata_df.columns}
+            d = {col: row[col] for col in metadata_df.columns}
+            meta = json.dumps(d)
             metadata.append(meta)
         
         data = pd.DataFrame(df[required_columns].values, columns=required_columns)
