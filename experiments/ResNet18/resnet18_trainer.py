@@ -28,7 +28,7 @@ def init_args():
 
 def train(args):
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    
+
     dataset             =   MelSpectrogramDataset(GLIDER(), verbose=args.verbose)
     class_information   =   dataset.classes()
     
@@ -69,4 +69,7 @@ def main():
     train(args)
 
 if __name__ == "__main__":
-    main()
+    # main()
+    print(torch.cuda.current_device())
+    for device_id in range(torch.cuda.device_count()):
+        print(device_id, torch.cuda.get_device_name(device_id))
