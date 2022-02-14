@@ -1,0 +1,27 @@
+name: TDT4900
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - matplotlib=3.5
+  - ffmpeg[version='=4.4.0|3.4.2|4.3.1']
+  - rich=10.14.0
+  - python=3.9
+  - pytorch
+  - torchvision
+  - bibtexparser=1.1.0
+  - scipy=1.7.3
+  - gsutil=5.5
+  - scikit-learn=1.0.1
+  - librosa=0.8.1
+  - seaborn=0.11.2
+  - numpy=1.21.4
+  - basemap=1.2.2
+  - conda-lock=0.13.1
+  - google-cloud-storage=1.42.3
+  - tqdm=4.62.3
+  - openpyxl=3.0.9
+  - cudatoolkit
+  - python-dotenv
+  - gitpython
+  - xlsxwriter
