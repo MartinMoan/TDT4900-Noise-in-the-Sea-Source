@@ -77,8 +77,9 @@ def log_fold(model, fold, truth, predictions, probabilities, *args, **kwargs):
         f1 = f1_score(truth, predictions, average="weighted")
         roc_auc = roc_auc_score(truth, probabilities, average="weighted")
         print(f"FOLD {fold} accuracy {accuracy:.8f} precision {precision:.8f} f1 {f1:.8f} roc_auc {roc_auc:.8f}")
-        tracker.track(*args, roc_auc=roc_auc, accuracy=accuracy, f1_score=f1, precision=precision, model=model.__class__.__name__, **kwargs)
-        saver.save(model, mode="fold_eval", accuracy=accuracy, precision=precision, f1=f1, roc_auc=roc_auc)
+        saved_path = saver.save(model, mode="fold_eval", accuracy=accuracy, precision=precision, f1=f1, roc_auc=roc_auc)
+        model_params_path = saved_path.absolute().relative_to(config.REPO_DIR)
+        tracker.track(*args, fold=fold, roc_auc=roc_auc, accuracy=accuracy, f1_score=f1, precision=precision, model=model.__class__.__name__, model_parameters_path=model_params_path, **kwargs)
     except Exception as ex:
         print(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
