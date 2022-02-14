@@ -2,9 +2,15 @@
 '''
     Script to investigate labels with no associated files.
 '''
+import pathlib
 from datetime import timedelta
-import config
+import sys
+
 import pandas as pd 
+import git
+
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
 
 file_list = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
 file_list["end_time"] = pd.to_datetime(file_list["end_time"], format=config.DATETIME_FORMAT, errors="coerce")

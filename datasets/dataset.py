@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+from argparse import ArgumentError
+from importlib.resources import path
 import pathlib
 import sys
 import inspect
 import copy
 import warnings
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 import matplotlib.pyplot as plt
 import librosa
@@ -15,22 +16,19 @@ from librosa.filters import mel
 import numpy as np
 import torch
 from rich import print
+import git
 
-from dclde.dataset import DCLDE
-
-class TorchDataset(torch.utils.data.Dataset):
-    def __init__(self, featurefunc, verbose=False, resample=True):
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
+from BasicDataset import BasicDataset
+        
+class AudioDataset(torch.utils.data.Dataset):
+    def __init__(self, basic_dataset, featurefunc=None, verbose=False, resample=True):
         super().__init__()
-        self._data = DCLDE(resample=resample)
-        # self._classes = {
-        #     "biophonic": 0,
-        #     "anthropogenic": 1,
-        #     "geogenic": 2,
-        #     # 3: "noise"
-        # }
-        self._classes = {
-            "biophonic": 0
-        }
+        if not isinstance(basic_dataset, BasicDataset):
+            raise Exception(f"basic_dataset argument of incorrect type. Expected BasicDataset but received {type(basic_dataset)}")
+        self._data = basic_dataset
+        
         if featurefunc is None:
             raise Exception("Error: argument featurefunc is None. Must be not None callable with signature (samples, sr)")
         
@@ -48,16 +46,17 @@ class TorchDataset(torch.utils.data.Dataset):
         self._seen_Y_shape = None
 
     def classes(self):
-        return copy.deepcopy(self._classes)
+        return copy.deepcopy(self._data.classes()) #copy.deepcopy(self._classes)
 
     def __len__(self):
         return len(self._data)
 
     def _labels(self, species_annotations):
-        classes = np.zeros(len(self._classes.keys()))
-        if len(species_annotations) > 0:
-            classes[self._classes["biophonic"]] = 1
-        return classes
+        class_labels = self._data.classes()
+        output = np.zeros(len(class_labels))
+        for key in class_labels.keys():
+            output[class_labels[key]] = species_annotations[key]
+        return output
 
     def _to_tensor(self, nparray):
         return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
@@ -84,30 +83,32 @@ class TorchDataset(torch.utils.data.Dataset):
         try:
             filepath, samples, sr, species_annotations = self._data[index]
             
-            # TODO: Fix implementation; naive approach to add zeros if file is not of expected 60 second length
-            if len(samples) != int(sr * 60): # Expect 1 minute recording
-                zeros = np.zeros(int(sr*60) - len(samples))
-                samples = np.concatenate([samples, zeros])
+            # # TODO: Fix implementation; naive approach to add zeros if file is not of expected 60 second length
+            # if len(samples) != int(sr * 60 * 10): # Expect 10 minute recording
+            #     zeros = np.zeros(int(sr * 60 * 10) - len(samples))
+            #     samples = np.concatenate([samples, zeros])
 
             if self.verbose:
                 print(filepath)
-            
+
             features = self._feature(samples, sr)
+            
             labels = self._labels(species_annotations)
             X, Y = self._to_single_channel_batch(self._to_tensor(features)), self._to_tensor(labels)
             X, Y = self._store_shapes(X, Y)
             return X, Y
+
         except Exception as ex:
             warnings.warn(f"An error occured when loading sample {index} with TorchDataset {str(ex)}. Returning zeroes with correct dimensions by default.")
             X = torch.zeros(self._seen_X_shape, dtype=torch.float32)
             Y = torch.zeros(self._seen_Y_shape, dtype=torch.float32)
             return X, Y
 
-class MelSpectrogramDataset(TorchDataset):
-    def __init__(self, n_mels=128, n_fft=2048, *args, **kwargs):
+class MelSpectrogramDataset(AudioDataset):
+    def __init__(self, *args, n_mels=128, n_fft=2048, **kwargs):
         self._n_mels = n_mels
         self._n_fft = n_fft
-        super().__init__(featurefunc=self._melspect, *args, **kwargs)
+        super().__init__(*args, featurefunc=self._melspect, **kwargs)
 
     def _melspect(self, samples, sr):
         """Compute the mel_spectrogram of the input samples, and normalize frequency bins to have 0 mean and unit variance
@@ -131,7 +132,11 @@ class MelSpectrogramDataset(TorchDataset):
         return S_db
 
 if __name__ == "__main__":
-    data = MelSpectrogramDataset(verbose=True, resample=True)
-
+    glider_path = pathlib.Path(__file__).parent.joinpath("glider")
+    sys.path.insert(0, str(glider_path))
+    from GLIDER import GLIDER
+    glider = GLIDER()
+    data = MelSpectrogramDataset(glider, verbose=True, resample=True)
+    
     X, Y = data[4]
     print(X.shape, Y)
