@@ -5,9 +5,9 @@ import json
 
 import pandas as pd
 import numpy as np
+import git
 
-config_path = pathlib.Path(__file__).parent.joinpath("config.py").absolute()
-sys.path.insert(0, str(config_path))
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
 output_file = config.PARSED_LABELS_PATH

@@ -8,9 +8,9 @@ import sys
 from datetime import datetime, timedelta
 
 import pandas as pd
+import git
 
-config_path = pathlib.Path(__file__).parent.joinpath("config.py").absolute()
-sys.path.insert(0, str(config_path))
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent).working_dir)))
 import config
 
 def format_datetime(dt):

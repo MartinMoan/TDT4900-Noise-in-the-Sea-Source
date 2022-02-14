@@ -17,7 +17,7 @@ module load Anaconda3/2020.07
 conda init --all
 source ~/.bashrc
 
-conda activate TDT4501
+conda activate TDT4900
 conda info --envs
 
-python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 16 --num-workers 16 --prediction-threshold 0.5 --force-gpu --verbose
+VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 16 --num-workers 16 --prediction-threshold 0.5 --force-gpu --verbose

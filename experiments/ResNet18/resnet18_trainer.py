@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 import argparse
 import pathlib
+import sys
 
 import torch
+from rich import print
+import git
 
-from ResNet18 import ResNet18
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
 from dataset import MelSpectrogramDataset
+from GLIDER import GLIDER
+from ResNet18 import ResNet18
 import trainer
 
 def init_args():
@@ -23,9 +29,9 @@ def init_args():
 def train(args):
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     
-    dataset             =   MelSpectrogramDataset(verbose=args.verbose)
-    class_information = dataset.classes()
-
+    dataset             =   MelSpectrogramDataset(GLIDER(), verbose=args.verbose)
+    class_information   =   dataset.classes()
+    
     lr                  =   args.learning_rate
     weight_decay        =   args.weight_decay
     epochs              =   args.epochs
@@ -33,7 +39,7 @@ def train(args):
     num_workers         =   args.num_workers
     n_model_outputs     =   len(class_information.keys())
     output_activation   =   torch.nn.Sigmoid() # Task is binary classification (audiofile contains biophonic event or not), therefore sigmoid [0, 1]
-    loss_ref            =   torch.nn.BCELoss
+    loss_ref            =   torch.nn.BCEWithLogitsLoss
     optimizer_ref       =   torch.optim.Adamax
 
     model_ref           =   ResNet18
