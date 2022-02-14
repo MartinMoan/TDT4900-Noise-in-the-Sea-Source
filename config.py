@@ -11,12 +11,12 @@ import git
 from rich import print
 
 repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
-repo_dir = pathlib.Path(repo.working_dir).absolute()
+REPO_DIR = pathlib.Path(repo.working_dir).absolute()
 
-for directory in [d for d in repo_dir.glob("**/*") if d.is_dir()]:
+for directory in [d for d in REPO_DIR.glob("**/*") if d.is_dir()]:
     sys.path.insert(0, str(directory))
 
-_GLIDER_DATASET_LABELS_DIRECTORY = repo_dir.joinpath("datasets", "glider")
+_GLIDER_DATASET_LABELS_DIRECTORY = REPO_DIR.joinpath("datasets", "glider")
 
 _PARSED_LABELS_CSV_FILENAME = "glider_labels.csv"
 _PARSED_DIRECTORY = _GLIDER_DATASET_LABELS_DIRECTORY.joinpath("parsed")
@@ -40,7 +40,7 @@ NEGATIVE_INSTANCE_CLASS_LABEL = False
 DATETIME_FORMAT = "%Y.%m.%dT%H:%M:%S.%f"
 
 # Tracking:
-TRACKING_DIRECTORY = repo_dir.joinpath("tracking")
+TRACKING_DIRECTORY = REPO_DIR.joinpath("tracking")
 EXPERIMENTS_TRACKING_DIRECTORY = TRACKING_DIRECTORY.joinpath("results") # pathlib.Path(__file__).parent.joinpath("results")
 EXPERIMENTS_FILE = EXPERIMENTS_TRACKING_DIRECTORY.joinpath("results.csv")
 LOGGED_AT_COLUMN = "created_at"
@@ -53,6 +53,6 @@ if os.environ.get("VIRTUAL_DATASET_LOADING") is None:
 VIRTUAL_DATASET_LOADING = os.environ.get("VIRTUAL_DATASET_LOADING").strip().lower() == "true"
 
 # Saver.py
-DEFAULT_PARAMETERS_PATH = repo_dir.joinpath("models", "parameters").absolute()
+DEFAULT_PARAMETERS_PATH = REPO_DIR.joinpath("models", "parameters").absolute()
 if not DEFAULT_PARAMETERS_PATH.exists():
     DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
