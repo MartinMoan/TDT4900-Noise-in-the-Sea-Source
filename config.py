@@ -47,6 +47,16 @@ LOGGED_AT_COLUMN = "created_at"
 COMMAND_AND_ARCUMENTS_COLUMN = "command"
 GIT_COMMIT_HASH_COLUMN = "commit"
 
+# SCOPES = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+SCOPES = ['https://www.googleapis.com/auth/drive']
+SPREADSHEET_ID = '1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw'
+SHEET_ID = 267619714
+
+c1, c2 = 181/255, 241/255
+HEADER_BACKGROUND_COLOR = {"red": c1, "green": c1, "blue": c1, "alpha": 1}
+ODD_ROW_BACKGROUND_COLOR = {"red": c2, "green": c2, "blue": c2, "alpha": 1}
+EVEN_ROW_BACKGROUND_COLOR = {"red": 1, "green": 1, "blue": 1, "alpha": 1}
+
 # Datasets loading
 if os.environ.get("VIRTUAL_DATASET_LOADING") is None:
     warnings.warn("Evironment variable VIRTUAL_DATASET_LOADING is missing, using default value False")
