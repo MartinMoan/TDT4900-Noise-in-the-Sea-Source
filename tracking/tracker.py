@@ -11,6 +11,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+import sheets
 
 def _create_results_path_if_not_exists(path):
     if path.suffix != "":
@@ -44,13 +45,7 @@ def _init_missing_df_columns(df, *args, **kwargs):
     return df
 
 def _get_dataframe(*args, **kwargs):
-    df = None
-    if not config.EXPERIMENTS_FILE.exists():
-        df = pd.DataFrame(columns=combine_args(*args, **kwargs).keys())
-    else:
-        df = pd.read_csv(config.EXPERIMENTS_FILE)
-        df = _init_missing_df_columns(df, *args, **kwargs)
-    return df
+    return sheets.load_csv()
 
 def _empty_row(df, *args, **kwargs):
     arguments = combine_args(*args, **kwargs)
@@ -60,13 +55,17 @@ def _empty_row(df, *args, **kwargs):
 def _add_data(df, *args, **kwargs):
     data = combine_args(*args, **kwargs)
     row = _empty_row(df, *args, **kwargs)
-    row[config.LOGGED_AT_COLUMN] = datetime.now().strftime(config.DATETIME_FORMAT)
+    # row[config.LOGGED_AT_COLUMN] = datetime.now().strftime(config.DATETIME_FORMAT)
     for key in data.keys():
         row[key] = data[key]
-    return df.append(row, ignore_index=True)
+    row = pd.DataFrame(data=[row])
+    # return df.append(row, ignore_index=True)
+    return pd.concat([df, row], ignore_index=True)
     
-def _save(df, *args, **kwargs):
-    df.to_csv(config.EXPERIMENTS_FILE, index=False)
+def _save(df, order=[], col_order=[]):
+    # df.to_csv(config.EXPERIMENTS_FILE, index=False)
+    # print(col_order)
+    sheets.save_csv(df, order=order, col_order=col_order)
 
 def _get_git_commit_hash():
     repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
@@ -81,8 +80,8 @@ def _get_command_and_arguments():
     repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
     repo_path = pathlib.Path(repo.working_dir)
     script = pathlib.Path(sys.argv[0]).absolute().relative_to(repo_path.parent.absolute())
-    sys.argv[0] = str(script)
-    return {"command": " ".join(sys.argv)}
+    args = [str(script)] + sys.argv[1:] 
+    return {"command": " ".join(args)}
 
 def _get_host_info():
     uname = os.uname()
@@ -97,19 +96,40 @@ def _get_host_info():
 
 def _add_default_arguments(*args, **kwargs):
     args = list(args)
-    args.append(_get_command_and_arguments())
-    args.append(_get_git_commit_hash())
-    args.append(_get_host_info())
-    args = tuple(args)
-    return args, kwargs
+    newargs = []
+    newargs.append(_get_command_and_arguments())
+    newargs.append(_get_git_commit_hash())
+    newargs.append(_get_host_info())
+    newargs.append({config.LOGGED_AT_COLUMN: datetime.now().strftime(config.DATETIME_FORMAT)})
+    newcols = []
+    for arg in newargs:
+        newcols += arg.keys()
+    args = tuple(list(args) + list(newargs))
+    return args, kwargs, newcols
 
-def track(*args, **kwargs):
-    args, kwargs = _add_default_arguments(*args, **kwargs)
+def _set_col_order(df, default_cols, col_order):
+    if col_order == [] or col_order is None:
+        c = list(set(default_cols).union(set(df.columns)) - set(default_cols))
+        col_order = c + default_cols
+    else:
+        missing_cols = list(set(df.columns).union(default_cols) - set(col_order))
+        col_order += missing_cols
+    return col_order
+
+def track(*args, order=[], col_order=[], **kwargs):
+    args, kwargs, default_cols = _add_default_arguments(*args, **kwargs)
     _create_results_path_if_not_exists(config.EXPERIMENTS_FILE)
     df = _get_dataframe(*args, **kwargs)
     df = _add_data(df, *args, **kwargs)
-    _save(df, *args, **kwargs)
+    
+    col_order = _set_col_order(df, default_cols, col_order)
+    
+    _save(df, order=order, col_order=col_order)
 
 if __name__ == "__main__":
-    d = {"akey": "yeah!"}
-    track(1, 2, d, astring="Test", something="a string", something_new="Does this show up?")
+    print("Beginning to test tracking...")
+    import time
+    for i in range(5):
+        track(order=["created_at"], col_order=["created_at"])
+        time.sleep(2)
+    print("Tracking test done!")
