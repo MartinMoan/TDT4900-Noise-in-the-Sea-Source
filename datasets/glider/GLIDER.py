@@ -50,13 +50,14 @@ class GLIDER(BasicDataset):
         return len(self._audiofiles)
 
     def _get_samples(self, filename):
+        samples, sr = [], None
         if config.VIRTUAL_DATASET_LOADING:
             dur = 3
             sr = 200
             samples = np.random.random(dur * sr)
-            return samples, sr
         else:
             samples, sr = librosa.load(filename, sr=None)
+        return samples, sr
 
     def _get_labels(self, row):
         if config.VIRTUAL_DATASET_LOADING:
