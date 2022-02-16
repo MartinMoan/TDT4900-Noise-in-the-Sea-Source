@@ -6,6 +6,7 @@ import sys
 import inspect
 import copy
 import warnings
+import re
 
 import matplotlib.pyplot as plt
 import librosa
@@ -88,7 +89,7 @@ class AudioDataset(torch.utils.data.Dataset):
                 samples = np.concatenate([samples, zeros])
 
             if self.verbose:
-                print(repr(str(filepath)))
+                print(index, re.sub(r"\n*", "", str(filepath)))
 
             features = self._feature(samples, sr)
             
