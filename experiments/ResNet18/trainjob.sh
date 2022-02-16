@@ -5,7 +5,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:P100:2
+#SBATCH --gres=gpu:2
+#SBATCH --constraint=P100
 #SBATCH --mem=42000
 #SBATCH --job-name="ResNet18 Training"
 #SBATCH --output="resnet18_trainer.out"
