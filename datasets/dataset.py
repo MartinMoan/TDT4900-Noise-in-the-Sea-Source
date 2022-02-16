@@ -82,11 +82,10 @@ class AudioDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         try:
             filepath, samples, sr, species_annotations = self._data[index]
-            
-            # # TODO: Fix implementation; naive approach to add zeros if file is not of expected 60 second length
-            # if len(samples) != int(sr * 60 * 10): # Expect 10 minute recording
-            #     zeros = np.zeros(int(sr * 60 * 10) - len(samples))
-            #     samples = np.concatenate([samples, zeros])
+            # TODO: Fix implementation; naive approach to add zeros if file is not of expected 10 minute length
+            if len(samples) != int(sr * 60 * 10): # Expect 10 minute recording
+                zeros = np.zeros(int(sr * 60 * 10) - len(samples))
+                samples = np.concatenate([samples, zeros])
 
             if self.verbose:
                 print(repr(str(filepath)))
