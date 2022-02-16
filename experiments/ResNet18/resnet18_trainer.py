@@ -69,7 +69,4 @@ def main():
     train(args)
 
 if __name__ == "__main__":
-    # main()
-    print(torch.cuda.current_device())
-    for device_id in range(torch.cuda.device_count()):
-        print(device_id, torch.cuda.get_device_name(device_id))
+    main()

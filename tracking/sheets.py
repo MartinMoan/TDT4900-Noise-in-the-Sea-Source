@@ -9,11 +9,12 @@ from oauth2client.service_account import ServiceAccountCredentials
 from rich import print
 import git
 
-sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+REPO_DIR = pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)
+sys.path.insert(0, str(REPO_DIR))
 import config
 
 def authenticate():
-    credentials_path = pathlib.Path(__file__).parent.joinpath("credentials.json")
+    credentials_path = REPO_DIR.joinpath("credentials.json")
     creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
     client = gspread.authorize(creds)
     return client
