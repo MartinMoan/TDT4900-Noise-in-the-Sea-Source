@@ -89,7 +89,7 @@ class AudioDataset(torch.utils.data.Dataset):
             #     samples = np.concatenate([samples, zeros])
 
             if self.verbose:
-                print(filepath)
+                print(repr(str(filepath)))
 
             features = self._feature(samples, sr)
             

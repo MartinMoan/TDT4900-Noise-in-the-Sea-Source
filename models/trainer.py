@@ -51,6 +51,10 @@ def train(model, trainset, epochs=8, lr=1e-3, weight_decay=1e-5, loss_ref=torch.
     for epoch in range(epochs):
         epoch_loss = 0
         for batch, (X, Y) in enumerate(trainset):
+            print("trainer.py train batch loop")
+            print(batch)
+            print(X.shape, Y.shape)
+            print()
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
             
