@@ -2,71 +2,70 @@
 import pathlib
 import sys
 import json
+import copy 
 
 import pandas as pd
 import numpy as np
 import git
+from rich import print
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-output_file = config.PARSED_LABELS_PATH
-mammal_detections_path = config.MAMMAL_DETECTIONS_PATH
-impulsive_noise_detections_path = config.IMPULSIVE_NOISE_PATH
-
-positive_detection_minutes = pd.read_excel(mammal_detections_path, sheet_name="Positive_Detection_Minutes")
-baleen_whale_encounters = pd.read_excel(mammal_detections_path, sheet_name="Baleen_Whale_Encounters", dtype=object)
-toothed_whale_encounters = pd.read_excel(mammal_detections_path, sheet_name="Toothed_Whale_Encounters")
-impulsive_noise = pd.read_excel(impulsive_noise_detections_path, sheet_name="ImpulsiveNoise")
+# positive_detection_minutes = pd.read_excel(config.MAMMAL_DETECTIONS_PATH, sheet_name="Positive_Detection_Minutes")
 
 def _parse_timestamps(df, time_col, date_col="Date"):
-    datetime_format = f"%Y-%m-%d %H:%M:%f"
     dates = df[date_col].astype(str)
     times = df[time_col].astype(str)
     formated = dates.str.cat(times, sep=" ")
-    dt = pd.to_datetime(formated, format=datetime_format)
+    dt = pd.to_datetime(formated, format=config.DATETIME_FORMAT)
     return dt
 
 def parse_baleen_whale_encounter(detection_events):
+    baleen_whale_encounters = pd.read_excel(config.MAMMAL_DETECTIONS_PATH, sheet_name="Baleen_Whale_Encounters", dtype=object)
     baleen_whale_encounters["source_sheet"] = "Baleen_Whale_Encounters"
     baleen_whale_encounters["sheet_row_id"] = baleen_whale_encounters.index + 2
-    baleen_whale_encounters["source_file"] = mammal_detections_path.name
+    baleen_whale_encounters["source_file"] = config.MAMMAL_DETECTIONS_PATH.name
     
     baleen_whale_encounters["start_time"] = _parse_timestamps(baleen_whale_encounters, "Start time", date_col="Date")
     baleen_whale_encounters["end_time"] = _parse_timestamps(baleen_whale_encounters, "End time", date_col="Date")
 
-    biophonic_idx = baleen_whale_encounters["Anthr. noise interference"].isna()
+    anthropogenic_idx = baleen_whale_encounters["Anthr. noise interference"].notna()
+    baleen_whale_encounters["source_class"] = "Biophonic"
+    baleen_whale_encounters["source_class_specific"] = baleen_whale_encounters["Species"]
+    anthropogenic = copy.copy(baleen_whale_encounters.loc[anthropogenic_idx])
+    anthropogenic["source_class"] = "Anthropogenic"
+    anthropogenic["source_class_specific"] = anthropogenic["Anthr. noise interference"]
+    helper = pd.concat([baleen_whale_encounters, anthropogenic], ignore_index=True)
+    baleen_whale_encounters = helper
     
-    baleen_whale_encounters.loc[biophonic_idx, "source_class"] = "Biophonic"
-    baleen_whale_encounters.loc[~biophonic_idx, "source_class"] = "Anthropogenic"
-
     detection_events.append(baleen_whale_encounters)
-
     return detection_events
 
 
 def parse_toothed_whale_encounters(detection_events):
+    toothed_whale_encounters = pd.read_excel(config.MAMMAL_DETECTIONS_PATH, sheet_name="Toothed_Whale_Encounters")
     toothed_whale_encounters["source_sheet"] = "Toothed_Whale_Encounters"
     toothed_whale_encounters["sheet_row_id"] = toothed_whale_encounters.index + 2
-    toothed_whale_encounters["source_file"] = mammal_detections_path.name
+    toothed_whale_encounters["source_file"] = config.MAMMAL_DETECTIONS_PATH.name
     
     toothed_whale_encounters["start_time"] = _parse_timestamps(toothed_whale_encounters, "Start time", date_col="Date")
     toothed_whale_encounters["end_time"] = _parse_timestamps(toothed_whale_encounters, "End time", date_col="Date")
 
-    biophonic_idx = toothed_whale_encounters["Anthr. noise interference"].isna()
+    anthropogenic_idx = toothed_whale_encounters["Anthr. noise interference"].notna()
+    toothed_whale_encounters["source_class"] = "Biophonic"
+    toothed_whale_encounters["source_class_specific"] = toothed_whale_encounters["Species"]
+    anthropogenic = copy.copy(toothed_whale_encounters.loc[anthropogenic_idx])
+    anthropogenic["source_class"] = "Anthropogenic"
+    anthropogenic["source_class_specific"] = anthropogenic["Anthr. noise interference"]
+    helper = pd.concat([toothed_whale_encounters, anthropogenic], ignore_index=True)
+    toothed_whale_encounters = helper
 
-    toothed_whale_encounters.loc[biophonic_idx, "source_class"] = "Anthropogenic"
-    toothed_whale_encounters.loc[~biophonic_idx, "source_class"] = "Biophonic"
-
-    detection_events.append(toothed_whale_encounters)
-     
+    detection_events.append(toothed_whale_encounters)     
     return detection_events
 
 def parse_impulsive_noise(detection_events):
-    toothed_whale_encounters["source_sheet"] = "Toothed_Whale_Encounters"
-    toothed_whale_encounters["sheet_row_id"] = toothed_whale_encounters.index + 2
-    toothed_whale_encounters["source_file"] = mammal_detections_path.name
-    
+    impulsive_noise = pd.read_excel(config.IMPULSIVE_NOISE_PATH, sheet_name="ImpulsiveNoise")
     date_as_string = impulsive_noise["Date"].astype(str)
     starttime_as_string = "T" + impulsive_noise["StartTime"].astype(str)
     start_datetime_as_string = date_as_string.str.cat(starttime_as_string)
@@ -78,17 +77,17 @@ def parse_impulsive_noise(detection_events):
 
     parsed = pd.DataFrame(data={"start_time": start_datetime, "end_time": endtime_datetime})
     parsed["source_class"] = "Anthropogenic"
-    parsed["Potential source"] = impulsive_noise["Potential source"]
+    parsed["source_class_specific"] = impulsive_noise["Potential source"]
     
     parsed["source_sheet"] = "ImpulsiveNoise"
     parsed["sheet_row_id"] = impulsive_noise.index + 2
-    parsed["source_file"] = impulsive_noise_detections_path.name
+    parsed["source_file"] = config.IMPULSIVE_NOISE_PATH.name
 
     detection_events.append(parsed)
     return detection_events
     
 def combine_data(detection_events):
-    required_columns = ["start_time", "end_time", "source_class"]
+    required_columns = ["start_time", "end_time", "source_class", "source_class_specific"]
     output_cols = ["start_time", "end_time", "source_class", "metadata"]
     combined = pd.DataFrame(columns=output_cols)
 
@@ -115,7 +114,8 @@ def combine_data(detection_events):
         
         data = pd.DataFrame(df[required_columns].values, columns=required_columns)
         data["metadata"] = metadata
-        combined = combined.append(data, ignore_index=True)
+        df = pd.concat([combined, data], ignore_index=True)
+        combined = df
     return combined
 
 def main():
@@ -125,7 +125,7 @@ def main():
     detection_events = parse_impulsive_noise(detection_events)
     combined = combine_data(detection_events)
     print(combined)
-    combined.to_csv(output_file, index=False)
+    combined.to_csv(config.PARSED_LABELS_PATH, index=False)
 
 if __name__ == "__main__":
     main()
