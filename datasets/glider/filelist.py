@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from cmath import inf
-from fileinput import filename
 import pathlib
 import subprocess
 import re
@@ -9,8 +7,9 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import git
+from rich import print
 
-sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent).working_dir)))
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
 def format_datetime(dt):
@@ -51,23 +50,33 @@ def get_wav_info(wav_filepath):
     }
     return metadata
 
+def get_filelist(dev=False, reload_files=True):
+    if reload_files:
+        data = {}
+        local_filelist = config.list_local_audiofiles()
+        for index, file in enumerate(local_filelist):
+            print(index, len(local_filelist), file.name)
+            info = get_wav_info(file)
+
+            for key in info.keys():
+                if key not in data.keys():
+                    data[key] = [info[key]]
+                else:
+                    data[key].append(info[key])
+
+            if dev and index >= 100:
+                break
+
+        df = pd.DataFrame(data=data)
+        df.to_csv(config.AUDIO_FILE_CSV_PATH, index=False)
+        return df
+    else:
+        df = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
+        return df
+
 def main(dev=False):
-    data = {}
-    for index, file in enumerate(config._AUDIO_FILE_LIST):
-        print(index, len(config._AUDIO_FILE_LIST), file.name)
-        info = get_wav_info(file)
-
-        for key in info.keys():
-            if key not in data.keys():
-                data[key] = [info[key]]
-            else:
-                data[key].append(info[key])
-
-        if dev and index >= 100:
-            break
-
-    df = pd.DataFrame(data=data)
-    df.to_csv(config.AUDIO_FILE_CSV_PATH, index=False)
+    df = get_filelist(reload_files=False)
 
 if __name__ == "__main__":
     main(dev = False)
+    
