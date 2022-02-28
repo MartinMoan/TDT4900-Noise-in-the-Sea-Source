@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
+import enum
+import multiprocessing
 import pathlib
 import sys
 import subprocess
+from multiprocessing.pool import ThreadPool, Pool
 import re
 import shutil
 from datetime import datetime
 
 import pandas as pd
+import numpy as np
 import git
 from rich import print
 
@@ -14,46 +18,52 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, __version__
 
-def azcopy_installed():
-    return shutil.which("azcopy") is not None
+def get_container_client():
+    return ContainerClient.from_container_url(config.DATASET_URL)
 
-def list_remote_files():
-    cmd = ["azcopy", "list", f'{config.DATASET_URL}', "--machine-readable"]
-    process = subprocess.run(cmd, capture_output=True, text=True)
-    if process.returncode != 0:
-        command = " ".join(cmd)
-        raise Exception(f"Could not list files in storage blob. Command {command} failed with non-zero returncode.\n{process.stdout}")
-    
-    content = process.stdout    
-    lines = re.split(r"\n+", content)
-    
-    min_matches = 3 # 3 required key/value pairs from azcopy list command (INFO, ContentType, 'Content Length')
-    data = {}
-    for line in lines:
-        matches = re.findall(r"([^:]+):\s*([^;]+);*\s*", line)
-        if len(matches) == min_matches:
-            for match in matches:
-                key, value = match
-                if key not in data.keys():
-                    data[key] = [value]
-                else:
-                    data[key].append(value)
-    
-    df = pd.DataFrame(data=data)
-    df["Content Length"] = df["Content Length"].astype(int)
-    df["ContentType"] = [pathlib.Path(path).suffix for path in df["INFO"].values]
-    df = df.sort_values(by="ContentType")
-    return df
+def missing_remote_blobs(client, local_filenames):
+    required_content_type="audio/x-wav"
+    blobs = client.list_blobs(config._DATASET_REMOTE_PREFIX)
+    missing_blobs = []
+    for blob in blobs:
+        content_settings = blob["content_settings"]
+        if content_settings is not None:
+            content_type=content_settings["content_type"]
+            if content_type is not None and content_type == required_content_type:
+                remote_relative_filepath = pathlib.Path(blob["name"])
+                filename = remote_relative_filepath.name
+                if filename not in local_filenames:
+                    missing_blobs.append(blob)
+    return missing_blobs
 
-def get_remote_audiofiles(missing_remote_files_df):
-    df = missing_remote_files_df
-    audio = df[(df["ContentType"] == ".wav")].copy()
-    not_audio = df[(df["ContentType"] != ".wav")]
+class MultiThreadAzureBlobDownloader:
+    def _download(self, blob):
+        filename = pathlib.Path(blob.name).name
+        local_tmp_filepath = config.TMP_DATA_DIR.joinpath(filename)
+        process = multiprocessing.current_process()
+        print(f"Process {process.pid} downloading remote file {filename} to {local_tmp_filepath.absolute()}")
+        client = get_container_client()
 
-    audio["remotePath"] = audio["INFO"]
-    filenames = [pathlib.Path(remotepath).name for remotepath in audio["remotePath"].values]
-    audio["filename"] = filenames
-    return audio
+        downloader = client.download_blob(blob, offset=0, length=blob.size, timeout=60)
+
+        try:
+            with open(local_tmp_filepath, "wb") as file:
+                props = downloader.download_to_stream(file)
+                print(f"Process {process.pid} done! File downloaded to {local_tmp_filepath.absolute()}")
+                return True, local_tmp_filepath
+        except Exception as ex:
+            print(f"Process {process.pid} failed downloading remote file {filename} to {local_tmp_filepath.absolute()}")
+            print(str(ex))
+            return False, local_tmp_filepath
+        
+
+    def download(self, blobs):
+        total_size = np.sum([blob.size for blob in blobs])
+        print(f"Beginning download of {len(blobs)} Azure storage blobs.")
+        print(f"With a total size of {bytes_to_gb(total_size):.2f} GB")
+        print()
+        with Pool(processes=int(multiprocessing.cpu_count() - 1)) as pool:
+            return pool.map(self._download, blobs)
 
 def get_local_audiofiles():
     return pd.DataFrame(data={"filename": [pathlib.Path(filepath).name for filepath in config.list_local_audiofiles()]})
@@ -61,40 +71,15 @@ def get_local_audiofiles():
 def bytes_to_gb(num_bytes):
     return num_bytes / (1000**3)
 
-def get_missing_files():
-    df = list_remote_files()
-    audio = get_remote_audiofiles(df)
-    
+def download_missing_files():
     local_files = get_local_audiofiles()
-
-    missing_files = audio[(~audio["filename"].isin(local_files["filename"]))]
-
-    missing_files.to_csv(config._META_MISSING_FILES_DIRECTORY.joinpath("remaining_files.csv"), index=False)
-    logmessage(audio, missing_files)
-    return missing_files
-
-def logmessage(audio, missing_files):
-    total_size_bytes = audio["Content Length"].sum()
-    missing_bytes = missing_files["Content Length"].sum()
-
-    total_gb = bytes_to_gb(total_size_bytes)
-    missing_gb = bytes_to_gb(missing_bytes)
-
-    print(f"Total remote dataset size {len(audio)} audio files totaling {total_gb} GB")
-    print(f"Total missing data {len(missing_files)} files totaling {missing_gb} GB")
-
-def download_missing_files(missing_files):
-    missing_files_list = missing_files["INFO"].values
-    print(f"Begginning to download {len(missing_files)} audiofiles to directory {str(config.TMP_DATA_DIR)}")
-    to_download = "\n".join(missing_files_list)
-    missing_files_txt_path = config._META_MISSING_FILES_DIRECTORY.joinpath("missing.txt")
-    file = open(missing_files_txt_path, "w")
-    file.write(to_download)
-    file.close()
-    cmd = ["azcopy", "copy", str(config.DATASET_URL), str(config.TMP_DATA_DIR), "--list-of-files", str(missing_files_txt_path)]
-    command = " ".join(cmd)
-    print(command)
-    process = subprocess.run(cmd, stdin=to_download)
+    local_filenames = local_files["filename"].values
+    
+    client = get_container_client()
+    missing_blobs = missing_remote_blobs(client, local_filenames)
+    downloader = MultiThreadAzureBlobDownloader()
+    downloaded_files = downloader.download(missing_blobs)
+    return downloaded_files
 
 def cleanup_tempfiles():
     tmp_files = list(config.TMP_DATA_DIR.glob("**/*.wav"))
@@ -117,13 +102,11 @@ def cleanup_tempfiles():
         shutil.move(file, destination)
 
 def main():
-    if not azcopy_installed():
-        raise Exception("azcopy is not installed. Install and add it to the system path and retry.")
     
-    missing_files = get_missing_files()
+    missing_files = download_missing_files()
     print(missing_files)
     download_missing_files(missing_files)
-    cleanup_tempfiles()
+    # cleanup_tempfiles()
 
 if __name__ == "__main__":
     main()
