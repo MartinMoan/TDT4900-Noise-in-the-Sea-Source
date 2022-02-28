@@ -6,6 +6,7 @@ import sys
 import os
 from types import TracebackType
 import warnings
+from urllib.parse import unquote
 
 import dotenv
 dotenv.load_dotenv()

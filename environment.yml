@@ -29,3 +29,4 @@ dependencies:
   - google-auth-oauthlib
   - gspread
   - google-api-python-client
+  - azure-storage-blob
