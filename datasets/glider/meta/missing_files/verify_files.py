@@ -29,7 +29,9 @@ def verify(files):
         return pool.map(_verify, files)
 
 def get_tmp_files():
+    print(f"Looking for .wav files in tmp data directory {str(config.TMP_DATA_DIR)}...")
     tmp_files = list(config.TMP_DATA_DIR.glob("**/*.wav"))
+    print(f"Found {len(tmp_files)} .wav files in tmp directory")
     return tmp_files
 
 def get_verified_tmp_files(verification_results):
