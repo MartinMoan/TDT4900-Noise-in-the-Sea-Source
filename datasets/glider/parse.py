@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import timedelta
 import pathlib
 import sys
 import json
@@ -21,6 +22,11 @@ def _parse_timestamps(df, time_col, date_col="Date"):
     dt = pd.to_datetime(formated, format=config.DATETIME_FORMAT)
     return dt
 
+def _ensure_start_before_end(df, start_time_col, end_time_col):
+    wrong_end_time = df[(df[start_time_col] >= df[end_time_col])]
+    df.loc[wrong_end_time.index, end_time_col] += np.timedelta64(1, "D")
+    return df
+
 def parse_baleen_whale_encounter(detection_events):
     baleen_whale_encounters = pd.read_excel(config.MAMMAL_DETECTIONS_PATH, sheet_name="Baleen_Whale_Encounters", dtype=object)
     baleen_whale_encounters["source_sheet"] = "Baleen_Whale_Encounters"
@@ -29,6 +35,8 @@ def parse_baleen_whale_encounter(detection_events):
     
     baleen_whale_encounters["start_time"] = _parse_timestamps(baleen_whale_encounters, "Start time", date_col="Date")
     baleen_whale_encounters["end_time"] = _parse_timestamps(baleen_whale_encounters, "End time", date_col="Date")
+
+    baleen_whale_encounters = _ensure_start_before_end(baleen_whale_encounters, "start_time", "end_time")
 
     anthropogenic_idx = baleen_whale_encounters["Anthr. noise interference"].notna()
     baleen_whale_encounters["source_class"] = "Biophonic"
@@ -51,6 +59,8 @@ def parse_toothed_whale_encounters(detection_events):
     
     toothed_whale_encounters["start_time"] = _parse_timestamps(toothed_whale_encounters, "Start time", date_col="Date")
     toothed_whale_encounters["end_time"] = _parse_timestamps(toothed_whale_encounters, "End time", date_col="Date")
+
+    toothed_whale_encounters = _ensure_start_before_end(toothed_whale_encounters, "Start time", "End time")
 
     anthropogenic_idx = toothed_whale_encounters["Anthr. noise interference"].notna()
     toothed_whale_encounters["source_class"] = "Biophonic"
@@ -76,6 +86,7 @@ def parse_impulsive_noise(detection_events):
     endtime_datetime = pd.to_datetime(end_datetime_as_string)
 
     parsed = pd.DataFrame(data={"start_time": start_datetime, "end_time": endtime_datetime})
+    parsed = _ensure_start_before_end(parsed, "start_time", "end_time")
     parsed["source_class"] = "Anthropogenic"
     parsed["source_class_specific"] = impulsive_noise["Potential source"]
     
