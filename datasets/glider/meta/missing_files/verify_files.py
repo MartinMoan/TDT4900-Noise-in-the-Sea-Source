@@ -69,4 +69,5 @@ def main():
     verify_non_tmp_files()
 
 if __name__ == "__main__":
+    print(__file__)
     main()
