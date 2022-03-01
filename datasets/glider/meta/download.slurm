@@ -23,4 +23,5 @@ VIRTUAL_DATASET_LOADING=False python ./missing_files/missing_files.py
 python ./missing_files/verify_files.py
 VIRTUAL_DATASET_LOADING=False python ./missing_files/missing_files.py
 python labels_without_files.py
+python ./missing_files/duplicates.py
 echo "slurmjob complete"
