@@ -27,8 +27,9 @@ def get_files(audiofiles_df, label):
     subset_files = audiofiles_df[(audiofiles_df["start_time"] >= start_time)]
     subset_files = subset_files[(subset_files["end_time"] <= end_time)]
     print(label)
-    print(start_time, end_time)
+    print()
     print(subset_files)
+    print()
     print()
     return subset_files
 
