@@ -56,8 +56,16 @@ def cleanup_tmp_files():
         print(f"Moving verified file {src.name} from {src} to {dest}")
         shutil.move(src, dest)
 
+def verify_non_tmp_files():
+    audiofiles = list(config.DATASET_DIRECTORY.glob("**/*.wav"))
+    results = verify(audiofiles)
+    not_verified = [result["path"] for result in results if not result["verified"]]
+    for file in not_verified:
+        print(f"File {str(file)} could not be verified")
+
 def main():
     cleanup_tmp_files()
+    verify_non_tmp_files()
 
 if __name__ == "__main__":
     main()
