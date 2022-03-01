@@ -2,6 +2,7 @@
 from inspect import trace
 from logging import warning
 import pathlib
+import getpass
 import sys
 import os
 from types import TracebackType
@@ -59,7 +60,7 @@ _RAW_FILES_DIRECTORY = _GLIDER_DATASET_LABELS_DIRECTORY.joinpath("raw")
 MAMMAL_DETECTIONS_PATH = _RAW_FILES_DIRECTORY.joinpath(_MAMMAL_DETECTIONS_XLSX_FILENAME)
 IMPULSIVE_NOISE_PATH = _RAW_FILES_DIRECTORY.joinpath(_IMPULSIVE_NOISE_XSLX_FILENAME)
 
-CLUSTER_WORKDIR = pathlib.Path("/cluster/work/martimoa")
+CLUSTER_WORKDIR = pathlib.Path(f"/cluster/work/{getpass.getuser()}")
 DATASET_DIRECTORY = CLUSTER_WORKDIR.joinpath("hdd_copy").absolute()
 _GLIDER_DATASET_DIRECTORY = DATASET_DIRECTORY.joinpath("GLIDER phase I deployment")
 TMP_DATA_DIR = DATASET_DIRECTORY.parent.joinpath("tmp_download_dir")

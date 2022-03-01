@@ -38,13 +38,13 @@ def get_wav_info(wav_filepath):
         timestamp = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     
     metadata = {
-        "filename": wav_filepath.relative_to(config.CLUSTER_WORKDIR), 
+        "filename": wav_filepath, # .relative_to(config.CLUSTER_WORKDIR), 
         "num_channels": num_channels, 
         "sampling_rate": sampling_rate, 
         "num_samples": num_samples, 
         "duration_seconds": duration_seconds,
-        "start_time": timestamp.strftime(config.DATETIME_FORMAT),
-        "end_time": (timestamp + timedelta(seconds=duration_seconds)).strftime(config.DATETIME_FORMAT)
+        "start_time": timestamp, # .strftime(config.DATETIME_FORMAT),
+        "end_time": (timestamp + timedelta(seconds=duration_seconds))# .strftime(config.DATETIME_FORMAT)
     }
     return metadata
 
