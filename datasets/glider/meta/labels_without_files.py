@@ -22,9 +22,15 @@ def _todatetime(df):
     return df
 
 def get_files(audiofiles_df, label):
-        start_time, end_time = label["start_time"], label["end_time"]
-        subset_files = audiofiles_df[(audiofiles_df["start_time"] >= start_time) & (audiofiles_df["end_time"] <= end_time)]
-        return subset_files
+    start_time, end_time = label["start_time"], label["end_time"]
+    # subset_files = audiofiles_df[(audiofiles_df["start_time"] >= start_time) & (audiofiles_df["end_time"] <= end_time)]
+    subset_files = audiofiles_df[(audiofiles_df["start_time"] >= start_time)]
+    subset_files = subset_files[(subset_files["end_time"] <= end_time)]
+    print(label)
+    print(start_time, end_time)
+    print(subset_files)
+    print()
+    return subset_files
 
 def to_excel(audiofiles, missing):
     sheet_name = "LabelsWithoutOverlapingFiles"
@@ -69,7 +75,7 @@ def main():
                 
     missing = pd.DataFrame(data=labels_without_files)
     print(f"There are {len(missing)} / {len(labels)} labels with no overlapping files.")
-    to_excel(audiofiles, missing)
+    # to_excel(audiofiles, missing)
     
 
 if __name__ == "__main__":
