@@ -12,12 +12,13 @@ from rich import print
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-def get_filelist(dev=False, reload_files=True):
+def get_filelist(dev=False, reload_files=True, printskip=100):
     if reload_files:
         data = {}
         local_filelist = config.list_local_audiofiles()
         for index, file in enumerate(local_filelist):
-            print(index, len(local_filelist), file.name)
+            if index % printskip == 0:
+                print(index, len(local_filelist), file.name)
             info = get_wav_info(file)
             if info is not None:
                 for key in info.keys():
