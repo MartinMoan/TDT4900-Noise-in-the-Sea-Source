@@ -59,7 +59,7 @@ MAMMAL_DETECTIONS_PATH = _RAW_FILES_DIRECTORY.joinpath(_MAMMAL_DETECTIONS_XLSX_F
 IMPULSIVE_NOISE_PATH = _RAW_FILES_DIRECTORY.joinpath(_IMPULSIVE_NOISE_XSLX_FILENAME)
 
 CLUSTER_WORKDIR = pathlib.Path("/cluster/work/martimoa")
-DATASET_DIRECTORY = CLUSTER_WORKDIR.joinpath("/hdd_copy/").absolute()
+DATASET_DIRECTORY = CLUSTER_WORKDIR.joinpath("hdd_copy").absolute()
 _GLIDER_DATASET_DIRECTORY = DATASET_DIRECTORY.joinpath("GLIDER phase I deployment")
 TMP_DATA_DIR = DATASET_DIRECTORY.parent.joinpath("tmp_download_dir")
 
@@ -73,7 +73,8 @@ if not TMP_DATA_DIR.exists():
         warn(f"Temporary dataset download directory does not exist, and could not be created automatically due to the following error", f"[Error No. {ex.errno}] {ex.strerror}")
 
 def list_local_audiofiles():
-    return list(DATASET_DIRECTORY.glob("**/*.wav")) + list(TMP_DATA_DIR.glob("**/*.wav"))
+    # return list(DATASET_DIRECTORY.glob("**/*.wav")) + list(TMP_DATA_DIR.glob("**/*.wav"))
+    return list(TMP_DATA_DIR.glob("**/*.wav"))
 
 AUDIO_FILE_CSV_PATH = _PARSED_DIRECTORY.joinpath("glider_wav_metadata.csv")
 
