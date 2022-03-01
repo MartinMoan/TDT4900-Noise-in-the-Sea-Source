@@ -28,7 +28,9 @@ def get_files(audiofiles_df, label):
 
 def to_excel(audiofiles, missing):
     sheet_name = "LabelsWithoutOverlapingFiles"
-    writer = pd.ExcelWriter(pathlib.Path(__file__).parent.joinpath(f"{pathlib.Path(__file__).stem}.xlsx"))
+    excel_path = pathlib.Path(__file__).parent.joinpath(f"{pathlib.Path(__file__).stem}.xlsx")
+    print(f"Storing list of labels without files to to {excel_path}")
+    writer = pd.ExcelWriter(excel_path)
     missing.to_excel(writer, sheet_name=sheet_name, index=False, na_rep="NaN")
     for column in missing.columns:
         width = max(missing[column].astype(str).map(len).max(), len(column))
@@ -67,7 +69,7 @@ def main():
                 
     missing = pd.DataFrame(data=labels_without_files)
     print(f"There are {len(missing)} / {len(labels)} labels with no overlapping files.")
-    # to_excel(audiofiles, missing)
+    to_excel(audiofiles, missing)
     
 
 if __name__ == "__main__":
