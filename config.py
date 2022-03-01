@@ -58,7 +58,8 @@ _RAW_FILES_DIRECTORY = _GLIDER_DATASET_LABELS_DIRECTORY.joinpath("raw")
 MAMMAL_DETECTIONS_PATH = _RAW_FILES_DIRECTORY.joinpath(_MAMMAL_DETECTIONS_XLSX_FILENAME)
 IMPULSIVE_NOISE_PATH = _RAW_FILES_DIRECTORY.joinpath(_IMPULSIVE_NOISE_XSLX_FILENAME)
 
-DATASET_DIRECTORY = pathlib.Path("/cluster/work/martimoa/hdd_copy/").absolute()
+CLUSTER_WORKDIR = pathlib.Path("/cluster/work/martimoa")
+DATASET_DIRECTORY = CLUSTER_WORKDIR.joinpath("/hdd_copy/").absolute()
 _GLIDER_DATASET_DIRECTORY = DATASET_DIRECTORY.joinpath("GLIDER phase I deployment")
 TMP_DATA_DIR = DATASET_DIRECTORY.parent.joinpath("tmp_download_dir")
 
