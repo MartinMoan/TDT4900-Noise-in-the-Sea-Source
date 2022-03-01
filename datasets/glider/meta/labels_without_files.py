@@ -69,7 +69,7 @@ def main():
                 
     missing = pd.DataFrame(data=labels_without_files)
     print(f"There are {len(missing)} / {len(labels)} labels with no overlapping files.")
-    # to_excel(audiofiles, missing)
+    to_excel(audiofiles, missing)
     
 
 if __name__ == "__main__":
