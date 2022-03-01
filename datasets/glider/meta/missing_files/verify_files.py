@@ -61,7 +61,8 @@ def verify_non_tmp_files():
     results = verify(audiofiles)
     not_verified = [result["path"] for result in results if not result["verified"]]
     for file in not_verified:
-        print(f"File {str(file)} could not be verified")
+        print(f"File {str(file)} could not be verified, removing...")
+        os.remove(file)
 
 def main():
     cleanup_tmp_files()
