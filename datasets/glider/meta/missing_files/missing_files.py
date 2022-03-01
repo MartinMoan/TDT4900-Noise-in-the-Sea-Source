@@ -114,7 +114,7 @@ def cleanup_tempfiles():
 def main():
     missing_files = download_missing_files()
     print(missing_files)
-    cleanup_tempfiles()
+    # cleanup_tempfiles()
 
 if __name__ == "__main__":
     main()

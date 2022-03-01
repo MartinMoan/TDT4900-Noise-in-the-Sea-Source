@@ -20,5 +20,6 @@ conda activate TDT4900
 conda info --envs
 
 VIRTUAL_DATASET_LOADING=False python missing_files.py
-VIRTUAL_DATASET_LOADING=False python verify_files.py
+python verify_files.py
+python labels_without_files.py
 echo "slurmjob complete"
