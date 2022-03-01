@@ -14,6 +14,8 @@ def get_wav_info(wav_filepath):
     output = subprocess.run(["ffprobe", "-i", str(wav_filepath), "-show_streams"], capture_output=True)
     if output.returncode != 0:
         print(f"Could not get information about file {wav_filepath}")
+        print(output.stdout.decode("utf8"))
+        print(output.stderr.decode("utf8"))
     
     decoded = output.stdout.decode("utf8")
     
