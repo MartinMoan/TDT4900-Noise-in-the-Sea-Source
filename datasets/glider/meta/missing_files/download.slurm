@@ -21,3 +21,4 @@ conda info --envs
 
 VIRTUAL_DATASET_LOADING=False python missing_files.py
 VIRTUAL_DATASET_LOADING=False python verify_files.py
+echo "slurmjob complete"
