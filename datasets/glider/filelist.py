@@ -19,15 +19,15 @@ def get_filelist(dev=False, reload_files=True):
         for index, file in enumerate(local_filelist):
             print(index, len(local_filelist), file.name)
             info = get_wav_info(file)
+            if info is not None:
+                for key in info.keys():
+                    if key not in data.keys():
+                        data[key] = [info[key]]
+                    else:
+                        data[key].append(info[key])
 
-            for key in info.keys():
-                if key not in data.keys():
-                    data[key] = [info[key]]
-                else:
-                    data[key].append(info[key])
-
-            if dev and index >= 100:
-                break
+                if dev and index >= 100:
+                    break
 
         df = pd.DataFrame(data=data)
         df.to_csv(config.AUDIO_FILE_CSV_PATH, index=False)

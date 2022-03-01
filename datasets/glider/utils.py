@@ -16,6 +16,7 @@ def get_wav_info(wav_filepath):
         print(f"Could not get information about file {wav_filepath}")
         print(output.stdout.decode("utf8"))
         print(output.stderr.decode("utf8"))
+        return None
     
     decoded = output.stdout.decode("utf8")
     
