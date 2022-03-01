@@ -37,25 +37,36 @@ def missing_remote_blobs(client, local_filenames):
     return missing_blobs
 
 class MultiThreadAzureBlobDownloader:
+    def _verified(self, local_filepath):
+        output = subprocess.run(["ffprobe", "-i", str(local_filepath), "-show_streams"], capture_output=True)
+        return output.returncode == 0
+
+    def _download_atempt(self, pid, blob, local_tmp_filepath):
+        client = get_container_client()
+        downloader = client.download_blob(blob, offset=0, length=blob.size, timeout=60)
+        with open(local_tmp_filepath, "wb") as file:
+            props = downloader.download_to_stream(file)
+            print(f"Process {pid} done! File downloaded to {local_tmp_filepath.absolute()}")
+
     def _download(self, blob):
         filename = pathlib.Path(blob.name).name
         local_tmp_filepath = config.TMP_DATA_DIR.joinpath(filename)
         process = multiprocessing.current_process()
         print(f"Process {process.pid} downloading remote file {filename} to {local_tmp_filepath.absolute()}")
-        client = get_container_client()
-
-        downloader = client.download_blob(blob, offset=0, length=blob.size, timeout=60)
 
         try:
-            with open(local_tmp_filepath, "wb") as file:
-                props = downloader.download_to_stream(file)
-                print(f"Process {process.pid} done! File downloaded to {local_tmp_filepath.absolute()}")
-                return True, local_tmp_filepath
+            for atempt in range(config._DATASET_MAX_FILE_DOWNLOAD_ATEMPTS):
+                self._download_atempt(process.pid, blob, local_tmp_filepath)
+                print(f"Process {process.pid} - verifying local file integrity {local_tmp_filepath.absolute()}")
+                if not self._verified(local_tmp_filepath):
+                    print(f"Process {process.pid} - could not verify file integrity, retrying...")
+                else: 
+                    return True, local_tmp_filepath
+            raise Exception(f"Failed to download and verify file {filename} from blob after {config._DATASET_MAX_FILE_DOWNLOAD_ATEMPTS} retries")
         except Exception as ex:
             print(f"Process {process.pid} failed downloading remote file {filename} to {local_tmp_filepath.absolute()}")
             print(str(ex))
-            return False, local_tmp_filepath
-        
+            return False, local_tmp_filepath 
 
     def download(self, blobs):
         total_size = np.sum([blob.size for blob in blobs])
@@ -93,7 +104,7 @@ def cleanup_tempfiles():
             timestamp = datetime.strptime(timestring, "%y%m%d_%H%M%S")
         except Exception as ex:
             print(ex)
-            timestamp = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            continue
 
         month_name = timestamp.strftime("%B")
         destination = config._GLIDER_DATASET_DIRECTORY.joinpath(month_name, file.name)
@@ -102,11 +113,10 @@ def cleanup_tempfiles():
         shutil.move(file, destination)
 
 def main():
-    
     missing_files = download_missing_files()
     print(missing_files)
     download_missing_files(missing_files)
-    # cleanup_tempfiles()
+    cleanup_tempfiles()
 
 if __name__ == "__main__":
     main()
