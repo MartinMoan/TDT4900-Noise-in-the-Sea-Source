@@ -24,14 +24,6 @@ def _todatetime(df):
 def get_files(audiofiles_df, label):
     start_time, end_time = label["start_time"], label["end_time"]
     subset_files = audiofiles_df[(audiofiles_df["start_time"] <= end_time) & (audiofiles_df["end_time"] >= start_time)]
-    # subset_files = audiofiles_df[(audiofiles_df["start_time"] >= start_time)]
-    # subset_files = subset_files[(subset_files["end_time"] <= end_time)]
-    if len(subset_files) == 0:
-        print(label)
-        print()
-        print(subset_files)
-        print()
-        print()
     return subset_files
 
 def to_excel(audiofiles, missing):
