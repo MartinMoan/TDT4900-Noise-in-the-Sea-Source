@@ -3,7 +3,7 @@
 #SBATCH --partition=CPUQ
 #SBATCH --time=00-24:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks=16
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=42000
 #SBATCH --job-name="Download GLIDER dataset missing files"
