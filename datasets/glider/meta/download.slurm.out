@@ -23,32 +23,57 @@ picrust2                 /cluster/apps/eb/software/Anaconda3/2020.07/envs/picrus
 TDT4501                  /cluster/home/martimoa/.conda/envs/TDT4501
 TDT4900               *  /cluster/home/martimoa/.conda/envs/TDT4900
 
+/cluster/home/martimoa/TDT4900-Noise-in-the-Sea-Source/datasets/glider/meta/./mi
+ssing_files/missing_files.py
+Found 8576 blobs in blobstorage, including non-audio files.
+Found 4664 blobs with content type audio/x-wav
+There are 5249 local audiofiles.
+With 0 files present in blobstorage not present amongst local files
+Beginning download of 0 Azure storage blobs missing from local directory.
+With a total size of 0.00 GB
+
+[]
+/cluster/home/martimoa/TDT4900-Noise-in-the-Sea-Source/datasets/glider/meta/./mi
+ssing_files/verify_files.py
+Looking for .wav files in tmp data directory 
+/cluster/work/martimoa/tmp_download_dir...
+Found 0 .wav files in tmp directory
+/cluster/home/martimoa/TDT4900-Noise-in-the-Sea-Source/datasets/glider/meta/./mi
+ssing_files/missing_files.py
+Found 8576 blobs in blobstorage, including non-audio files.
+Found 4664 blobs with content type audio/x-wav
+There are 5249 local audiofiles.
+With 0 files present in blobstorage not present amongst local files
+Beginning download of 0 Azure storage blobs missing from local directory.
+With a total size of 0.00 GB
+
+[]
 /cluster/home/martimoa/TDT4900-Noise-in-the-Sea-Source/datasets/glider/meta/labe
 ls_without_files.py
 0 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0337au_003_180805_084740.wav
 700 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0560au_004_180618_071238.wav
-1200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0456au_002_180819_164003.wav
 500 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0501au_006_180825_055401.wav
-300 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0576au_005_180620_042911.wav
+1200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0456au_002_180819_164003.wav
 1000 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0311bu_005_180802_162615.wav
-800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0348au_005_180806_150034.wav
+300 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0576au_005_180620_042911.wav
 100 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0418au_002_180814_200614.wav
-600 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0353au_001_180807_034516.wav
+800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0348au_005_180806_150034.wav
 1300 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0473au_006_180821_125153.wav
-400 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0407au_006_180813_135153.wav
+600 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0353au_001_180807_034516.wav
 1100 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0316bu_002_180803_043945.wav
+400 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0407au_006_180813_135153.wav
 200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0478au_003_180822_031658.wav
 900 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
@@ -73,10 +98,10 @@ deployment/August/pa0312bu_005_180802_190342.wav
 deployment/August/pa0479au_003_180822_063407.wav
 1800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0604au_001_180623_042535.wav
-1600 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/August/pa0362au_003_180808_053157.wav
 2500 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/September/pa0584au_004_180904_232603.wav
+1600 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/August/pa0362au_003_180808_053157.wav
 2300 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/August/pa0568au_001_180619_050732.wav
 2800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
@@ -89,7 +114,6 @@ deployment/July/pa0288au_002_180730_162154.wav
 deployment/July/pa0070bu_003_180710_173947.wav
 3800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0093au_002_180712_134452.wav
-time data '652585_453909' does not match format '%y%m%d_%H%M%S'
 2900 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0170au_002_180718_141537.wav
 2700 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
@@ -98,16 +122,17 @@ deployment/July/pa0091bu_003_180712_111144.wav
 deployment/July/pa0195au_003_180720_210327.wav
 3400 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0264bu_003_180728_110819.wav
+time data '652585_453909' does not match format '%y%m%d_%H%M%S'
 3200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0251au_005_180726_220848.wav
-3000 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/July/pa0171au_003_180718_161906.wav
 3900 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0201bu_002_180721_151321.wav
-4200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/July/pa0146bu_003_180716_183811.wav
+3000 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/July/pa0171au_003_180718_161906.wav
 3700 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0187bu_003_180720_031053.wav
+4200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/July/pa0146bu_003_180716_183811.wav
 4000 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0240au_005_180725_172727.wav
 4900 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
@@ -120,10 +145,10 @@ deployment/July/pa0274bu_001_180729_091304.wav
 deployment/July/pa0241au_001_180725_192552.wav
 5200 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0088bu_001_180712_050927.wav
-4100 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
-deployment/July/pa0122au_004_180714_200307.wav
 5000 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0063bu_002_180709_234945.wav
+4100 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
+deployment/July/pa0122au_004_180714_200307.wav
 4800 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
 deployment/July/pa0169bu_001_180718_131249.wav
 4600 5249 /cluster/work/martimoa/hdd_copy/GLIDER phase I 
@@ -158,7 +183,10 @@ end_time
 02:07:25
 
 [5249 rows x 7 columns]
-There are 8 / 545 labels with no overlapping files.
+There are 0 / 545 labels with no overlapping files.
 Storing list of labels without files to to /cluster/home/martimoa/TDT4900-Noise-
 in-the-Sea-Source/datasets/glider/meta/labels_without_files.xlsx
+/cluster/home/martimoa/TDT4900-Noise-in-the-Sea-Source/datasets/glider/meta/./mi
+ssing_files/duplicates.py
+Out of 5249 local audio files, there are 0 duplicate files
 slurmjob complete
