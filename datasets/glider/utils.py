@@ -35,7 +35,7 @@ def get_wav_info(wav_filepath):
         timestamp = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     
     metadata = {
-        "filename": wav_filepath.relative_to(config.DATASET_DIRECTORY), 
+        "filename": wav_filepath.relative_to(config.CLUSTER_WORKDIR), 
         "num_channels": num_channels, 
         "sampling_rate": sampling_rate, 
         "num_samples": num_samples, 
