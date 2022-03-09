@@ -82,7 +82,11 @@ class AudioDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         try:
-            filepath, samples, sr, species_annotations = self._data[index]
+            labeled_audio_data = self._data[index]
+            sr = labeled_audio_data.sampling_rate
+            filepath = labeled_audio_data.filepath
+            samples = labeled_audio_data.samples
+            
             # TODO: Fix implementation; naive approach to add zeros if file is not of expected 10 minute length
             if len(samples) != int(sr * 60 * 10): # Expect 10 minute recording
                 zeros = np.zeros(int(sr * 60 * 10) - len(samples))
@@ -93,7 +97,7 @@ class AudioDataset(torch.utils.data.Dataset):
 
             features = self._feature(samples, sr)
             
-            labels = self._labels(species_annotations)
+            labels = labeled_audio_data.fill_labels()
             X, Y = self._to_single_channel_batch(self._to_tensor(features)), self._to_tensor(labels)
             X, Y = self._store_shapes(X, Y)
             return X, Y
@@ -134,7 +138,7 @@ class MelSpectrogramDataset(AudioDataset):
 if __name__ == "__main__":
     glider_path = pathlib.Path(__file__).parent.joinpath("glider")
     sys.path.insert(0, str(glider_path))
-    from GLIDER import GLIDER
+    from glider.GLIDER import GLIDER
     glider = GLIDER()
     data = MelSpectrogramDataset(glider, verbose=True, resample=True)
     
