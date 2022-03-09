@@ -4,6 +4,7 @@ import sys
 from multiprocessing.pool import ThreadPool, Pool
 from datetime import timedelta
 from dataclasses import dataclass
+from threading import local
 
 import pandas as pd
 import numpy as np
@@ -22,16 +23,16 @@ class GLIDER(BasicDataset):
     def __init__(self):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
-        print(self._audiofiles.filename)
-        local_audiofiles = config.list_local_audiofiles()
-        local_audiofiles = [str(path) for path in local_audiofiles]
-        print(local_audiofiles[:10])
-        print(self._audiofiles.filename.values[:10])
-        print(self._audiofiles.filename.isin(local_audiofiles))
-
-        self._audiofiles = self._audiofiles.loc[self._audiofiles.filename.isin(local_audiofiles)]
-        print(self._audiofiles)
         
+        local_audiofiles = config.list_local_audiofiles()
+        if len(local_audiofiles) != len(self._audiofiles):
+            if len(local_audiofiles) > len(self._audiofiles):
+                warnings.warn(f"There are local files that do not exist among the described in the csv at {config.PARSED_LABELS_PATH}")
+            elif len(local_audiofiles) < len(self._audiofiles):
+                warnings.warn(f"There are files described in the csv at {config.PARSED_LABELS_PATH} that do not exist in any subdirectory of {config.DATASET_DIRECTORY}")
+        self._audiofiles.filename = [config.DATASET_DIRECTORY.joinpath(path) for path in self._audiofiles.filename.values]    
+        self._audiofiles = self._audiofiles[self._audiofiles.filename.isin(local_audiofiles)]
+
         self._label_columns = self._labels.source_class.unique()
         self._classdict = self.classes()
         self._label_audiofiles()
@@ -52,12 +53,14 @@ class GLIDER(BasicDataset):
     def _getitem_blocking(self, index):
         file = self._audiofiles.iloc[index]
         labels = self._get_labels(file)
-        samples, sr = librosa.load(file.filename, sr=None)
+        samples, sr = np.zeros(file.num_samples), file.sampling_rate
+        if not config.VIRTUAL_DATASET_LOADING:
+            samples, sr = librosa.load(file.filename, sr=None)
         return LabeledAudioData(
             index,
             pathlib.Path(file.filename), 
             file.num_channels, 
-            file.sampling_rate, 
+            sr, 
             file.num_samples, 
             file.start_time, 
             file.end_time,
@@ -67,12 +70,13 @@ class GLIDER(BasicDataset):
 
     def _getitem_async(self, index):
         file = self._audiofiles.iloc[index]
-        print(file)
         with ThreadPool(processes=2) as pool:
-            async_samples_result = pool.apply_async(librosa.load, (file.filename, ), {"sr": None})
             async_labels_result = pool.apply_async(self._get_labels, (file, ))
+            samples, sr = np.zeros(file.num_samples), file.sampling_rate
+            if not config.VIRTUAL_DATASET_LOADING:
+                async_samples_result = pool.apply_async(librosa.load, (file.filename, ), {"sr": None})
+                samples, sr = async_samples_result.get()
 
-            samples, sr = async_samples_result.get()
             labels = async_labels_result.get()
             return LabeledAudioData(
                 index,
@@ -93,6 +97,8 @@ class GLIDER(BasicDataset):
         return self._labels[(self._labels.start_time <= file.end_time) & (self._labels.end_time >= file.start_time)]
             
     def __len__(self):
+        if config.VIRTUAL_DATASET_LOADING:
+            return 42
         return len(self._audiofiles)
 
     def classes(self) -> dict:
@@ -108,7 +114,6 @@ class GLIDER(BasicDataset):
             if "time" in col.lower():
                 df[col] = pd.to_datetime(df[col], errors="coerce")
         return df
-
 
 if __name__ == "__main__":
     from time import perf_counter as timer

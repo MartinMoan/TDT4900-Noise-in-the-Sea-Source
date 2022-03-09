@@ -94,7 +94,7 @@ class AudioDataset(torch.utils.data.Dataset):
 
             if self.verbose:
                 print(index, str(filepath.name))
-
+            
             features = self._feature(samples, sr)
             
             labels = labeled_audio_data.fill_labels()
