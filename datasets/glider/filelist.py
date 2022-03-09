@@ -33,6 +33,8 @@ def get_filelist(dev=False, reload_files=True):
         data = {}
         local_filelist = config.list_local_audiofiles()
         fileinfo = get_file_info(local_filelist)
+        print(fileinfo)
+        exit()
         for index, info in enumerate(fileinfo):            
             if info is not None:
                 for key in info.keys():
