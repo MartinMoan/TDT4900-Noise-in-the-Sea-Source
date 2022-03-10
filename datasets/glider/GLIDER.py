@@ -38,6 +38,9 @@ class GLIDER(BasicDataset):
         self._label_audiofiles()
         if config.VIRTUAL_DATASET_LOADING:
             warnings.warn("The environment variable VIRTUAL_DATASET_LOADING is set to True, meaning that the GLIDER dataset loading class will only simulate loading datasets from disk. Ensure that this variable is not set during training or inference, as it is only intended to be used during local development.")
+            import socket
+            if "idun-login" in socket.gethostname():
+                raise Exception(f"GLIDER detected that the current hostname ({socket.gethostname()}) seems to correspond to the NTNU Idun computing cluster, while the VIRTUAL_DATASET_LOADING environment variable was set to True. This variable is only intended for local development and can cause unexpected results. This exception is raised to ensure that logs and model parameters are not overwritten using invalid/simulated data.")
         self._audiofiles.sort_values(by=["start_time"], inplace=True, ascending=True)
 
     def _label_audiofiles(self):
@@ -97,8 +100,6 @@ class GLIDER(BasicDataset):
         return self._labels[(self._labels.start_time <= file.end_time) & (self._labels.end_time >= file.start_time)]
             
     def __len__(self):
-        if config.VIRTUAL_DATASET_LOADING:
-            return 42
         return len(self._audiofiles)
 
     def classes(self) -> dict:
@@ -127,4 +128,5 @@ if __name__ == "__main__":
         total += dur
         print(f"{i} It took {(end_time - start_time)} seconds to load sample {i} average {total / (i+1)}")
         print(data)
-        print(data.fill_labels())
+        print(data.label_roll())
+        print(data.binary())

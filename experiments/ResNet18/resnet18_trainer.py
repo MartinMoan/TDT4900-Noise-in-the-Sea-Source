@@ -6,11 +6,13 @@ import sys
 import torch
 from rich import print
 import git
+import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from dataset import MelSpectrogramDataset
 from GLIDER import GLIDER
+from audiodata import LabeledAudioData
 from ResNet18 import ResNet18
 import trainer
 
@@ -26,10 +28,13 @@ def init_args():
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual loca files loaded if set.")
     return parser.parse_args()
 
+def label_accessor(basic_dataset: GLIDER, labeled_audio_data: LabeledAudioData, features: np.ndarray, **kwargs):
+    return labeled_audio_data.label_roll(N=features.shape[1])
+
 def train(args):
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    dataset             =   MelSpectrogramDataset(GLIDER(), verbose=args.verbose)
+    dataset             =   MelSpectrogramDataset(GLIDER(), verbose=args.verbose, label_accessor=label_accessor)
     class_information   =   dataset.classes()
     
     lr                  =   args.learning_rate
@@ -47,7 +52,7 @@ def train(args):
 
     train_kwargs        =   {"lr": lr, "weight_decay": weight_decay, "epochs": epochs, "loss_ref": loss_ref, "optimizer_ref": optimizer_ref, "device": device}
     eval_kwargs         =   {"threshold": args.prediction_threshold, "device": device}
-
+    col_order           =   [config.LOGGED_AT_COLUMN, "model", "description", "precision", "roc_auc", "accuracy", "f1_score"]
     if args.force_gpu and not torch.cuda.is_available():
         raise Exception(f"Force_gpu argument was set, but no CUDA device was found/available. Found device {device}")
 
@@ -61,7 +66,9 @@ def train(args):
         batch_size=batch_size, 
         num_workers=num_workers,
         train_kwargs=train_kwargs, 
-        eval_kwargs=eval_kwargs
+        eval_kwargs=eval_kwargs,
+        tracker_kwargs={"description": "ResNet18 model with 10-minute (recording length) input and spectrogram shaped label-roll output"},
+        col_order = col_order
     )
 
 def main():

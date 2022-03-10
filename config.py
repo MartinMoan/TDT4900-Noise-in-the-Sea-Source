@@ -92,11 +92,6 @@ LOGGED_AT_COLUMN = "created_at"
 COMMAND_AND_ARCUMENTS_COLUMN = "command"
 GIT_COMMIT_HASH_COLUMN = "commit"
 
-# SCOPES = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-SCOPES = ['https://www.googleapis.com/auth/drive']
-SPREADSHEET_ID = '1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw'
-SHEET_ID = 267619714
-
 c1, c2 = 181/255, 241/255
 HEADER_BACKGROUND_COLOR = {"red": c1, "green": c1, "blue": c1, "alpha": 1}
 ODD_ROW_BACKGROUND_COLOR = {"red": c2, "green": c2, "blue": c2, "alpha": 1}
@@ -111,3 +106,9 @@ VIRTUAL_DATASET_LOADING = os.environ.get("VIRTUAL_DATASET_LOADING").strip().lowe
 DEFAULT_PARAMETERS_PATH = REPO_DIR.joinpath("models", "parameters").absolute()
 if not DEFAULT_PARAMETERS_PATH.exists():
     DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
+
+ENV = os.environ.get("ENV", "dev")
+
+SCOPES = ['https://www.googleapis.com/auth/drive']
+SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
+SHEET_ID = int(os.environ.get(f"{ENV.upper()}_SHEET_ID"))

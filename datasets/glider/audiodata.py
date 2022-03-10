@@ -27,11 +27,13 @@ class LabeledAudioData(AudioData):
     labels: pd.DataFrame # the overlaping labels of the example
     labels_dict: dict # the label dictionary with {str: int} with int being the vertical axis of the sample_labels representing the label str
     
-    def fill_labels(self, N=None):
-        """Generate an C, N matrix of 0/1 values, where C equals the number of classes, and N being a positive integer. 
+    def label_roll(self, N=None):
+        """Generate the label roll consisting of N elements, e.g. a C, N matrix of 0/1 values, where C equals the number of classes, and N being a positive integer. 
         The label instances will be distributed over N accoring to the file start- and end timestamps along any overlapping label instances. 
         Args:
             N (None | int): The lenght of the output matrix second axis. If None the number of samples of the example is used.
+        Returns:
+            numpy.ndarray : the label roll
         """
         if N is None:
             N = self.num_samples
@@ -46,3 +48,15 @@ class LabeledAudioData(AudioData):
             last_sample = int((e - self.start_time) / (self.end_time - self.start_time) * N)
             sample_labels[self.labels_dict[label.source_class], first_sample:last_sample] = 1
         return sample_labels
+
+    def binary(self):
+        """Get the binary (true/false) label instance vector. E.g.: vector of C values, where C is the number of classes in the dataset, with 1 representing a true instance of class C.
+
+        Returns:
+            numpy.ndarray : The binary label vector
+        """
+        classes = self.labels.source_class.values
+        output = np.zeros(len(self.labels_dict.keys()))
+        for classname in classes:
+            output[self.labels_dict[classname]] = 1
+        return output

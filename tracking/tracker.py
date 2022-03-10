@@ -28,7 +28,11 @@ def combine_args(*args, **kwargs):
         for key in arg.keys():
             all_dict[key] = arg[key]
     for key in kwargs.keys():
-        all_dict[key] = kwargs[key]
+        if type(kwargs[key]) == dict:
+            for key2 in kwargs[key].keys():
+                all_dict[key2] = kwargs[key][key2]
+        else:
+            all_dict[key] = kwargs[key]
     return all_dict
 
 def _add_default_columns(df, *args, **kwargs):
@@ -109,19 +113,18 @@ def _add_default_arguments(*args, **kwargs):
 
 def _set_col_order(df, default_cols, col_order):
     if col_order == [] or col_order is None:
-        c = list(set(default_cols).union(set(df.columns)) - set(default_cols))
-        col_order = c + default_cols
+        non_default_cols = list(np.sort(list(set(default_cols).union(set(df.columns)) - set(default_cols))))
+        col_order = default_cols + non_default_cols
     else:
         missing_cols = list(set(df.columns).union(default_cols) - set(col_order))
         col_order += missing_cols
     return col_order
 
-def track(*args, order=[], col_order=[], **kwargs):
+def track(*args, order=[config.LOGGED_AT_COLUMN], col_order=[], **kwargs):
     args, kwargs, default_cols = _add_default_arguments(*args, **kwargs)
     _create_results_path_if_not_exists(config.EXPERIMENTS_FILE)
     df = _get_dataframe(*args, **kwargs)
     df = _add_data(df, *args, **kwargs)
-    
     col_order = _set_col_order(df, default_cols, col_order)
     
     _save(df, order=order, col_order=col_order)
