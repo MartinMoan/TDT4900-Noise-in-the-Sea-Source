@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:2
-#SBATCH --constraint=V100
+#SBATCH --constraint=V10032
 #SBATCH --mem=42000
 #SBATCH --job-name="ResNet18 Training"
 #SBATCH --output="resnet18.slurm.out"
