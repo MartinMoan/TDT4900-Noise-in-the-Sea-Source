@@ -9,7 +9,7 @@
 #SBATCH --constraint=P100
 #SBATCH --mem=42000
 #SBATCH --job-name="ResNet18 Training"
-#SBATCH --output="resnet18_trainer.out"
+#SBATCH --output="restnet18.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
@@ -21,4 +21,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 4 --num-workers 16 --prediction-threshold 0.5 --force-gpu --verbose
+ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 4 --num-workers 16 --prediction-threshold 0.5 --force-gpu --verbose
