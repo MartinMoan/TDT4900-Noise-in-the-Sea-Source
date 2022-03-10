@@ -24,7 +24,7 @@ import config
 from BasicDataset import BasicDataset
         
 class AudioDataset(torch.utils.data.Dataset):
-    def __init__(self, basic_dataset, featurefunc=None, verbose=False, resample=True):
+    def __init__(self, basic_dataset, featurefunc=None, verbose=False, resample=True, label_accessor=None):
         super().__init__()
         if not isinstance(basic_dataset, BasicDataset):
             raise Exception(f"basic_dataset argument of incorrect type. Expected BasicDataset but received {type(basic_dataset)}")
@@ -39,8 +39,15 @@ class AudioDataset(torch.utils.data.Dataset):
         signature = dict(inspect.signature(featurefunc).parameters)
         if len(signature.keys()) != 2:
             raise Exception(f"Error: argument featurefunc has incorrect number of expected arguments, expected callable with arguments (samples, sr) but received callable with arguments {signature}")
+
+        if label_accessor is None:
+            raise Exception("Error: argument label_accessor is None. Must be callable.")
+
+        if not callable(label_accessor):
+            raise Exception(f"Error: arugment label_accessor must be callable, but received uncallable of type {type(label_accessor)}")
         
         self._feature = featurefunc
+        self._label_accessor = label_accessor
         self.verbose = verbose
 
         self._seen_X_shape = None
@@ -97,21 +104,23 @@ class AudioDataset(torch.utils.data.Dataset):
             
             features = self._feature(samples, sr)
             
-            labels = labeled_audio_data.fill_labels()
+            labels = self._label_accessor(audio_dataset=self, basic_dataset=self._data, labeled_audio_data=labeled_audio_data, features=features)
             X, Y = self._to_single_channel_batch(self._to_tensor(features)), self._to_tensor(labels)
             X, Y = self._store_shapes(X, Y)
             return X, Y
 
         except Exception as ex:
-            warnings.warn(f"An error occured when loading sample {index} with TorchDataset {str(ex)}. Returning zeroes with correct dimensions by default.")
-            X = torch.zeros(self._seen_X_shape, dtype=torch.float32)
-            Y = torch.zeros(self._seen_Y_shape, dtype=torch.float32)
-            return X, Y
+            # warnings.warn(f"An error occured when loading sample {index} with TorchDataset {str(ex)}. Returning zeroes with correct dimensions by default.")
+            # X = torch.zeros(self._seen_X_shape, dtype=torch.float32)
+            # Y = torch.zeros(self._seen_Y_shape, dtype=torch.float32)
+            # return X, Y
+            raise ex
 
 class MelSpectrogramDataset(AudioDataset):
-    def __init__(self, *args, n_mels=128, n_fft=2048, **kwargs):
+    def __init__(self, *args, n_mels=128, n_fft=2048, hop_length=512, **kwargs):
         self._n_mels = n_mels
         self._n_fft = n_fft
+        self._hop_length = hop_length
         super().__init__(*args, featurefunc=self._melspect, **kwargs)
 
     def _melspect(self, samples, sr):
@@ -122,9 +131,13 @@ class MelSpectrogramDataset(AudioDataset):
             sr (int > 0): the sample rate of the sampled data
 
         Returns:
-            [np.array (n_mels, N)]: Standardized mel_spectrogram across frequency bins
+            [np.array (n_mels, 1 + (N / hop_length))]: Standardized mel_spectrogram across frequency bins
         """
-        S_db = librosa.power_to_db(librosa.feature.melspectrogram(y=samples, sr=sr, n_mels=self._n_mels, n_fft=self._n_fft))
+        if config.VIRTUAL_DATASET_LOADING:
+            output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
+            return np.zeros(output_shape)
+
+        S_db = librosa.power_to_db(librosa.feature.melspectrogram(y=samples, sr=sr, n_mels=self._n_mels, n_fft=self._n_fft, hop_length=self._hop_length))
         S_db = np.flip(S_db, axis=0)
         
         # Normalize across frequency bands (give every frequency band/bin 0 mean and unit variance)
@@ -140,7 +153,9 @@ if __name__ == "__main__":
     sys.path.insert(0, str(glider_path))
     from glider.GLIDER import GLIDER
     glider = GLIDER()
-    data = MelSpectrogramDataset(glider, verbose=True, resample=True)
+    
+    label_accessor = lambda labeled_audio_data: labeled_audio_data.label_roll()
+    data = MelSpectrogramDataset(glider, verbose=True, resample=True, label_accessor=label_accessor)
     
     X, Y = data[4]
     print(X.shape, Y)

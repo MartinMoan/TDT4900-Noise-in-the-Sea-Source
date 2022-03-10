@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from cgi import test
+from imghdr import tests
 import sys
 import pathlib
 from datetime import datetime
@@ -12,6 +14,7 @@ from rich import print
 from sklearn.model_selection import KFold
 from sklearn.metrics import f1_score, roc_auc_score, precision_score, accuracy_score
 import git
+import numpy as np
 
 import saver
 
@@ -20,6 +23,10 @@ import config
 import tracker
 
 def evaluate(model, testset, threshold=0.5, device=None):
+    if config.ENV == "dev":
+        zeros = np.zeros(len(testset))
+        return zeros, zeros, zeros
+    
     def cat(t1, t2):
         if t1 is None:
             return t2
@@ -44,6 +51,12 @@ def evaluate(model, testset, threshold=0.5, device=None):
         return truth, predictions, probabilities
 
 def train(model, trainset, epochs=8, lr=1e-3, weight_decay=1e-5, loss_ref=torch.nn.BCELoss, optimizer_ref=torch.optim.Adamax, device=None):
+    if config.ENV == "dev":
+        for epoch in range(epochs):
+            for batch in range(len(trainset)):
+                print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss -1 (simulated loss)")
+        return model
+
     optimizer = optimizer_ref(model.parameters(), lr=lr, weight_decay=weight_decay)
     lossfunction = loss_ref()
 
@@ -51,10 +64,6 @@ def train(model, trainset, epochs=8, lr=1e-3, weight_decay=1e-5, loss_ref=torch.
     for epoch in range(epochs):
         epoch_loss = 0
         for batch, (X, Y) in enumerate(trainset):
-            print("trainer.py train batch loop")
-            print(batch)
-            print(X.shape, Y.shape)
-            print()
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
             
@@ -67,7 +76,7 @@ def train(model, trainset, epochs=8, lr=1e-3, weight_decay=1e-5, loss_ref=torch.
 
             current_loss = loss.item()
             epoch_loss += current_loss
-
+            
             print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
             
         average_epoch_loss = epoch_loss / len(trainset)
@@ -76,18 +85,22 @@ def train(model, trainset, epochs=8, lr=1e-3, weight_decay=1e-5, loss_ref=torch.
 
 def log_fold(model, fold, truth, predictions, probabilities, *args, **kwargs):
     try:
-        accuracy = accuracy_score(truth, predictions)
-        precision = precision_score(truth, predictions, average="weighted")
-        f1 = f1_score(truth, predictions, average="weighted")
-        roc_auc = roc_auc_score(truth, probabilities, average="weighted")
-        print(f"FOLD {fold} accuracy {accuracy:.8f} precision {precision:.8f} f1 {f1:.8f} roc_auc {roc_auc:.8f}")
+        s = "-1 (simulated value)"
+        accuracy, precision, f1, roc_auc = s, s, s, s
+        if not config.VIRTUAL_DATASET_LOADING:
+            accuracy = accuracy_score(truth, predictions)
+            precision = precision_score(truth, predictions, average="weighted")
+            f1 = f1_score(truth, predictions, average="weighted")
+            roc_auc = roc_auc_score(truth, probabilities, average="weighted")
+            print(f"FOLD {fold} accuracy {accuracy:.8f} precision {precision:.8f} f1 {f1:.8f} roc_auc {roc_auc:.8f}")
+        
         saved_path = saver.save(model, mode="fold_eval", accuracy=accuracy, precision=precision, f1=f1, roc_auc=roc_auc)
         model_params_path = saved_path.absolute().relative_to(config.REPO_DIR)
         tracker.track(*args, fold=fold, roc_auc=roc_auc, accuracy=accuracy, f1_score=f1, precision=precision, model=model.__class__.__name__, model_parameters_path=model_params_path, **kwargs)
     except Exception as ex:
         print(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
-def kfoldcv(model_ref, model_kwargs, dataset, device, kfolds=5, batch_size=8, num_workers=1, train_kwargs={}, eval_kwargs={}):
+def kfoldcv(model_ref, model_kwargs, dataset, device, kfolds=5, batch_size=8, num_workers=1, train_kwargs={}, eval_kwargs={}, tracker_kwargs={}, col_order=[]):
     started_at = datetime.now()
     folds = KFold(n_splits=kfolds, shuffle=True)
     
@@ -106,7 +119,23 @@ def kfoldcv(model_ref, model_kwargs, dataset, device, kfolds=5, batch_size=8, nu
 
         truth, predictions, probabilities = evaluate(model, testset, **eval_kwargs)
 
-        log_fold(model, fold, truth, predictions, probabilities, model_kwargs, train_kwargs, eval_kwargs, kfolds=kfolds, device=device, batch_size=batch_size, num_workers=num_workers, started_at=started_at.strftime(config.DATETIME_FORMAT))
+        log_fold(
+            model, 
+            fold, 
+            truth, 
+            predictions, 
+            probabilities, 
+            model_kwargs, 
+            train_kwargs, 
+            eval_kwargs=eval_kwargs, 
+            kfolds=kfolds, 
+            device=device, 
+            batch_size=batch_size, 
+            num_workers=num_workers, 
+            started_at=started_at.strftime(config.DATETIME_FORMAT), 
+            tracker_kwargs=tracker_kwargs, 
+            col_order=col_order
+        )
 
         print(f"End fold {fold}")
         print("----------------------------------------")

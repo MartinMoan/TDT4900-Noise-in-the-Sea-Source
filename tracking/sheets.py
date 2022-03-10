@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import uuid
 
 import numpy as np
 import gspread
@@ -110,13 +111,13 @@ def _value_batch_update(df, client, spreadsheet, worksheet, order=[], col_order=
 def _delete_formatting(banded_range_id):
     return {"deleteBanding": {"bandedRangeId": banded_range_id}}
 
-def _formatting(df, command="addBanding"):
+def _formatting(df, next_id, command="addBanding"):
     output = {
         command: 
         {
             'bandedRange':
             {
-                'bandedRangeId': 1,
+                'bandedRangeId': str(next_id),
                 'range': 
                 {
                     'sheetId': config.SHEET_ID,
@@ -136,25 +137,30 @@ def _formatting(df, command="addBanding"):
     return output
 
 def _get_brange_ids(spreadsheet):
-    banded_range_ids = []
+    banded_range_ids_in_sheet = []
+    banded_range_ids_in_all_sheets = []
     spreadsheet_get_info = spreadsheet._spreadsheets_get()
     if "sheets" in spreadsheet_get_info.keys():
         for sheet in spreadsheet_get_info["sheets"]:
             if "properties" in sheet.keys() and "sheetId" in sheet["properties"].keys():
-                if sheet["properties"]["sheetId"] == config.SHEET_ID:
-                    if "bandedRanges" in sheet.keys():
-                        for brange in sheet["bandedRanges"]:
-                            if "bandedRangeId" in brange.keys():
-                                banded_range_ids.append(brange["bandedRangeId"])
-    return banded_range_ids
+                if "bandedRanges" in sheet.keys():
+                    for brange in sheet["bandedRanges"]:
+                        if "bandedRangeId" in brange.keys():
+                            if sheet["properties"]["sheetId"] == config.SHEET_ID:
+                                banded_range_ids_in_sheet.append(brange["bandedRangeId"])
+                            else:
+                                banded_range_ids_in_all_sheets.append(brange["bandedRangeId"])
+    next_id = 1 if len(banded_range_ids_in_all_sheets) == 0 else np.max(banded_range_ids_in_all_sheets) + 1
+    return banded_range_ids_in_sheet, next_id
 
 def _set_requests(df, client, spreadsheet, worksheet, order=[], col_order=[]):
     requests = [
         _value_batch_update(df, client, spreadsheet, worksheet, order=order, col_order=col_order),
         _resize_request(df),
     ]
-    requests += [_delete_formatting(BRANGE_ID) for BRANGE_ID in _get_brange_ids(spreadsheet)]
-    requests.append(_formatting(df, command="addBanding"))
+    banded_ranges_in_sheet, next_id = _get_brange_ids(spreadsheet)
+    requests += [_delete_formatting(BRANGE_ID) for BRANGE_ID in banded_ranges_in_sheet]
+    requests.append(_formatting(df, next_id=next_id, command="addBanding"))
     return requests
 
 def _batch_update(df, order=[], col_order=[]):
