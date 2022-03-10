@@ -6,10 +6,10 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:2
-#SBATCH --constraint=P100
+#SBATCH --constraint=V10032
 #SBATCH --mem=42000
 #SBATCH --job-name="ResNet18 Training"
-#SBATCH --output="restnet18.slurm.out"
+#SBATCH --output="resnet18.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
