@@ -2,9 +2,10 @@
 import pathlib
 import sys
 from multiprocessing.pool import ThreadPool, Pool
-from datetime import timedelta
+from datetime import timedelta, datetime
 from dataclasses import dataclass
 from threading import local
+from typing import Iterable, Mapping, Union
 
 import pandas as pd
 import numpy as np
@@ -16,11 +17,14 @@ import re
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from BasicDataset import BasicDataset
+from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
+EXPECTED_SR = 128000
+EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
+EXPECTED_NUM_CHANNLES = 1
 
-class GLIDER(BasicDataset):
-    def __init__(self):
+class GLIDER(ICustomDataset):
+    def __init__(self, pad = True):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
         
@@ -42,8 +46,13 @@ class GLIDER(BasicDataset):
             if "idun-login" in socket.gethostname():
                 raise Exception(f"GLIDER detected that the current hostname ({socket.gethostname()}) seems to correspond to the NTNU Idun computing cluster, while the VIRTUAL_DATASET_LOADING environment variable was set to True. This variable is only intended for local development and can cause unexpected results. This exception is raised to ensure that logs and model parameters are not overwritten using invalid/simulated data.")
         self._audiofiles.sort_values(by=["start_time"], inplace=True, ascending=True)
+        self._pad = pad
 
     def _label_audiofiles(self):
+        # Initialize label columns with missing values
+        for col in self._label_columns:
+            self._audiofiles[col] = None
+            
         for idx in self._audiofiles.index:
             row = self._audiofiles.loc[idx]
             file_labels = self._labels[(self._labels.start_time <= row.end_time) & (self._labels.end_time >= row.start_time)]
@@ -53,56 +62,59 @@ class GLIDER(BasicDataset):
         for col in self._label_columns:
             self._audiofiles[col] = self._audiofiles[col].fillna(config.NEGATIVE_INSTANCE_CLASS_LABEL)
 
-    def _getitem_blocking(self, index):
-        file = self._audiofiles.iloc[index]
-        labels = self._get_labels(file)
-        samples, sr = np.zeros(file.num_samples), file.sampling_rate
-        if not config.VIRTUAL_DATASET_LOADING:
-            samples, sr = librosa.load(file.filename, sr=None)
-        return LabeledAudioData(
-            index,
-            pathlib.Path(file.filename), 
-            file.num_channels, 
-            sr, 
-            file.num_samples, 
-            file.start_time, 
-            file.end_time,
-            samples, 
-            labels,
-            self._classdict)
-
     def _getitem_async(self, index):
         file = self._audiofiles.iloc[index]
         with ThreadPool(processes=2) as pool:
             async_labels_result = pool.apply_async(self._get_labels, (file, ))
             samples, sr = np.zeros(file.num_samples), file.sampling_rate
+                
             if not config.VIRTUAL_DATASET_LOADING:
                 async_samples_result = pool.apply_async(librosa.load, (file.filename, ), {"sr": None})
                 samples, sr = async_samples_result.get()
+
+            if self._pad:
+                new_end_dt, padded_samples = self._ensure_equal_length(samples, sr, file.end_time, to_length=int(self._audiofiles.num_samples.max()))
+                file.end_time = new_end_dt
+                samples = padded_samples
 
             labels = async_labels_result.get()
             return LabeledAudioData(
                 index,
                 pathlib.Path(file.filename), 
                 file.num_channels, 
-                sr,
-                file.num_samples, 
+                sr, 
                 file.start_time, 
                 file.end_time,
                 samples, 
                 labels,
                 self._classdict)
 
-    def __getitem__(self, index):
+    def _ensure_equal_length(self, samples: Iterable[float], sr: int, end_time: datetime, to_length: int) -> tuple[datetime, Iterable[float]]:
+        if len(samples) < to_length:
+            zeros = np.zeros(to_length - len(samples))
+            padded_samples = np.concatenate((samples, zeros), axis=0)
+            extra_duration_seconds = (to_length - len(samples)) / sr
+            
+            end_time = end_time + timedelta(seconds = extra_duration_seconds)
+            samples = padded_samples
+            
+        elif len(samples) > to_length:
+            duration_difference_seconds = (len(samples) - to_length) / sr
+            end_time = end_time - timedelta(seconds = duration_difference_seconds)
+            samples = samples[:to_length]
+        
+        return end_time, samples
+
+    def __getitem__(self, index: int) -> LabeledAudioData:
         return self._getitem_async(index)
             
-    def _get_labels(self, file):        
+    def _get_labels(self, file):
         return self._labels[(self._labels.start_time <= file.end_time) & (self._labels.end_time >= file.start_time)]
             
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._audiofiles)
 
-    def classes(self) -> dict:
+    def classes(self) -> Mapping[str, int]:
         """BasicDataset.classes 'abstract' method implementation. Returns a dictionary of classname: class_index value.
 
         Returns:
@@ -110,23 +122,29 @@ class GLIDER(BasicDataset):
         """
         return {self._label_columns[idx]: idx for idx in range(len(self._label_columns))}
 
+    def example_shapes(self) -> Iterable[tuple[int, int]]:
+        if self._pad:
+            output_shape = (self._audiofiles.num_channels.max(), self._audiofiles.num_samples.max())
+            return [output_shape for i in range(len(self._audiofiles))]
+        else:
+            shapes_as_lists = self._audiofiles[["num_channels", "num_samples"]].to_numpy()
+            shapes_as_tuples = [tuple(item) for item in shapes_as_lists]
+            return shapes_as_tuples
+
     def _todatetime(df):
         for col in df.columns:
             if "time" in col.lower():
                 df[col] = pd.to_datetime(df[col], errors="coerce")
         return df
 
+    def __str__(self):
+        return f"GLIDER(BasicDataset) object with {len(self)} instances"
+
 if __name__ == "__main__":
-    from time import perf_counter as timer
     dataset = GLIDER()
-    total = 0
+
     for i in range(len(dataset)):
-        start_time = timer()
         data = dataset[i]
-        end_time =  timer()
-        dur = end_time - start_time
-        total += dur
-        print(f"{i} It took {(end_time - start_time)} seconds to load sample {i} average {total / (i+1)}")
-        print(data)
-        print(data.label_roll())
-        print(data.binary())
+        # print(data)
+
+    

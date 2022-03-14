@@ -21,12 +21,12 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from BasicDataset import BasicDataset
+from ICustomDataset import ICustomDataset
         
 class AudioDataset(torch.utils.data.Dataset):
     def __init__(self, basic_dataset, featurefunc=None, verbose=False, resample=True, label_accessor=None):
         super().__init__()
-        if not isinstance(basic_dataset, BasicDataset):
+        if not isinstance(basic_dataset, ICustomDataset):
             raise Exception(f"basic_dataset argument of incorrect type. Expected BasicDataset but received {type(basic_dataset)}")
         self._data = basic_dataset
         
