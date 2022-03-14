@@ -15,9 +15,9 @@ dotenv.load_dotenv()
 import git
 from rich import print
 
-def warn(message, *args):
-    parts = "\n\t".join(args)
-    print(f"[bold red]{message}[/bold red]\n\t{parts}")
+import CustomWarnings
+# warnings.warn = CustomWarnings.warn
+warnings.formatwarning = CustomWarnings.custom_format
 
 repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
 REPO_DIR = pathlib.Path(repo.working_dir).absolute()
@@ -29,13 +29,13 @@ _DATASET_REMOTE_PREFIX=os.environ.get("GLIDER_BLOB_PATH")
 _DATASET_MAX_FILE_DOWNLOAD_ATEMPTS=3
 
 if _DATASET_SAS is None:
-    warn("Missing environment variable 'GLIDER_SharedAccessSignature' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
+    warnings.warn("Missing environment variable 'GLIDER_SharedAccessSignature' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
 if _DATASET_REMOTE_URL is None:
-    warn("Missing environment variable 'GLIDER_BLOB_URL' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
+    warnings.warn("Missing environment variable 'GLIDER_BLOB_URL' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
 if _DATASET_CONTAINER_NAME is None:
-    warn("Missing environment variable 'GLIDER_CONTAINER_NAME' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
+    warnings.warn("Missing environment variable 'GLIDER_CONTAINER_NAME' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
 if _DATASET_REMOTE_PREFIX is None:
-    warn("Missing environment variable 'GLIDER_BLOB_PATH' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
+    warnings.warn("Missing environment variable 'GLIDER_BLOB_PATH' from .env. This can cause unexpected errors when trying to communicate with the remote dataset blobstorage.")
 
 DATASET_URL=f"{_DATASET_REMOTE_URL}/{_DATASET_CONTAINER_NAME}?{_DATASET_SAS}"
 
@@ -66,13 +66,13 @@ _GLIDER_DATASET_DIRECTORY = DATASET_DIRECTORY.joinpath("GLIDER phase I deploymen
 TMP_DATA_DIR = DATASET_DIRECTORY.parent.joinpath("tmp_download_dir")
 
 if not DATASET_DIRECTORY.exists():
-    warn(f"The dataset directory {str(DATASET_DIRECTORY)} does not exist. This can lead to errors and unexpected results.")
+    warnings.warn(f"The dataset directory {str(DATASET_DIRECTORY)} does not exist. This can lead to errors and unexpected results.")
 
 if not TMP_DATA_DIR.exists():
     try:
         TMP_DATA_DIR.mkdir(parents=False, exist_ok=False)
     except Exception as ex:
-        warn(f"Temporary dataset download directory does not exist, and could not be created automatically due to the following error", f"[Error No. {ex.errno}] {ex.strerror}")
+        warnings.warn(f"Temporary dataset download directory does not exist, and could not be created automatically due to the following error", f"[Error No. {ex.errno}] {ex.strerror}")
 
 def list_local_audiofiles():
     return list(TMP_DATA_DIR.glob("**/*.wav")) + list(DATASET_DIRECTORY.glob("**/*.wav"))
@@ -99,7 +99,7 @@ EVEN_ROW_BACKGROUND_COLOR = {"red": 1, "green": 1, "blue": 1, "alpha": 1}
 
 # Datasets loading
 if os.environ.get("VIRTUAL_DATASET_LOADING") is None:
-    warn("Evironment variable VIRTUAL_DATASET_LOADING is missing, using default value False")
+    warnings.warn("Evironment variable VIRTUAL_DATASET_LOADING is missing, using default value False")
 VIRTUAL_DATASET_LOADING = os.environ.get("VIRTUAL_DATASET_LOADING").strip().lower() == "true"
 
 # Saver.py

@@ -27,13 +27,16 @@ def combine_args(*args, **kwargs):
     for arg in _get_all_dicts(*args):
         for key in arg.keys():
             all_dict[key] = arg[key]
-    for key in kwargs.keys():
-        if type(kwargs[key]) == dict:
-            for key2 in kwargs[key].keys():
-                all_dict[key2] = kwargs[key][key2]
+    flattened_args = pd.json_normalize(all_dict).to_dict(orient="records")[0]
+    flattened_kwargs = pd.json_normalize(kwargs).to_dict(orient="records")[0]
+    combined_dict = flattened_args
+    for key in flattened_kwargs.keys():
+        if key not in combined_dict.keys():
+            combined_dict[key] = flattened_kwargs[key]
         else:
-            all_dict[key] = kwargs[key]
-    return all_dict
+            newkey = f"kwargs.{key}"
+            combined_dict[newkey] = flattened_kwargs[key]
+    return combined_dict
 
 def _add_default_columns(df, *args, **kwargs):
     if config.LOGGED_AT_COLUMN not in df.columns:
@@ -120,7 +123,7 @@ def _set_col_order(df, default_cols, col_order):
         col_order += missing_cols
     return col_order
 
-def track(*args, order=[config.LOGGED_AT_COLUMN], col_order=[], **kwargs):
+def track(*args, order=[config.LOGGED_AT_COLUMN], col_order=[config.LOGGED_AT_COLUMN], **kwargs):
     args, kwargs, default_cols = _add_default_arguments(*args, **kwargs)
     _create_results_path_if_not_exists(config.EXPERIMENTS_FILE)
     df = _get_dataframe(*args, **kwargs)
