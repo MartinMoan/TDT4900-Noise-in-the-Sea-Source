@@ -16,8 +16,10 @@ import git
 from rich import print
 
 import CustomWarnings
-# warnings.warn = CustomWarnings.warn
-warnings.formatwarning = CustomWarnings.custom_format
+ENV = os.environ.get("ENV", "dev")
+if ENV == "dev":
+    # warnings.warn = CustomWarnings.warn
+    warnings.formatwarning = CustomWarnings.custom_format
 
 repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
 REPO_DIR = pathlib.Path(repo.working_dir).absolute()
@@ -106,8 +108,6 @@ VIRTUAL_DATASET_LOADING = os.environ.get("VIRTUAL_DATASET_LOADING").strip().lowe
 DEFAULT_PARAMETERS_PATH = REPO_DIR.joinpath("models", "parameters").absolute()
 if not DEFAULT_PARAMETERS_PATH.exists():
     DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
-
-ENV = os.environ.get("ENV", "dev")
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
