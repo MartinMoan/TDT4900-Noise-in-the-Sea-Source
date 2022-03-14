@@ -48,6 +48,10 @@ class ResNet18Module(nn.Module):
     def forward(self, X):
         return self._layers(X)
 
+class NoActionLayer(nn.Module):
+    def __call__(self, X: torch.Tensor):
+        return X
+
 class ResNet18(nn.Module):
     """ResNet18 achitecture"""
     def __init__(self, n_outputs, output_activation=None):
@@ -65,12 +69,10 @@ class ResNet18(nn.Module):
 
         self._out_activation = output_activation
         if output_activation is None:
-            warnings.warn("No output_activation function was provided to the ResNet18 __init__ method. Model will assume classification task with num classes defined by 'n_outputs' argument. To avoid this warning, provide the output activation function explicitly")
-
-            if n_outputs > 1:
-                self._out_activation = torch.nn.Softmax()
-            else:
-                self._out_activation = torch.nn.Sigmoid()
+            # warnings.warn("No output_activation function was provided to the ResNet18 __init__ method. Model will assume classification task with num classes defined by 'n_outputs' argument. To avoid this warning, provide the output activation function explicitly")
+            warnings.warn(f"No output_activation function was provided to the ResNet18 __init__ method. Will use {NoActionLayer} as the activation function for the output layer.")
+            self._out_activation = NoActionLayer()
+            
 
         self._layers = nn.Sequential(
             self._input,
