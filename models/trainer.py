@@ -127,6 +127,9 @@ def train(
             epoch_loss += current_loss
             
             print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
+            print(X)
+            print(Y)
+            print()
             
         average_epoch_loss = epoch_loss / len(trainset)
         saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
