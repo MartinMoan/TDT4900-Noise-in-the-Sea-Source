@@ -116,9 +116,9 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         audio_data = self._dataset[index]
-        features = self._feature_accessor(audio_data)
+        features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
         labels = self._label_accessor(audio_data, features)
-        return features, labels, index
+        return index, features, labels
 
     def __len__(self) -> int:
         return len(self._dataset)
@@ -146,9 +146,9 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
             return None
 
 if __name__ == "__main__":
-    dataset = FileLengthTensorAudioDataset(dataset=GLIDER(), label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
+    dataset = FileLengthTensorAudioDataset(dataset=GLIDER(clip_duration_seconds = 10.0), label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
+    _indeces = [40414, 146869, 78997, 162159, 174450, 75375, 80172, 11896, 45205, 212519, 75177, 228142, 88527, 128200, 153709, 117738, 50659, 10586, 122117, 180314, 81489, 58191, 94471, 82012, 199068, 244187, 232152, 233318, 23947, 182991, 635, 215504, 64169, 226989, 12302, 136440, 244239, 28445, 46475, 120555, 80150, 163527, 246924, 135159, 188942, 228160, 106653, 36583, 53382, 34099, 36762, 146038, 83628, 140742, 231528, 67522, 93338, 248063, 87903, 113978, 55655, 88584, 126586, 131694]
+    indeces = [idx for idx in _indeces if idx < len(dataset)]
     print(len(dataset))
-    print(dataset.label_shape())
-    print(dataset.example_shape())
-    for index, (X, Y) in enumerate(dataset):
-        print(index)
+    for index in indeces:
+        print(dataset[index])

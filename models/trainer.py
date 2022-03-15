@@ -121,7 +121,7 @@ def train(
     model.train()
     for epoch in range(epochs):
         epoch_loss = 0
-        for batch, (X, Y, index) in enumerate(trainset):
+        for batch, (index, X, Y) in enumerate(trainset):
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
             optimizer.zero_grad()

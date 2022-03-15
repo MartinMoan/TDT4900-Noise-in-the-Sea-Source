@@ -88,6 +88,8 @@ class ResNet18(nn.Module):
             self._layers.add_module("output_activation", self._out_activation)
 
     def __call__(self, X):
+        if torch.isnan(X).any():
+            warnings.warn(f"The input tensor to {self.__class__.__name__} contains NaN values, this will likely cause exploding or vanishing gradients, or NaN output.")
         return self.forward(X)
 
     def forward(self, X):
