@@ -6,7 +6,7 @@ import pathlib
 from datetime import datetime
 import traceback
 import warnings
-from typing import Mapping, Type
+from typing import Iterable, Mapping, Type
 
 import torch
 from torch.utils import data
@@ -95,13 +95,20 @@ def infer(
 
 def train(
     model: torch.nn.Module, 
-    trainset: torch.utils.data.DataLoader, 
+    dataset: ITensorAudioDataset,
+    training_samples: Iterable[int],
+    batch_size: int = 8,
+    num_workers: int = 16,
     epochs: int = 8, 
     lr: float = 1e-3, 
     weight_decay: float = 1e-5, 
     loss_ref: Type[torch.nn.Module] = torch.nn.BCELoss, 
     optimizer_ref: Type[torch.nn.Module] = torch.optim.Adamax, 
     device: str = None):
+    
+    sampler = SubsetRandomSampler(training_samples)
+    trainset = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
+    
     if config.ENV == "dev":
         for epoch in range(epochs):
             for batch in range(len(trainset)):
@@ -114,16 +121,34 @@ def train(
     model.train()
     for epoch in range(epochs):
         epoch_loss = 0
-        for batch, (X, Y) in enumerate(trainset):
+        for batch, (X, Y, index) in enumerate(trainset):
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
             optimizer.zero_grad()
 
             loss = lossfunction(Yhat, Y)
+            
             loss.backward()
             optimizer.step()
 
             current_loss = loss.item()
+            
+            if np.isnan(current_loss):
+                print(f"Loss is nan! Loss: {current_loss} Batch: {batch} / {len(trainset)} Device: {device} Index: {index}")
+                print("X:", X)
+                print("Y:", Y)
+                print("Yhat:", Yhat)
+                for idx in index:
+                    i = idx.item()
+                    print(i)
+                    audio_data = dataset._dataset[i]
+                    print(audio_data)
+                    unique_sample_values = np.unique(audio_data.samples)
+                    print(unique_sample_values)
+                    print(f"There are {len(unique_sample_values)} unique sample values in clip with index {i}")
+                    print()
+                raise Exception("Loss is nan...")
+            
             epoch_loss += current_loss
             
             print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
@@ -162,13 +187,11 @@ def kfoldcv(
         print("----------------------------------------")
         print(f"Start fold {fold}")
         print()
-        trainset = DataLoader(dataset, batch_size=batch_size, sampler=SubsetRandomSampler(training_samples), num_workers=num_workers)
-
         model = model_ref(**model_kwargs)
 
         model.to(device)
 
-        model = train(model, trainset, **train_kwargs)
+        model = train(model, dataset, training_samples, batch_size=batch_size, num_workers=num_workers, **train_kwargs)
 
         truth, predictions = infer(model, dataset, test_samples, batch_size, num_workers, device=device)
         metrics = metric_computer(truth, predictions)
