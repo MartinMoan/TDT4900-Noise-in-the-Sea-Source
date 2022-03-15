@@ -69,12 +69,9 @@ def infer(
 
     if config.ENV == "dev":
         label_shape = dataset.label_shape()
-        print(label_shape)
         output_shape = (len(testset), *label_shape)
-        print(output_shape)
         zeros = np.zeros(output_shape)
         return zeros, zeros
-    
     
     def cat(t1, t2):
         if t1 is None:
@@ -120,11 +117,9 @@ def train(
         for batch, (X, Y) in enumerate(trainset):
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
-            
             optimizer.zero_grad()
 
             loss = lossfunction(Yhat, Y)
-
             loss.backward()
             optimizer.step()
 

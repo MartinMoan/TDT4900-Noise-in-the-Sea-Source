@@ -2,6 +2,7 @@
 import argparse
 import pathlib
 import sys
+from tabnanny import verbose
 
 import torch
 from rich import print
@@ -32,7 +33,8 @@ def init_args():
 def train(args):
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    glider              =   GLIDER(pad = True)
+    clip_duration_sec   =   10.0
+    glider              =   GLIDER(clip_duration_seconds = clip_duration_sec, verbose = args.verbose, suppress_warnings = False)
     dataset             =   FileLengthTensorAudioDataset(dataset=glider, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
     class_information   =   dataset.classes()
     
@@ -66,7 +68,7 @@ def train(args):
         batch_size=batch_size, 
         num_workers=num_workers,
         train_kwargs=train_kwargs, 
-        tracker_kwargs={"description": "ResNet18 model with recording/file length input and N-class binary class vector output"}
+        tracker_kwargs={"description": f"ResNet18 model with {clip_duration_sec} second clip length input and binary class vector output"}
     )
 
 def main():
