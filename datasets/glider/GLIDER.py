@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 from rich import print
 import librosa
+from scipy.io import wavfile
 import git
 import warnings
 import re
@@ -24,7 +25,7 @@ EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
 EXPECTED_NUM_CHANNLES = 1
 
 class GLIDER(ICustomDataset):
-    def __init__(self, pad = True):
+    def __init__(self, clip_duration_seconds: float = 10.0, verbose = False, suppress_warnings = None):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
         
@@ -46,7 +47,13 @@ class GLIDER(ICustomDataset):
             if "idun-login" in socket.gethostname():
                 raise Exception(f"GLIDER detected that the current hostname ({socket.gethostname()}) seems to correspond to the NTNU Idun computing cluster, while the VIRTUAL_DATASET_LOADING environment variable was set to True. This variable is only intended for local development and can cause unexpected results. This exception is raised to ensure that logs and model parameters are not overwritten using invalid/simulated data.")
         self._audiofiles.sort_values(by=["start_time"], inplace=True, ascending=True)
-        self._pad = pad
+        self._pad = True
+        self._clip_duration_seconds = clip_duration_seconds
+        self._file_duration_seconds = self._audiofiles.num_samples.max() / self._audiofiles.sampling_rate.max()
+        self._num_clips = int((len(self._audiofiles) * self._file_duration_seconds) / self._clip_duration_seconds)
+        self._verbose = verbose
+        self._suppress_warnings = config.ENV == "env" if suppress_warnings is None else suppress_warnings
+
 
     def _label_audiofiles(self):
         # Initialize label columns with missing values
@@ -62,32 +69,59 @@ class GLIDER(ICustomDataset):
         for col in self._label_columns:
             self._audiofiles[col] = self._audiofiles[col].fillna(config.NEGATIVE_INSTANCE_CLASS_LABEL)
 
-    def _getitem_async(self, index):
-        file = self._audiofiles.iloc[index]
+    def _getitem_async(self, clip_index):
+        clips_per_file = self._num_clips / len(self._audiofiles)
+        file_index = int(clip_index / clips_per_file)
+
+        file = self._audiofiles.iloc[file_index]
+        first_clip_in_file_clip_index = file_index * clips_per_file
+        nth_clip_in_file = clip_index - first_clip_in_file_clip_index
+        clip_start_offset_seconds = nth_clip_in_file * self._clip_duration_seconds
+        offset_td = timedelta(seconds=clip_start_offset_seconds)
+        file_duration_seconds = (file.end_time - file.start_time).seconds
         with ThreadPool(processes=2) as pool:
-            async_labels_result = pool.apply_async(self._get_labels, (file, ))
-            samples, sr = np.zeros(file.num_samples), file.sampling_rate
-                
-            if not config.VIRTUAL_DATASET_LOADING:
-                async_samples_result = pool.apply_async(librosa.load, (file.filename, ), {"sr": None})
-                samples, sr = async_samples_result.get()
+            filepath = file.filename
+            samples, sr = np.array([]), file.sampling_rate
 
-            if self._pad:
-                new_end_dt, padded_samples = self._ensure_equal_length(samples, sr, file.end_time, to_length=int(self._audiofiles.num_samples.max()))
-                file.end_time = new_end_dt
-                samples = padded_samples
+            start_time = file.start_time + offset_td 
+            end_time = start_time + timedelta(seconds=self._clip_duration_seconds)
+            labels = self._get_labels(start_time, end_time)
 
-            labels = async_labels_result.get()
+            labels_task = pool.apply_async(self._get_labels, (start_time, end_time))
+            expected_samples_shape = (int(self._clip_duration_seconds * self._audiofiles.sampling_rate.max()),)
+            if config.VIRTUAL_DATASET_LOADING:
+                samples, sr = np.zeros(expected_samples_shape), self._audiofiles.sampling_rate.max()
+            elif clip_start_offset_seconds >= file_duration_seconds:
+                # if not self._suppress_warnings:
+                #     warnings.warn(f"The {clip_index}-th audio clip could not be read due to the parent audiofile having unexpected length. Returning zeroes with correct shape. {filepath}")
+                # samples, sr = np.zeros(expected_samples_shape), self._audiofiles.sampling_rate.max()
+                return self._getitem_async(clip_index+1) # TODO: This one does not spar joy...
+            else:
+                dur_to_read = min(self._clip_duration_seconds, (file.end_time - start_time).seconds)
+                if dur_to_read > (file.end_time - start_time).seconds:
+                    dur_to_read = (file.end_time - start_time).seconds
+
+                loading_task = pool.apply_async(librosa.load, (filepath, ), {"sr": None, "offset": clip_start_offset_seconds, "duration": dur_to_read})
+                samples, sr = loading_task.get()
+                if len(samples) == 0 and not self._suppress_warnings:
+                    warnings.warn(f"librosa.load returned an 0 samples for audiofile {filepath}. Reading parameters: offset: {clip_start_offset_seconds} duration: {dur_to_read} file duration seconds: {file_duration_seconds}")
+                if len(samples) != expected_samples_shape[0]:
+                    to_pad = np.zeros(expected_samples_shape[0] - len(samples))
+                    samples = np.concatenate((samples, to_pad), axis=0)
+
+            labels = labels_task.get()
+            
             return LabeledAudioData(
-                index,
-                pathlib.Path(file.filename), 
-                file.num_channels, 
-                sr, 
-                file.start_time, 
-                file.end_time,
-                samples, 
-                labels,
-                self._classdict)
+                clip_index,
+                filepath = filepath,
+                num_channels = file.num_channels,
+                sampling_rate = sr,
+                start_time = start_time,
+                end_time = end_time,
+                samples = samples,
+                labels = labels,
+                labels_dict = self.classes()
+            )
 
     def _ensure_equal_length(self, samples: Iterable[float], sr: int, end_time: datetime, to_length: int) -> tuple[datetime, Iterable[float]]:
         if len(samples) < to_length:
@@ -106,13 +140,17 @@ class GLIDER(ICustomDataset):
         return end_time, samples
 
     def __getitem__(self, index: int) -> LabeledAudioData:
-        return self._getitem_async(index)
+        audio_data = self._getitem_async(index)
+        if self._verbose:
+            print(f"{index} / {len(self)}", audio_data)
             
-    def _get_labels(self, file):
-        return self._labels[(self._labels.start_time <= file.end_time) & (self._labels.end_time >= file.start_time)]
+        return audio_data
+            
+    def _get_labels(self, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+        return self._labels[(self._labels.start_time <= end_time) & (self._labels.end_time >= start_time)]
             
     def __len__(self) -> int:
-        return len(self._audiofiles)
+        return self._num_clips
 
     def classes(self) -> Mapping[str, int]:
         """BasicDataset.classes 'abstract' method implementation. Returns a dictionary of classname: class_index value.
@@ -141,10 +179,9 @@ class GLIDER(ICustomDataset):
         return f"GLIDER(BasicDataset) object with {len(self)} instances"
 
 if __name__ == "__main__":
-    dataset = GLIDER()
-
+    dataset = GLIDER(clip_duration_seconds=10.0, verbose=True, suppress_warnings=True)
+    
     for i in range(len(dataset)):
         data = dataset[i]
-        # print(data)
 
     

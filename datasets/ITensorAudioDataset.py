@@ -14,15 +14,21 @@ from glider.audiodata import LabeledAudioData
 from GLIDER import GLIDER 
 import warnings
 
+def _to_tensor(nparray: np.ndarray) -> torch.Tensor:
+    return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
+
 class ILabelAccessor(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         raise NotImplementedError
 
 class IFeatureAccessor(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, audio_data: LabeledAudioData) -> np.ndarray:
+    def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:
         raise NotImplementedError
+
+    def _to_single_channel_batch(self, tensor: torch.Tensor) -> torch.Tensor:
+        return tensor.view(1, *tensor.shape)
 
 class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     @classmethod
@@ -58,20 +64,18 @@ class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     def label_shape(self) -> tuple[int, ...]:
         raise NotImplementedError
 
-    def _to_tensor(self, nparray: np.ndarray) -> torch.Tensor:
-        return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
-
 #####
 ##### Implementations:
 #####
 
 class LabelRollAccessor(ILabelAccessor):
-    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        # return _to_tensor(audio_data.label_roll())
         return super().__call__(audio_data, features)
 
 class BinaryLabelAccessor(ILabelAccessor):
-    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        return audio_data.binary()
+    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        return _to_tensor(audio_data.binary())
 
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
     def __init__(self, n_mels: int = 128, n_fft: int = 2048, hop_length: int = 512) -> None:
@@ -79,7 +83,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         self._n_fft = n_fft
         self._hop_length = hop_length
 
-    def __call__(self, audio_data: LabeledAudioData) -> np.ndarray:
+    def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    
         samples, sr = audio_data.samples, audio_data.sampling_rate
         if config.VIRTUAL_DATASET_LOADING:
             output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
@@ -94,7 +98,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         numerator = (S_db - mean)
         denominator = np.std(S_db, axis=1).reshape((-1, 1))
         S_db = numerator * (1/denominator)
-        return S_db
+        return self._to_single_channel_batch(_to_tensor(S_db))
 
 class FileLengthTensorAudioDataset(ITensorAudioDataset):
     def __init__(self, dataset: ICustomDataset, label_accessor: ILabelAccessor, feature_accessor: IFeatureAccessor) -> None:
@@ -113,8 +117,7 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
         audio_data = self._dataset[index]
         features = self._feature_accessor(audio_data)
         labels = self._label_accessor(audio_data, features)
-        X, Y = self._to_tensor(features), self._to_tensor(labels)
-        return X, Y
+        return features, labels
 
     def __len__(self) -> int:
         return len(self._dataset)
