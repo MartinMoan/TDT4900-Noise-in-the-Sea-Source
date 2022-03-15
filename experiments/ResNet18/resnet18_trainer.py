@@ -27,10 +27,11 @@ def init_args():
     parser.add_argument("-nw", "--num-workers", type=int, default=8, help="num workers for dataloaders")
     parser.add_argument("--prediction-threshold", type=float, default=0.5, help="Prediction confidence threshold. Any prediction with a confidence less than this is not considered a correct prediction (only relevant during evaluation, has no effect on training).")
     parser.add_argument("--force-gpu", action="store_true", default=False, help="Force using CUDA cores. If no CUDA cores are available, will raise an exception and halt the program.")
-    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual loca files loaded if set.")
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual local files loaded if set.")
     return parser.parse_args()
 
 def train(args):
+    torch.manual_seed(0)
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     clip_duration_sec   =   10.0
