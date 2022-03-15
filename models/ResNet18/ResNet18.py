@@ -68,10 +68,10 @@ class ResNet18(nn.Module):
         # Multilabel classification: output activation -> sigmoid
 
         self._out_activation = output_activation
-        if output_activation is None:
+        # if output_activation is None:
             # warnings.warn("No output_activation function was provided to the ResNet18 __init__ method. Model will assume classification task with num classes defined by 'n_outputs' argument. To avoid this warning, provide the output activation function explicitly")
-            warnings.warn(f"No output_activation function was provided to the ResNet18 __init__ method. Will use {NoActionLayer} as the activation function for the output layer.")
-            self._out_activation = NoActionLayer()
+            # warnings.warn(f"No output_activation function was provided to the ResNet18 __init__ method. Will use {NoActionLayer} as the activation function for the output layer.")
+            # self._out_activation = NoActionLayer()
             
 
         self._layers = nn.Sequential(
@@ -83,8 +83,9 @@ class ResNet18(nn.Module):
             nn.AdaptiveAvgPool2d((1,1)),
             nn.Flatten(),
             nn.Linear(512, n_outputs),
-            self._out_activation
         )
+        if self._out_activation is not None:
+            self._layers.add_module("output_activation", self._out_activation)
 
     def __call__(self, X):
         return self.forward(X)
@@ -93,7 +94,7 @@ class ResNet18(nn.Module):
         return self._layers(X)
 
 if __name__ == "__main__":
-    net = ResNet18(3)
+    net = ResNet18(3, output_activation=torch.nn.Sigmoid())
     tensor = torch.rand(1, 1, 128, 5168) 
     out = net.forward(tensor)
     print(out.shape)
