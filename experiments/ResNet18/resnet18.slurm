@@ -5,8 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:V10032:1
-#SBATCH --constraint=V100
+#SBATCH --gres=gpu:1
 #SBATCH --mem=42000
 #SBATCH --job-name="ResNet18 Training"
 #SBATCH --output="resnet18.slurm.out"
@@ -21,4 +20,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 4 --num-workers 16 --prediction-threshold 0.5 --force-gpu --verbose
+ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 4 --num-workers 16 --prediction-threshold 0.5 --force-gpu
