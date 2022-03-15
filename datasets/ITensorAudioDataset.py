@@ -87,8 +87,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         samples, sr = audio_data.samples, audio_data.sampling_rate
         if config.VIRTUAL_DATASET_LOADING:
             output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
-            return np.zeros(output_shape)
-        # print(np.unique(samples), len(samples), sr)
+            return torch.zeros((1, *output_shape), dtype=torch.float32, requires_grad=False)
 
         S_db = librosa.power_to_db(librosa.feature.melspectrogram(y=samples, sr=sr, n_mels=self._n_mels, n_fft=self._n_fft, hop_length=self._hop_length))
         S_db = np.flip(S_db, axis=0)

@@ -3,7 +3,7 @@ from cgi import test
 from imghdr import tests
 import sys
 import pathlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
 import warnings
 from typing import Iterable, Mapping, Type
@@ -82,7 +82,7 @@ def infer(
     with torch.no_grad():
         truth = None
         predictions = None
-        for i, (X, Y) in enumerate(testset):
+        for i, (index, X, Y) in enumerate(testset):
             X, Y = X.to(device), Y.to(device)
             Yhat = model(X)
             Yhat = Yhat.cpu()
@@ -104,8 +104,11 @@ def train(
     weight_decay: float = 1e-5, 
     loss_ref: Type[torch.nn.Module] = torch.nn.BCELoss, 
     optimizer_ref: Type[torch.nn.Module] = torch.optim.Adamax, 
-    device: str = None):
+    device: str = None,
+    checkpoint_dt: timedelta = timedelta(minutes=5)):
     
+    _LAST_CHECKPOINT_CREATED_AT = None
+
     sampler = SubsetRandomSampler(training_samples)
     trainset = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
     
@@ -132,21 +135,15 @@ def train(
             optimizer.step()
 
             current_loss = loss.item()
+            if _LAST_CHECKPOINT_CREATED_AT is None or (datetime.now() - _LAST_CHECKPOINT_CREATED_AT) >= checkpoint_dt:
+                locals_list = ["batch_size", "num_workers", "epocs", "lr", "weight_decay", "device"]
+                l = locals()
+                locals_to_checkpoint = {key: l[key] for key in l if key in locals_list}
+                # checkpoint(model, optimizer, **locals_to_checkpoint)
+                _LAST_CHECKPOINT_CREATED_AT = datetime.now()
+
             
             if np.isnan(current_loss):
-                print(f"Loss is nan! Loss: {current_loss} Batch: {batch} / {len(trainset)} Device: {device} Index: {index}")
-                print("X:", X)
-                print("Y:", Y)
-                print("Yhat:", Yhat)
-                for idx in index:
-                    i = idx.item()
-                    print(i)
-                    audio_data = dataset._dataset[i]
-                    print(audio_data)
-                    unique_sample_values = np.unique(audio_data.samples)
-                    print(unique_sample_values)
-                    print(f"There are {len(unique_sample_values)} unique sample values in clip with index {i}")
-                    print()
                 raise Exception("Loss is nan...")
             
             epoch_loss += current_loss
@@ -156,6 +153,17 @@ def train(
         average_epoch_loss = epoch_loss / len(trainset)
         saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
     return model
+
+def checkpoint(model, optimizer, **kwargs):
+    import pandas as pd
+    if kwargs is not None:
+        flattened_kwargs = pd.json_normalize(kwargs, sep=".").to_dict(orient="records")[0]
+        state = {"model.state_dict": model.state_dict(), "optimizer.state_dict": optimizer.state_dict(), **flattened_kwargs}
+        print(state.keys())
+        now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"{model.__class__.__name__}_{now}.pth".lower()
+        filepath = config.DEFAULT_PARAMETERS_PATH.joinpath(filename)
+        torch.save(state, filepath)
 
 def log_fold(
     model: torch.nn.Module, 
@@ -192,7 +200,7 @@ def kfoldcv(
         model.to(device)
 
         model = train(model, dataset, training_samples, batch_size=batch_size, num_workers=num_workers, **train_kwargs)
-
+        
         truth, predictions = infer(model, dataset, test_samples, batch_size, num_workers, device=device)
         metrics = metric_computer(truth, predictions)
         
