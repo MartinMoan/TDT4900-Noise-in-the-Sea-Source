@@ -28,6 +28,8 @@ class GLIDER(ICustomDataset):
     def __init__(self, clip_duration_seconds: float = 10.0, verbose = False, suppress_warnings = None):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
+        expected_num_samples = self._audiofiles.num_samples.max()
+        self._audiofiles = self._audiofiles[(self._audiofiles.num_samples == expected_num_samples)]
         
         local_audiofiles = config.list_local_audiofiles()
         if len(local_audiofiles) != len(self._audiofiles):
