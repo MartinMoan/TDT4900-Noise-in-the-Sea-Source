@@ -20,4 +20,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 4 --num-workers 16 --prediction-threshold 0.5 --force-gpu
+ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 64 --num-workers 16 --prediction-threshold 0.5 --force-gpu
