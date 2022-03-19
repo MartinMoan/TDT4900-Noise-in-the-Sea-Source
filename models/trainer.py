@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from cgi import test
-from imghdr import tests
 import sys
 import pathlib
 from datetime import datetime, timedelta

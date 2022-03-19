@@ -25,7 +25,11 @@ EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
 EXPECTED_NUM_CHANNLES = 1
 
 class GLIDER(ICustomDataset):
-    def __init__(self, clip_duration_seconds: float = 10.0, verbose = False, suppress_warnings = None):
+    def __init__(self, clip_duration_seconds = 10.0, overlap_seconds = 0.0, verbose = False, suppress_warnings = None):
+        self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
+        self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
+    '''
+    def __init__(self, clip_duration_seconds: float = 10.0, overlap_seconds=0.0, verbose = False, suppress_warnings = None):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
         expected_num_samples = self._audiofiles.num_samples.max()
@@ -56,6 +60,8 @@ class GLIDER(ICustomDataset):
         self._verbose = verbose
         self._suppress_warnings = config.ENV == "env" if suppress_warnings is None else suppress_warnings
 
+        self.clips_per_file = self._num_clips / len(self._audiofiles)
+
 
     def _label_audiofiles(self):
         # Initialize label columns with missing values
@@ -70,79 +76,33 @@ class GLIDER(ICustomDataset):
         
         for col in self._label_columns:
             self._audiofiles[col] = self._audiofiles[col].fillna(config.NEGATIVE_INSTANCE_CLASS_LABEL)
-
-    def _getitem_async(self, clip_index):
-        clips_per_file = self._num_clips / len(self._audiofiles)
-        file_index = int(clip_index / clips_per_file)
-
-        file = self._audiofiles.iloc[file_index]
-        first_clip_in_file_clip_index = file_index * clips_per_file
-        nth_clip_in_file = clip_index - first_clip_in_file_clip_index
-        clip_start_offset_seconds = nth_clip_in_file * self._clip_duration_seconds
-        offset_td = timedelta(seconds=clip_start_offset_seconds)
-        file_duration_seconds = (file.end_time - file.start_time).seconds
-        with ThreadPool(processes=2) as pool:
-            filepath = file.filename
-            samples, sr = np.array([]), file.sampling_rate
-
-            start_time = file.start_time + offset_td 
-            end_time = start_time + timedelta(seconds=self._clip_duration_seconds)
-            labels = self._get_labels(start_time, end_time)
-
-            labels_task = pool.apply_async(self._get_labels, (start_time, end_time))
-            expected_samples_shape = (int(self._clip_duration_seconds * self._audiofiles.sampling_rate.max()),)
-            if config.VIRTUAL_DATASET_LOADING:
-                samples, sr = np.zeros(expected_samples_shape), self._audiofiles.sampling_rate.max()
-            elif clip_start_offset_seconds >= file_duration_seconds:
-                # if not self._suppress_warnings:
-                #     warnings.warn(f"The {clip_index}-th audio clip could not be read due to the parent audiofile having unexpected length. Returning zeroes with correct shape. {filepath}")
-                # samples, sr = np.zeros(expected_samples_shape), self._audiofiles.sampling_rate.max()
-                return self._getitem_async(clip_index+1) # TODO: This one does not spar joy...
-            else:
-                dur_to_read = min(self._clip_duration_seconds, (file.end_time - start_time).seconds)
-                if dur_to_read > (file.end_time - start_time).seconds:
-                    dur_to_read = (file.end_time - start_time).seconds
-
-                loading_task = pool.apply_async(librosa.load, (filepath, ), {"sr": None, "offset": clip_start_offset_seconds, "duration": dur_to_read})
-                samples, sr = loading_task.get()
-                if len(samples) == 0 and not self._suppress_warnings:
-                    warnings.warn(f"librosa.load returned an 0 samples for audiofile {filepath}. Reading parameters: offset: {clip_start_offset_seconds} duration: {dur_to_read} file duration seconds: {file_duration_seconds}")
-                if len(samples) != expected_samples_shape[0]:
-                    to_pad = np.zeros(expected_samples_shape[0] - len(samples))
-                    samples = np.concatenate((samples, to_pad), axis=0)
-
-            labels = labels_task.get()
-            
-            return LabeledAudioData(
-                clip_index,
-                filepath = filepath,
-                num_channels = file.num_channels,
-                sampling_rate = sr,
-                start_time = start_time,
-                end_time = end_time,
-                samples = samples,
-                labels = labels,
-                labels_dict = self.classes()
-            )
-
-    def _ensure_equal_length(self, samples: Iterable[float], sr: int, end_time: datetime, to_length: int) -> tuple[datetime, Iterable[float]]:
-        if len(samples) < to_length:
-            zeros = np.zeros(to_length - len(samples))
-            padded_samples = np.concatenate((samples, zeros), axis=0)
-            extra_duration_seconds = (to_length - len(samples)) / sr
-            
-            end_time = end_time + timedelta(seconds = extra_duration_seconds)
-            samples = padded_samples
-            
-        elif len(samples) > to_length:
-            duration_difference_seconds = (len(samples) - to_length) / sr
-            end_time = end_time - timedelta(seconds = duration_difference_seconds)
-            samples = samples[:to_length]
-        
-        return end_time, samples
+    '''
 
     def __getitem__(self, index: int) -> LabeledAudioData:
-        audio_data = self._getitem_async(index)
+        clip_index = index
+        file_index = int(clip_index / self.clips_per_file)
+        file = self._audiofiles.iloc[file_index]
+
+        first_clip_in_file_clip_index = file_index * self.clips_per_file
+        nth_clip_in_file = clip_index - first_clip_in_file_clip_index
+        clip_start_offset_seconds = nth_clip_in_file * self._clip_duration_seconds
+
+        if clip_start_offset_seconds >= (file.end_time - file.start_time).seconds:
+            return self.__getitem__(index + 1) # This one does not spark joy...
+
+        audio_data = LabeledAudioData(
+            clip_index,
+            file.filename,
+            file.num_channels,
+            file.sampling_rate,
+            file.start_time,
+            file.end_time,
+            self._clip_duration_seconds,
+            clip_start_offset_seconds,
+            all_labels = self._labels,
+            labels_dict = self.classes()
+        )
+        
         if self._verbose:
             print(f"{index} / {len(self)}", audio_data)
             

@@ -1,11 +1,13 @@
 from multiprocessing.spawn import import_main_path
 import pathlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Iterable, Union
 
 import numpy as np
 import pandas as pd
 from rich import print
+import librosa
 
 @dataclass
 class AudioData:
@@ -15,21 +17,49 @@ class AudioData:
     num_channels: int # number of channels of the audiofile
     sampling_rate: int # the sampling rate of the audiofile
     # num_samples: int # the number of samples of the audio recording
-    start_time: np.datetime64 # the starting timestamp of the recording
-    end_time: np.datetime64 # the ending timestamp of the recording
+    file_start_time: np.datetime64 # the starting timestamp of the recording
+    file_end_time: np.datetime64 # the ending timestamp of the recording
+
+    # start_time: np.datetime64 # the starting timestamp of the clip
+    # end_time: np.datetime64 # the ending timestamp of the clip
+
+    clip_duration: float # the clip duration in seconds
+    clip_offset: float # the clip start offset, relative to the start of the recording, in seconds
     
-    samples: np.ndarray # the sample values of the recording
+    # _sr: Union[float, int]
+    # _samples: Iterable[float]
+
+    @property
+    def samples(self) -> Iterable[float]:
+        if not hasattr(self, "_samples"):
+            samples, sr = librosa.load(self.filepath, sr=None, offset=self.clip_offset, duration=self.clip_duration)
+            self._samples = samples
+            self._sr = sr
+        return self._samples
 
     @property
     def num_samples(self) -> int:
         return len(self.samples)
-    
+
+    @property
+    def start_time(self) -> datetime:
+        return self.file_start_time + timedelta(seconds=self.clip_offset)
+
+    @property
+    def end_time(self) -> datetime:
+        return self.start_time + timedelta(seconds=self.clip_duration)
 
 @dataclass
 class LabeledAudioData(AudioData):
     """Class representing a labeled audio dataset example (e.g. an audio file/series of samles with associated labels)"""
-    labels: pd.DataFrame # the overlaping labels of the example
+    all_labels: pd.DataFrame # the labels dataframe (all labels)
     labels_dict: dict # the label dictionary with {str: int} with int being the vertical axis of the sample_labels representing the label str
+
+    @property
+    def labels(self):
+        start_time = self.file_start_time + timedelta(seconds=self.clip_offset)
+        end_time = start_time + timedelta(self.clip_duration)
+        return self.all_labels[(self.all_labels.start_time <= end_time) & (self.all_labels.end_time >= start_time)]    
     
     def label_roll(self, N=None) -> np.ndarray:
         """Generate the label roll consisting of N elements, e.g. a C, N matrix of 0/1 values, where C equals the number of classes, and N being a positive integer. 

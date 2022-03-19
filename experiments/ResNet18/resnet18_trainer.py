@@ -2,12 +2,10 @@
 import argparse
 import pathlib
 import sys
-from tabnanny import verbose
 
 import torch
 from rich import print
 import git
-import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
