@@ -1,2 +1,4 @@
 #!/bin/sh
-sbatch ./ResNet18/resnet18_trainer.py
+cd ResNet18/
+sbatch resnet18.slurm
+cd ../

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import multiprocessing
 from multiprocessing.pool import ThreadPool, Pool
 from datetime import timedelta, datetime
 from dataclasses import dataclass
 from threading import local
 from typing import Iterable, Mapping, Union
+import math
 
 import pandas as pd
 import numpy as np
@@ -25,10 +27,6 @@ EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
 EXPECTED_NUM_CHANNLES = 1
 
 class GLIDER(ICustomDataset):
-    def __init__(self, clip_duration_seconds = 10.0, overlap_seconds = 0.0, verbose = False, suppress_warnings = None):
-        self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
-        self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
-    '''
     def __init__(self, clip_duration_seconds: float = 10.0, overlap_seconds=0.0, verbose = False, suppress_warnings = None):
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
@@ -76,7 +74,6 @@ class GLIDER(ICustomDataset):
         
         for col in self._label_columns:
             self._audiofiles[col] = self._audiofiles[col].fillna(config.NEGATIVE_INSTANCE_CLASS_LABEL)
-    '''
 
     def __getitem__(self, index: int) -> LabeledAudioData:
         clip_index = index

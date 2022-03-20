@@ -16,18 +16,11 @@ class AudioData:
     filepath: pathlib.PosixPath # local filepath to the audiofile
     num_channels: int # number of channels of the audiofile
     sampling_rate: int # the sampling rate of the audiofile
-    # num_samples: int # the number of samples of the audio recording
     file_start_time: np.datetime64 # the starting timestamp of the recording
     file_end_time: np.datetime64 # the ending timestamp of the recording
 
-    # start_time: np.datetime64 # the starting timestamp of the clip
-    # end_time: np.datetime64 # the ending timestamp of the clip
-
     clip_duration: float # the clip duration in seconds
     clip_offset: float # the clip start offset, relative to the start of the recording, in seconds
-    
-    # _sr: Union[float, int]
-    # _samples: Iterable[float]
 
     @property
     def samples(self) -> Iterable[float]:
@@ -58,7 +51,7 @@ class LabeledAudioData(AudioData):
     @property
     def labels(self):
         start_time = self.file_start_time + timedelta(seconds=self.clip_offset)
-        end_time = start_time + timedelta(self.clip_duration)
+        end_time = start_time + timedelta(seconds=self.clip_duration)
         return self.all_labels[(self.all_labels.start_time <= end_time) & (self.all_labels.end_time >= start_time)]    
     
     def label_roll(self, N=None) -> np.ndarray:

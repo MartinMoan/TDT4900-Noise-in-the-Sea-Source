@@ -171,7 +171,7 @@ def log_fold(
     try:
         saved_path = saver.save(model, mode="fold_eval")
         model_params_path = saved_path.absolute().relative_to(config.REPO_DIR)
-        tracker.track(*args, fold=fold, metrics=metrics, model=model.__class__.__name__, model_parameters_path=model_params_path, **kwargs)
+        tracker.track(metrics, model.__class__.__name__, model_params_path, *args, fold=fold, **kwargs)
     except Exception as ex:
         print(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
