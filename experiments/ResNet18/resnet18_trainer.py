@@ -10,6 +10,7 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from GLIDER import GLIDER
+from clipping import ClippedDataset
 from audiodata import LabeledAudioData
 from ResNet18 import ResNet18
 import trainer
@@ -25,15 +26,17 @@ def init_args():
     parser.add_argument("-nw", "--num-workers", type=int, default=8, help="num workers for dataloaders")
     parser.add_argument("--prediction-threshold", type=float, default=0.5, help="Prediction confidence threshold. Any prediction with a confidence less than this is not considered a correct prediction (only relevant during evaluation, has no effect on training).")
     parser.add_argument("--force-gpu", action="store_true", default=False, help="Force using CUDA cores. If no CUDA cores are available, will raise an exception and halt the program.")
+    parser.add_argument("-cd", "--clip-duration-seconds", type=float, default=10.0, help="The clip duration in seconds to use for the glider audio data.")
+    parser.add_argument("-co", "--clip-overlap-seconds", type=float, default=2.0, help="The clip overlap in seconds. Every clip will overlap the pervious clip with this number of seconds.")
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual local files loaded if set.")
     return parser.parse_args()
 
 def train(args):
-    torch.manual_seed(0)
     device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    clip_duration_sec   =   10.0
-    glider              =   GLIDER(clip_duration_seconds = clip_duration_sec, verbose = args.verbose, suppress_warnings = False)
+    clip_duration_sec   =   args.clip_duration_seconds
+    clip_overlap_sec    =   args.clip_overlap_seconds
+    glider              =   ClippedDataset(clip_duration_seconds = clip_duration_sec, clip_overlap_seconds = clip_overlap_sec)
     dataset             =   FileLengthTensorAudioDataset(dataset=glider, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
     class_information   =   dataset.classes()
     
@@ -57,6 +60,7 @@ def train(args):
     if args.force_gpu and not torch.cuda.is_available():
         raise Exception(f"Force_gpu argument was set, but no CUDA device was found/available. Found device {device}")
 
+    col_order = ["created_at",	"started_at",	"metrics.accuracy",	"metrics.roc_auc.Anthropogenic",	"branch",	"num_workers",	"nodename",	"metrics.roc_auc.Biophonic",	"metrics.recall.Anthropogenic",	"repo",	"version",	"metrics.recall.Biophonic",	"metrics.precision.Anthropogenic",	"metrics.precision.Biophonic",	"metrics.f1.Anthropogenic",	"metrics.f1.Biophonic",	"device",	"sysname",	"epochs"]
     print(f"Using device: {device}")
     trainer.kfoldcv(
         model_ref, 

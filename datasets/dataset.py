@@ -19,6 +19,7 @@ import torch
 from rich import print
 import git
 
+'''
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from ICustomDataset import ICustomDataset
@@ -159,3 +160,4 @@ if __name__ == "__main__":
     
     X, Y = data[4]
     print(X.shape, Y)
+'''
