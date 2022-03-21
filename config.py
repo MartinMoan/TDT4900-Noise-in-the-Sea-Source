@@ -109,6 +109,10 @@ DEFAULT_PARAMETERS_PATH = REPO_DIR.joinpath("models", "parameters").absolute()
 if not DEFAULT_PARAMETERS_PATH.exists():
     DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
 
+CHECKPOINTS_PATH = REPO_DIR.joinpath("models", "checkpoints").absolute()
+if not CHECKPOINTS_PATH.exists():
+    CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
+
 SCOPES = ['https://www.googleapis.com/auth/drive']
 SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
 SHEET_ID = int(os.environ.get(f"{ENV.upper()}_SHEET_ID"))

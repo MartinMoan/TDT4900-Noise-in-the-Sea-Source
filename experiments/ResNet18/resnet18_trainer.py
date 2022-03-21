@@ -29,10 +29,12 @@ def init_args():
     parser.add_argument("-cd", "--clip-duration-seconds", type=float, default=10.0, help="The clip duration in seconds to use for the glider audio data.")
     parser.add_argument("-co", "--clip-overlap-seconds", type=float, default=2.0, help="The clip overlap in seconds. Every clip will overlap the pervious clip with this number of seconds.")
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual local files loaded if set.")
+    parser.add_argument("-cp", "--checkpoint", type=str, default=None, help="Path to the checkpoint directory to load model, optimizer and local variables from.")
+    parser.add_argument("--from-checkpoint", action="store_true", default=False, help="Wheter to load model, optimizer and local variables from checkpoint. If -cp (--checkpoint) argument is provided, will use that value as the path to load from")
     return parser.parse_args()
 
 def train(args):
-    device              =   torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device              =   "cuda" if torch.cuda.is_available() else "cpu"
 
     clip_duration_sec   =   args.clip_duration_seconds
     clip_overlap_sec    =   args.clip_overlap_seconds
@@ -57,10 +59,11 @@ def train(args):
 
     train_kwargs        =   {"lr": lr, "weight_decay": weight_decay, "epochs": epochs, "loss_ref": loss_ref, "optimizer_ref": optimizer_ref, "device": device}
 
+    from_checkpoint     =   args.checkpoint if args.checkpoint is not None else args.from_checkpoint
+
     if args.force_gpu and not torch.cuda.is_available():
         raise Exception(f"Force_gpu argument was set, but no CUDA device was found/available. Found device {device}")
 
-    col_order = ["created_at",	"started_at",	"metrics.accuracy",	"metrics.roc_auc.Anthropogenic",	"branch",	"num_workers",	"nodename",	"metrics.roc_auc.Biophonic",	"metrics.recall.Anthropogenic",	"repo",	"version",	"metrics.recall.Biophonic",	"metrics.precision.Anthropogenic",	"metrics.precision.Biophonic",	"metrics.f1.Anthropogenic",	"metrics.f1.Biophonic",	"device",	"sysname",	"epochs"]
     print(f"Using device: {device}")
     trainer.kfoldcv(
         model_ref, 
@@ -68,6 +71,7 @@ def train(args):
         dataset,
         metrics_computer,
         device,
+        from_checkpoint=from_checkpoint,
         batch_size=batch_size, 
         num_workers=num_workers,
         train_kwargs=train_kwargs, 
