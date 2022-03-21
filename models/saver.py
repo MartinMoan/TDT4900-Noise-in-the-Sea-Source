@@ -2,6 +2,7 @@
 import pathlib
 import sys
 from datetime import datetime
+import warnings
 
 import torch
 import git
@@ -17,12 +18,17 @@ def filepath(model, **kwargs):
         kvs += f"{str(key)}_"
         if type(kwargs[key]) == float:
             kvs += f"{kwargs[key]:.5f}_"
+        elif type(kwargs[key]) == str:
+            kvs += f"{kwargs[key]}_"
         
     return config.DEFAULT_PARAMETERS_PATH.joinpath(pathlib.Path(f"{str(model.__class__.__name__).lower()}_{kvs}{t}.pt"))
 
 def save(model, **kwargs):
     path = filepath(model, **kwargs)
-    torch.save(model.state_dict(), path)
+    if config.ENV == "prod":
+        torch.save(model.state_dict(), path)
+    else:
+        warnings.warn("The current environment is not set to 'prod' so no model parameters will be saved by saver.py for the current session.")
     return path
 
 def get_state_dict(path, model_ref, *model_args, **model_kwargs):

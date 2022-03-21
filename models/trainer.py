@@ -4,7 +4,8 @@ import pathlib
 from datetime import datetime, timedelta
 import traceback
 import warnings
-from typing import Iterable, Mapping, Type
+import json
+from typing import Iterable, Mapping, Type, Union
 
 import torch
 from torch.utils import data
@@ -20,9 +21,12 @@ import saver
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+from checkpointer import checkpoint, load, clear_checkpoints
 import tracker
 from ITensorAudioDataset import ITensorAudioDataset
 from IMetricComputer import IMetricComputer
+
+_started_at = datetime.now()
 
 def _verify_arguments(
     model_ref: torch.nn.Module, 
@@ -100,24 +104,30 @@ def train(
     epochs: int = 8, 
     lr: float = 1e-3, 
     weight_decay: float = 1e-5, 
+    from_checkpoint: Union[bool, pathlib.PosixPath] = False,
     loss_ref: Type[torch.nn.Module] = torch.nn.BCELoss, 
     optimizer_ref: Type[torch.nn.Module] = torch.optim.Adamax, 
     device: str = None,
-    checkpoint_dt: timedelta = timedelta(minutes=5)):
+    checkpoint_td: timedelta = timedelta(seconds=2)):
     
-    _LAST_CHECKPOINT_CREATED_AT = None
-
     sampler = SubsetRandomSampler(training_samples)
     trainset = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
-    
+
+    optimizer = optimizer_ref(model.parameters(), lr=lr, weight_decay=weight_decay)
+    lossfunction = loss_ref()
+
+    if from_checkpoint is not None:
+        if type(from_checkpoint) == bool and from_checkpoint:
+            model, optimizer, _ = load(model, optimizer, locals())
+        elif type(from_checkpoint) == str or type(from_checkpoint) == pathlib.PosixPath:
+            model, optimizer, _ = load(model, optimizer, locals(), checkpoint_dir=from_checkpoint)
+
     if config.ENV == "dev":
         for epoch in range(epochs):
             for batch in range(len(trainset)):
                 print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss -1 (simulated loss)")
-        return model
-
-    optimizer = optimizer_ref(model.parameters(), lr=lr, weight_decay=weight_decay)
-    lossfunction = loss_ref()
+            checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
+        return model, optimizer
 
     model.train()
     for epoch in range(epochs):
@@ -133,14 +143,7 @@ def train(
             optimizer.step()
 
             current_loss = loss.item()
-            if _LAST_CHECKPOINT_CREATED_AT is None or (datetime.now() - _LAST_CHECKPOINT_CREATED_AT) >= checkpoint_dt:
-                locals_list = ["batch_size", "num_workers", "epocs", "lr", "weight_decay", "device"]
-                l = locals()
-                locals_to_checkpoint = {key: l[key] for key in l if key in locals_list}
-                # checkpoint(model, optimizer, **locals_to_checkpoint)
-                _LAST_CHECKPOINT_CREATED_AT = datetime.now()
 
-            
             if np.isnan(current_loss):
                 raise Exception("Loss is nan...")
             
@@ -149,20 +152,11 @@ def train(
             print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
             
         average_epoch_loss = epoch_loss / len(trainset)
-        saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
-    return model
-
-def checkpoint(model, optimizer, **kwargs):
-    import pandas as pd
-    if kwargs is not None:
-        flattened_kwargs = pd.json_normalize(kwargs, sep=".").to_dict(orient="records")[0]
-        state = {"model.state_dict": model.state_dict(), "optimizer.state_dict": optimizer.state_dict(), **flattened_kwargs}
-        print(state.keys())
-        now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"{model.__class__.__name__}_{now}.pth".lower()
-        filepath = config.DEFAULT_PARAMETERS_PATH.joinpath(filename)
-        torch.save(state, filepath)
-
+        checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
+        # saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
+    
+    return model, optimizer
+        
 def log_fold(
     model: torch.nn.Module, 
     fold: int, 
@@ -181,6 +175,7 @@ def kfoldcv(
     dataset: ITensorAudioDataset, 
     metric_computer: IMetricComputer,
     device: str,
+    from_checkpoint: Union[bool, pathlib.PosixPath] = False,
     kfolds: int = 5, 
     batch_size: int = 8, 
     num_workers: int = 1, 
@@ -197,7 +192,7 @@ def kfoldcv(
 
         model.to(device)
 
-        model = train(model, dataset, training_samples, batch_size=batch_size, num_workers=num_workers, **train_kwargs)
+        model, optimizer = train(model, dataset, training_samples, from_checkpoint=from_checkpoint, batch_size=batch_size, num_workers=num_workers, **train_kwargs)
         
         truth, predictions = infer(model, dataset, test_samples, batch_size, num_workers, device=device)
         metrics = metric_computer(truth, predictions)
@@ -218,3 +213,5 @@ def kfoldcv(
 
         print(f"End fold {fold}")
         print("----------------------------------------")
+    
+    clear_checkpoints(model, optimizer)

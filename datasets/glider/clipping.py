@@ -24,15 +24,16 @@ class ClippedDataset(ICustomDataset):
 
         self._preprocess_tabular_data()
 
-        labeled_audiofiles = []
-        for labelidx in self._labels.index:
-            label = self._labels.iloc[labelidx]
-            labeled = self._audiofiles[(self._audiofiles.start_time <= label.end_time) & (self._audiofiles.end_time >= label.start_time)]
-            if len(labeled) > 0:
-                labeled_audiofiles += labeled.index.values.tolist()
-        
-        self._audiofiles = self._audiofiles.loc[labeled_audiofiles, :]
-        self._audiofiles = self._audiofiles.iloc[:50]
+        if config.VIRTUAL_DATASET_LOADING:
+            labeled_audiofiles = []
+            for labelidx in self._labels.index:
+                label = self._labels.iloc[labelidx]
+                labeled = self._audiofiles[(self._audiofiles.start_time <= label.end_time) & (self._audiofiles.end_time >= label.start_time)]
+                if len(labeled) > 0:
+                    labeled_audiofiles += labeled.index.values.tolist()
+            
+            self._audiofiles = self._audiofiles.loc[labeled_audiofiles, :]
+            self._audiofiles = self._audiofiles.iloc[:50]
 
         self._clip_duration = clip_duration_seconds
         self._clip_overlap = clip_overlap_seconds
@@ -53,7 +54,7 @@ class ClippedDataset(ICustomDataset):
             percentage = ((i - start) / (stop - start)) * 100
             part = math.ceil((stop - start) * 0.025)
             if (i - start) % part == 0:
-                print(proc, f"{percentage:.2f}%")
+                print(proc.name, f"{percentage:.2f}%")
             try:
                 # file_index = math.floor(i / self._num_clips_per_file)
                 audiodata = self._load(i)
