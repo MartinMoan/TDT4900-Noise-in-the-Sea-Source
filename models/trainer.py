@@ -170,8 +170,8 @@ def log_fold(
         print(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
 def kfoldcv(
-    model_ref: Type[torch.nn.Module], 
-    model_kwargs: Mapping, 
+    model_ref: Union[Type[torch.nn.Module], torch.nn.Module], 
+    model_kwargs: Union[Mapping, None],
     dataset: ITensorAudioDataset, 
     metric_computer: IMetricComputer,
     device: str,
@@ -188,7 +188,14 @@ def kfoldcv(
         print("----------------------------------------")
         print(f"Start fold {fold}")
         print()
-        model = model_ref(**model_kwargs)
+        
+        model = None
+        if isinstance(model_ref, type):
+            model = model_ref(**model_kwargs)
+        elif isinstance(model_ref, torch.nn.Module):
+            model = model_ref
+        else:
+            raise TypeError(f"Argument model_ref has invalid type, must be torch.nn.Module instance or type reference, but received {type(model_ref)}")
 
         model.to(device)
 

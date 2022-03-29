@@ -83,6 +83,8 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         self._hop_length = hop_length
 
     def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    
+        """Compute the Log-Mel Spectrogram of the input LabeledAudioData samples. Output will have shape (1, self._n_mels, 1 + int(len(samples) / self._hop_length))
+        """
         samples, sr = audio_data.samples, audio_data.sampling_rate
         if config.VIRTUAL_DATASET_LOADING:
             output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
@@ -96,7 +98,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         mean = np.mean(S_db, axis=1).reshape((-1, 1))
         numerator = (S_db - mean)
         denominator = np.std(S_db, axis=1).reshape((-1, 1))
-        S_db = numerator * (1/denominator)
+        S_db = numerator * (1/denominator) # TODO: Fix 0 division error (replace with 0)
         return self._to_single_channel_batch(_to_tensor(S_db))
 
 class FileLengthTensorAudioDataset(ITensorAudioDataset):
@@ -145,9 +147,18 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
 
 if __name__ == "__main__":
     from GLIDER import GLIDER
-    dataset = FileLengthTensorAudioDataset(dataset=GLIDER(clip_duration_seconds = 10.0), label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
+    from rich import print
+    glider = GLIDER(clip_duration_seconds = 10.0)
+
+    dataset = FileLengthTensorAudioDataset(dataset=glider, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
     _indeces = [40414, 146869, 78997, 162159, 174450, 75375, 80172, 11896, 45205, 212519, 75177, 228142, 88527, 128200, 153709, 117738, 50659, 10586, 122117, 180314, 81489, 58191, 94471, 82012, 199068, 244187, 232152, 233318, 23947, 182991, 635, 215504, 64169, 226989, 12302, 136440, 244239, 28445, 46475, 120555, 80150, 163527, 246924, 135159, 188942, 228160, 106653, 36583, 53382, 34099, 36762, 146038, 83628, 140742, 231528, 67522, 93338, 248063, 87903, 113978, 55655, 88584, 126586, 131694]
     indeces = [idx for idx in _indeces if idx < len(dataset)]
     print(len(dataset))
     for index in indeces:
-        print(dataset[index])
+        samples = glider[index].samples
+        print(samples.shape)
+        i, X, Y = dataset[index]
+        print(X.shape)
+        _n_mels = 128
+        _hop_length = 512
+        

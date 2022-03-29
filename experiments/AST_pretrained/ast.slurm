@@ -7,8 +7,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --mem=42000
-#SBATCH --job-name="ResNet18 Training"
-#SBATCH --output="resnet18.slurm.out"
+#SBATCH --job-name="AST Training"
+#SBATCH --output="ast.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
@@ -20,4 +20,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-ENV=prod VIRTUAL_DATASET_LOADING=False python resnet18_trainer.py --learning-rate 0.001 --weight-decay 0.00001 --epochs 3 --batch-size 64 --num-workers 16 --prediction-threshold 0.5 --force-gpu
+ENV=prod VIRTUAL_DATASET_LOADING=False python ast_trainer.py --learning-rate 0.0001 --weight-decay 0.00001 --epochs 3 --batch-size 64 --num-workers 32 --force-gpu

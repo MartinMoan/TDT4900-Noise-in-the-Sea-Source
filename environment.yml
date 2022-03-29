@@ -18,6 +18,7 @@ dependencies:
   - librosa=0.8.1
   - seaborn=0.11.2
   - numpy=1.21.4
+  - numba=0.53.1
   - basemap=1.2.2
   - conda-lock=0.13.1
   - google-cloud-storage=1.42.3
@@ -30,3 +31,7 @@ dependencies:
   - gspread
   - google-api-python-client
   - azure-storage-blob
+  - llvmlite=0.36.0
+  - timm=0.4.9
+  - wget
+  - zipp

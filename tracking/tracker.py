@@ -12,7 +12,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-import sheets
+from sheets import SheetClient
 
 def _get_all_dicts(*args):
     return [arg for arg in args if type(arg) == dict]
@@ -22,8 +22,10 @@ def _combine_args_and_kwargs(*args: Iterable, **kwargs: Mapping[str, any]) -> Ma
     for arg in _get_all_dicts(*args):
         for key in arg.keys():
             all_dict[key] = arg[key]
-    flattened_args = pd.json_normalize(all_dict).to_dict(orient="records")[0]
-    flattened_kwargs = pd.json_normalize(kwargs).to_dict(orient="records")[0]
+    
+    flattened_args = {} if len(all_dict) == 0 else pd.json_normalize(all_dict).to_dict(orient="records")[0]
+    flattened_kwargs = {} if len(kwargs) == 0 else pd.json_normalize(kwargs).to_dict(orient="records")[0]
+    
     combined_dict = flattened_args
     for key in flattened_kwargs.keys():
         if key not in combined_dict.keys():
@@ -33,14 +35,13 @@ def _combine_args_and_kwargs(*args: Iterable, **kwargs: Mapping[str, any]) -> Ma
             combined_dict[newkey] = flattened_kwargs[key]
     return combined_dict
 
-def _empty_row(df: pd.DataFrame, data: Mapping[str, any]) -> Mapping[str, any]:
-    cols = list(set(df.columns).union(set(data.keys())))
-    return {key: None for key in cols}
-
 def _add_data(df, data):
-    row = _empty_row(df, data)
-    row = pd.DataFrame(data=[row])
-    return pd.concat([df, row], ignore_index=True)
+    cols = list(set(df.columns).union(set(data.keys())))
+    empty_row = {key: None for key in cols}
+    for key in data.keys():
+        empty_row[key] = data[key]
+    df = df.append(empty_row, ignore_index=True)
+    return df
 
 def _default_values():
     repo = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
@@ -68,9 +69,11 @@ def _default_values():
 def _add_required_values(data: Mapping[str, any], metrics: Mapping[str, float], model: str, model_parameters_path: Union[str, pathlib.PosixPath]):
     data[config.LOGGED_AT_COLUMN] = datetime.now().strftime(config.DATETIME_FORMAT)
     data["model"] = model
-    data["model_parameters_path"] = model_parameters_path
+    data["model_parameters_path"] = str(model_parameters_path)
 
+    print(metrics)
     flattened_metrics = pd.json_normalize(metrics).to_dict(orient="records")[0]
+    print(flattened_metrics)
     for key in flattened_metrics.keys():
         data[key] = flattened_metrics[key]
     return data
@@ -81,21 +84,40 @@ def _add_optional_values(data: Mapping[str, any], *args: Iterable, **kwargs: Map
         data[key] = new_values[key]
     return data
 
-def track(metrics: Mapping[str, float], model: str, model_parameters_path: Union[str, pathlib.PosixPath], *args, **kwargs):
+def track(
+    metrics: Mapping[str, float], 
+    model: str, 
+    model_parameters_path: Union[str, pathlib.PosixPath], 
+    *args, 
+    order: Iterable[str] = None, 
+    col_order: Iterable[str] = None, 
+    **kwargs):
+    
     data = _default_values()
     data = _add_required_values(data, metrics, model, model_parameters_path)
-    col_order = [config.LOGGED_AT_COLUMN] + list(data.keys())
     data = _add_optional_values(data, *args, **kwargs)
 
-    df = sheets.load_csv()
-    df = _add_data(df, data)
+    if col_order is None:
+        rem = set(data.keys()) - set([config.LOGGED_AT_COLUMN])
+        col_order = [config.LOGGED_AT_COLUMN] + list(rem)
+    if order is None:
+        order = [config.LOGGED_AT_COLUMN]
 
-    sheets.save_csv(df, order=[config.LOGGED_AT_COLUMN], col_order=col_order)
+    client = SheetClient()
+    client.add_row(data)
+    client.format(order_by=order, col_order=col_order)
 
 if __name__ == "__main__":
     print("Beginning to test tracking...")
     import time
     for i in range(5):
-        track(order=["created_at"], col_order=["created_at"])
+        metrics = {
+            "ametric": 0.42,
+            "anothermetric": 0.99999,
+            "lastmetric": 121342141241.1
+        }
+        model = "TrackingTestModel"
+        model_parameters_path = "/no/parameters/exits.pth"
+        track(metrics, model, model_parameters_path, order=["created_at"], col_order=["created_at"])
         time.sleep(2)
     print("Tracking test done!")
