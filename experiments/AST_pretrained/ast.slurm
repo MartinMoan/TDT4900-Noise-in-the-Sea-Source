@@ -4,7 +4,7 @@
 #SBATCH --time=00-16:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --gres=gpu:1
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
@@ -20,4 +20,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-ENV=prod VIRTUAL_DATASET_LOADING=False python ast_trainer.py --learning-rate 0.0001 --weight-decay 0.00001 --epochs 3 --batch-size 64 --num-workers 32 --force-gpu
+ENV=prod VIRTUAL_DATASET_LOADING=False python ast_trainer.py --learning-rate 0.0001 --weight-decay 0.00001 --epochs 3 --batch-size 16 --num-workers 32 --force-gpu
