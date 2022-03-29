@@ -88,6 +88,8 @@ def train(args):
         verbose=True
     )
 
+    model.freeze_pretrained_parameters()
+
     # idx, X, Y = dataset[0]
     # print(X.shape)
     # Yhat = model(X)
