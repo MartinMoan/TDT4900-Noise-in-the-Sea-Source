@@ -18,13 +18,18 @@ from audiodata import LabeledAudioData
 from ITensorAudioDataset import MelSpectrogramFeatureAccessor
 
 class ClippedDataset(ICustomDataset):
-    def __init__(self, clip_duration_seconds = 10.0, clip_overlap_seconds = 0.0) -> None:
+    def __init__(self, clip_duration_seconds = None, clip_overlap_seconds = None, clip_nsamples: int = None, overlap_nsamples = None) -> None:
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
 
         self._preprocess_tabular_data()
 
         if config.VIRTUAL_DATASET_LOADING:
+            warnings.warn("The environment variable VIRTUAL_DATASET_LOADING is set to True, meaning that the GLIDER dataset loading class will only simulate loading datasets from disk. Ensure that this variable is not set during training or inference, as it is only intended to be used during local development.")
+            import socket
+            if "idun-login" in socket.gethostname():
+                raise Exception(f"GLIDER detected that the current hostname ({socket.gethostname()}) seems to correspond to the NTNU Idun computing cluster, while the VIRTUAL_DATASET_LOADING environment variable was set to True. This variable is only intended for local development and can cause unexpected results. This exception is raised to ensure that logs and model parameters are not overwritten using invalid/simulated data.")
+
             labeled_audiofiles = []
             for labelidx in self._labels.index:
                 label = self._labels.iloc[labelidx]
@@ -35,8 +40,17 @@ class ClippedDataset(ICustomDataset):
             self._audiofiles = self._audiofiles.loc[labeled_audiofiles, :]
             self._audiofiles = self._audiofiles.iloc[:50]
 
-        self._clip_duration = clip_duration_seconds
-        self._clip_overlap = clip_overlap_seconds
+        sampling_rate = self._audiofiles.sampling_rate.max()
+        if clip_duration_seconds is None and clip_nsamples is not None:
+            self._clip_duration = clip_nsamples / sampling_rate
+        else:
+            self._clip_duration = clip_duration_seconds
+        
+        if clip_overlap_seconds is None and overlap_nsamples is not None:
+            self._clip_overlap = overlap_nsamples / sampling_rate
+        else:
+            self._clip_overlap = clip_overlap_seconds
+
         self._max_file_duration = self._audiofiles.duration_seconds.max()
         self._num_clips_per_file = math.floor((self._max_file_duration - self._clip_overlap) / (self._clip_duration - self._clip_overlap))
         
@@ -157,9 +171,9 @@ class ClippedDataset(ICustomDataset):
 
     def example_shapes(self) -> Iterable[tuple[int, ...]]:
         sr = self._audiofiles.sampling_rate.max()
-        num_samples = self._clip_duration * sr
-        num_channels = self._audiofiles.num_samples.max()
-        return [(num_channels, num_samples) for _ in range(len(self))] 
+        num_samples = int(self._clip_duration * sr)
+        num_channels = self._audiofiles.num_channels.max()
+        return [(num_channels, num_samples) for _ in range(len(self))]
 
 if __name__ == "__main__":
     dataset = ClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)

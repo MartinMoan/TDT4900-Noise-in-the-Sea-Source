@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
-import uuid
+from typing import Iterable, Mapping, Tuple, Union
 
-import numpy as np
 import gspread
+from gspread.utils import a1_range_to_grid_range, rowcol_to_a1
 import pandas as pd
+import numpy as np
 from oauth2client.service_account import ServiceAccountCredentials
 from rich import print
 import git
@@ -14,164 +15,203 @@ REPO_DIR = pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_di
 sys.path.insert(0, str(REPO_DIR))
 import config
 
-def authenticate():
-    credentials_path = REPO_DIR.joinpath("credentials.json")
-    creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
-    client = gspread.authorize(creds)
-    return client
-    
-def _get_sheet():
-    client = authenticate()
-    sheet = client.open_by_key(config.SPREADSHEET_ID)
-    return sheet.get_worksheet_by_id(config.SHEET_ID)
+class SheetClient:
+    def __init__(self) -> None:
+        self._client = self._authenticate()
+        self._spreadsheet = self._client.open_by_key(config.SPREADSHEET_ID)
+        self._sheet = self._spreadsheet.get_worksheet_by_id(config.SHEET_ID)
 
-def load_csv():
-    worksheet = _get_sheet()
-    records = worksheet.get_all_records()
-    return pd.DataFrame.from_dict(records)
+    def _authenticate(self) -> gspread.Client:
+        credentials_path = REPO_DIR.joinpath("credentials.json")
+        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
+        client = gspread.authorize(creds)
+        return client
 
-def _header(worksheet):
-    n_headers = len(worksheet.row_values(1))
-    return f"{gspread.utils.rowcol_to_a1(1, 1)}:{gspread.utils.rowcol_to_a1(1, n_headers)}"
+    def get_column_names(self) -> Iterable[str]:
+        rows = self._sheet.get_values()
+        if len(rows) > 0:
+            return rows[0]
+        return []
 
-def _resize_request(df):
-    output = { "autoResizeDimensions": 
-            {
-                "dimensions": 
-                    {
+    def add_columns(self, columns: Iterable[str]) -> None:
+        cols = self.get_column_names()
+        if len(cols) + len(columns) >= self._sheet.col_count:
+            num_new_cols = len(columns)
+            self._sheet.add_cols(num_new_cols)
+
+        first_new_col_idx = len(cols) + 1
+        last_new_col_idx = first_new_col_idx + len(columns)
+        data = [{
+            "range": f"{rowcol_to_a1(1, first_new_col_idx)}:{rowcol_to_a1(1, last_new_col_idx)}",
+            "values": [columns]
+        }]
+        self._sheet.batch_update(data)
+        
+    def _order_row_values(self, flattened_new_row: Mapping[str, any]) -> list:
+        existing_columns = self.get_column_names()
+        output = [flattened_new_row[col] for col in existing_columns]
+        return output
+
+    def add_row(self, row: Mapping[str, any]) -> None:
+        if len(row) == 0:
+            raise Exception(f"SheetClient could not write empty row: {row}")
+        
+        # Flatten nested dicts in the row
+        flattened_row = pd.json_normalize(row).to_dict(orient="records")[0]
+
+        existing_columns = self.get_column_names()
+        cols_in_new_row = flattened_row.keys()
+        
+        # Ensure that the new row has keys/columns for all columns that already exist in the sheet
+        missing_columns = list(set(existing_columns) - set(cols_in_new_row)) # Initialize these columns in the new row with missing value None/0/np.nan 
+        for col in missing_columns:
+            flattened_row[col] = None
+
+        # Add any new columns, e.g. keys/columns in the new row that are not already present in the sheet, to the sheet.
+        new_columns = list(set(cols_in_new_row) - set(existing_columns)) # add these columns to the sheet
+        if len(new_columns) > 0:
+            self.add_columns(new_columns)
+
+        # Ensure that the values in new row is ordered correctly, according to columns and append it to the worksheet
+        row_values_to_append = self._order_row_values(flattened_row)
+        for idx, value in enumerate(row_values_to_append):
+            if type(value) not in [float, int, str] and value is not None:
+                row_values_to_append[idx] = str(value)
+        self._sheet.append_row(row_values_to_append, value_input_option="RAW", insert_data_option="INSERT_ROWS")
+
+    def sort(self, order_by: Iterable[str] = []) -> None:
+        cols = self.get_column_names()
+        _order_by = [col for col in order_by if col in cols]
+        order_by = [(cols.index(col) + 1, "des") for col in _order_by]
+        rows = self._sheet.get_values()
+        value_range = f"A2:{rowcol_to_a1(len(rows), len(cols))}" # cells not containing header row
+        self._sheet.sort(*order_by, range=value_range)
+
+    def _move_request(self, from_col_idx: int, to_col_idx: int) -> dict:
+        json_request = {
+                    "moveDimension": {
+                        "source": {
+                            "sheetId": config.SHEET_ID,
+                            "dimension": "COLUMNS",
+                            "startIndex": from_col_idx,
+                            "endIndex": from_col_idx+1
+                        },
+                        "destinationIndex": to_col_idx
+                    }
+                }
+        return json_request
+
+    def set_col_order(self, col_order: Iterable[str] = []) -> None:
+        columns = self.get_column_names()
+        cols_to_move = []
+        for index, column in enumerate(col_order):
+            frm = columns.index(column)
+            to = index
+            if frm != to:
+                r = self._move_request(frm, index)
+                
+                del columns[frm]
+                columns.insert(index, column)
+
+                cols_to_move.append(r)
+        
+        if len(cols_to_move) > 0:
+            body = {
+                "requests": cols_to_move
+            }
+            self._spreadsheet.batch_update(body)
+
+    def _get_sheet_metadata(self):
+        spreadsheet_metadata = self._spreadsheet.fetch_sheet_metadata()
+        
+        if "sheets" in spreadsheet_metadata.keys():
+            for sheet in spreadsheet_metadata["sheets"]:
+                if "properties" in sheet:
+                    properties = sheet["properties"]
+                    if "sheetId" in properties:
+                        if properties["sheetId"] == config.SHEET_ID:
+                            return sheet
+        return {}
+
+    def _batchupdate_bandedrange(self, command: str = "addBanding", banded_range_id: int = None):
+        if command not in ["addBanding", "updateBanding"]:
+            raise Exception(f"Command argument {command} is invalid, must be 'addBanding' or 'updateBanding'")
+        
+        rows = self._sheet.get_values()
+        cols = self.get_column_names()
+        banded_range = {
+            'range': {
+                'sheetId': config.SHEET_ID,
+                'startRowIndex': 0,
+                'endRowIndex': len(rows),
+                'startColumnIndex': 0,
+                'endColumnIndex': len(cols),
+            },
+            'rowProperties': {
+                'headerColor': config.HEADER_BACKGROUND_COLOR,
+                'firstBandColor': config.ODD_ROW_BACKGROUND_COLOR,
+                'secondBandColor': config.EVEN_ROW_BACKGROUND_COLOR
+            },
+        }
+        if banded_range_id is not None:
+            banded_range["bandedRangeId"] = banded_range_id
+        
+        cmd = {command: {"bandedRange": banded_range}}
+        if command == "updateBanding": 
+            cmd[command]["fields"] = "range"
+
+        body = {"requests": [cmd]}
+        self._spreadsheet.batch_update(body)
+
+    def set_alternating_colors(self):
+        metadata = self._get_sheet_metadata()
+        
+        banded_range_id = None
+        command = "addBanding"
+        if "bandedRanges" in metadata:
+            for bandedRange in metadata["bandedRanges"]:
+                if "bandedRangeId" in bandedRange:
+                    banded_range_id = bandedRange["bandedRangeId"]
+                    command = "updateBanding"
+
+        self._batchupdate_bandedrange(command=command, banded_range_id=banded_range_id)
+
+    def autosize_columns(self):
+        cols = self.get_column_names()
+        resize_request = {
+            "autoResizeDimensions": {
+                "dimensions": {
                     "sheetId": config.SHEET_ID,
                     "dimension": "COLUMNS",
                     "startIndex": 0,
-                    "endIndex": len(df.columns)
-                    }
+                    "endIndex": len(cols)
+                }
             }
-    }
-    return output
-
-def _rgba(*args):
-    def _to_rgba_dict(rgba):
-        return {"red": rgba[0], "green": rgba[1], "blue": rgba[2], "alpha": rgba[3]}
-    if len(args) == 1:
-        c = args[0]
-        return _to_rgba_dict((c, c, c, 1))
-    elif len(args) == 2:
-        c, a = args[0], args[1]
-        return _to_rgba_dict((c, c, c, a))
-    elif len(args) == 3:
-        return _to_rgba_dict((args[0], args[1], args[2], 1))
-    elif len(args) == 4:
-        return _to_rgba_dict((args[0], args[1], args[2], args[3]))
-    else:
-        raise Exception(f"Unexpected number of arguments to sheets._rgba {len(args)}")
-
-def _sheet_dtype(value):
-    if type(value) == str:
-        return "stringValue", str(value)
-    elif type(value) in [np.int32, np.int64, int, float, np.float64, np.float32]:
-        return "numberValue", str(value)
-    elif type(value) in [bool, np.bool8]:
-        return "boolValue", bool(value)
-    else:
-        return "stringValue", str(value)
-
-def _value_batch_update(df, client, spreadsheet, worksheet, order=[], col_order=[]):
-    def _val(val):
-        dtype, value = _sheet_dtype(val)
-        return {"userEnteredValue": {dtype: value}}
-
-    def _row_values(row):
-        vals = []
-        for col in col_order:
-            vals.append(_val(row[col]))
-        return vals
-
-    if order is not None and order != []:
-        df = df.sort_values(by=order, axis=0, ascending=False, na_position="last", ignore_index=False)
+        }
+        body = {
+            "requests": [resize_request]
+        }
+        self._spreadsheet.batch_update(body)
     
-    rows = [{"values": [_val(col) for col in col_order]}]
-    for idx in df.index:
-        row = {"values": _row_values(df.loc[idx])}
-        rows.append(row)
+    def format(self, order_by: Iterable[Tuple[str, str]] = [], col_order: Iterable[str] = []) -> None:
+        self.sort(order_by=order_by)
+        self.set_col_order(col_order=col_order)
+        self.set_alternating_colors()
+        self.autosize_columns()
 
-    output = {
-        "updateCells": {
-            "rows": rows,
-            "range": {
-                "sheetId": config.SHEET_ID,
-                "startRowIndex": 0,
-                "endRowIndex": len(df) + 1, # +1 due to header/column names row also added
-                "startColumnIndex": 0,
-                "endColumnIndex": len(df.columns)
-            },
-            "fields": "userEnteredValue"
+def main():
+    from datetime import datetime
+    client = SheetClient()
+    data = {
+        "created_at": datetime.now().strftime(config.DATETIME_FORMAT),
+        "a_new_column": {
+            "nested": "value"
         }
     }
-    return output
+    client.add_row(data)
+    col_order = ["created_at"]
+    
+    client.format(order_by=[("created_at", "des")], col_order=col_order)
 
-def _delete_formatting(banded_range_id):
-    return {"deleteBanding": {"bandedRangeId": banded_range_id}}
-
-def _formatting(df, next_id, command="addBanding"):
-    output = {
-        command: 
-        {
-            'bandedRange':
-            {
-                'bandedRangeId': str(next_id),
-                'range': 
-                {
-                    'sheetId': config.SHEET_ID,
-                    'startRowIndex': 0,
-                    'endRowIndex': len(df) + 1,
-                    'startColumnIndex': 0,
-                    'endColumnIndex': len(df.columns),
-                },
-                'rowProperties': {
-                    'headerColor': config.HEADER_BACKGROUND_COLOR,
-                    'firstBandColor': config.ODD_ROW_BACKGROUND_COLOR,
-                    'secondBandColor': config.EVEN_ROW_BACKGROUND_COLOR
-                },
-            }
-        }
-    }
-    return output
-
-def _get_brange_ids(spreadsheet):
-    banded_range_ids_in_sheet = []
-    banded_range_ids_in_all_sheets = []
-    spreadsheet_get_info = spreadsheet._spreadsheets_get()
-    if "sheets" in spreadsheet_get_info.keys():
-        for sheet in spreadsheet_get_info["sheets"]:
-            if "properties" in sheet.keys() and "sheetId" in sheet["properties"].keys():
-                if "bandedRanges" in sheet.keys():
-                    for brange in sheet["bandedRanges"]:
-                        if "bandedRangeId" in brange.keys():
-                            if sheet["properties"]["sheetId"] == config.SHEET_ID:
-                                banded_range_ids_in_sheet.append(brange["bandedRangeId"])
-                            else:
-                                banded_range_ids_in_all_sheets.append(brange["bandedRangeId"])
-    next_id = 1 if len(banded_range_ids_in_all_sheets) == 0 else np.max(banded_range_ids_in_all_sheets) + 1
-    return banded_range_ids_in_sheet, next_id
-
-def _set_requests(df, client, spreadsheet, worksheet, order=[], col_order=[]):
-    requests = [
-        _value_batch_update(df, client, spreadsheet, worksheet, order=order, col_order=col_order),
-        _resize_request(df),
-    ]
-    banded_ranges_in_sheet, next_id = _get_brange_ids(spreadsheet)
-    requests += [_delete_formatting(BRANGE_ID) for BRANGE_ID in banded_ranges_in_sheet]
-    requests.append(_formatting(df, next_id=next_id, command="addBanding"))
-    return requests
-
-def _batch_update(df, order=[], col_order=[]):
-    client = authenticate()
-    spreadsheet = client.open_by_key(config.SPREADSHEET_ID)
-    worksheet =  spreadsheet.get_worksheet_by_id(config.SHEET_ID)
-    body = {"requests": _set_requests(df, client, spreadsheet, worksheet, order=order, col_order=col_order)}
-    res = spreadsheet.batch_update(body)
-
-def save_csv(df, order=[], col_order=[]):
-    cleaned_df = df.fillna("")
-    if col_order == [] or col_order is None:
-        col_order = cleaned_df.columns
-    _batch_update(cleaned_df, order=order, col_order=col_order)
+if __name__ == "__main__":
+    main()
