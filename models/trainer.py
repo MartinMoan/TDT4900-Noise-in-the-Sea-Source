@@ -180,10 +180,11 @@ def kfoldcv(
     batch_size: int = 8, 
     num_workers: int = 1, 
     train_kwargs: Mapping = {}, 
-    tracker_kwargs: Mapping = {}):
+    tracker_kwargs: Mapping = {},
+    folder_ref: type = KFold):
     
     started_at = datetime.now()
-    folds = KFold(n_splits=kfolds, shuffle=True)
+    folds = folder_ref(n_splits=kfolds, shuffle=True)
     
     for fold, (training_samples, test_samples) in enumerate(folds.split(dataset)):
         print("----------------------------------------")

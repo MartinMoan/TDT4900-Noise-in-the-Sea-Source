@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-import warnings
 import abc
-from typing import Iterable, Mapping, Tuple
-import sys
-from matplotlib.pyplot import cla
+from typing import Iterable, Mapping
+
 import sklearn
-import torch
 from ICustomDataset import ICustomDataset
 from glider.audiodata import LabeledAudioData
 from glider.clipping import ClippedDataset
-from ITensorAudioDataset import ITensorAudioDataset, ILabelAccessor, IFeatureAccessor, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from ITensorAudioDataset import ITensorAudioDataset, FileLengthTensorAudioDataset, ILabelAccessor, IFeatureAccessor, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 import multiprocessing
 from multiprocessing import Pool
 import math
 import numpy as np
 from rich import print
+import sklearn
+import sklearn.model_selection
 
-class IBalancedDataset(ITensorAudioDataset, metaclass=abc.ABCMeta):
+class IDatasetBalancer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def train() -> None:
-        """Set the dataset to training mode: meaning that the dataset will be balanced"""
-    
-    @abc.abstractmethod
-    def eval() -> None:
+    def eval_only_indeces() -> Iterable[int]:
         """Set the dataset to eval mode, the dataset ouput will not be balanced."""
+        raise NotImplementedError
 
+    @abc.abstractmethod
+    def train_indeces() -> Iterable[int]:
+        raise NotImplementedError
 
-class BalancedDataset(IBalancedDataset):
+class DatasetBalancer(IDatasetBalancer):
     """A ITensorAudioDataset implentation that ensures that the number of unlabeled instances to use for training is equal to the average size of each of the types of labeled instances. 
 
     Because any ICustomDataset can contain instances with any ONE of the following label presence pairs:
@@ -48,10 +47,9 @@ class BalancedDataset(IBalancedDataset):
     Args:
         FileLengthTensorAudioDataset (_type_): _description_
     """
-    def __init__(self, dataset: ICustomDataset, label_accessor: ILabelAccessor, feature_accessor: IFeatureAccessor) -> None:
+    def __init__(self, dataset: ICustomDataset) -> None:
         super().__init__()
         self._dataset = dataset
-        
         self._split_labels: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
 
         self._both_labels_indeces: Iterable[int] = self._split_labels["both"]
@@ -62,13 +60,11 @@ class BalancedDataset(IBalancedDataset):
         average_num_examples_per_label: float = np.mean([len(self._both_labels_indeces), len(self._anthropogenic_indeces), len(self._biophonic_indeces)])
         _num_unlabeled_to_use = min(len(self._neither_labels_indeces), int(average_num_examples_per_label))
 
-        
         self._unlabeled_indeces_to_use = np.random.choice(self._neither_labels_indeces, size=_num_unlabeled_to_use, replace=False)
-        self._labeled_indeces = np.concatenate([self._both_labels_indeces, self._anthropogenic_indeces, self._biophonic_indeces], axis=0)
-        self._indeces_to_use = np.concatenate((self._labeled_indeces, self._unlabeled_indeces_to_use), axis=0)
+        self._eval_only_unlabeled_indeces = [idx for idx in self._neither_labels_indeces if idx not in self._unlabeled_indeces_to_use] # The remaining unlabeled indeces should only be used during eval, in conjunction with normal labeled instances. 
 
-        self._label_accessor = label_accessor
-        self._feature_accessor = feature_accessor
+        self._labeled_indeces = np.concatenate([self._both_labels_indeces, self._anthropogenic_indeces, self._biophonic_indeces], axis=0)
+        self._train_indeces_to_use = np.concatenate((self._labeled_indeces, self._unlabeled_indeces_to_use), axis=0)
 
     def _split_by_labels_poolfunc(self, dataset: ICustomDataset, start: int, end: int) -> Mapping[str, Iterable[int]]:
         proc = multiprocessing.current_process()
@@ -128,79 +124,71 @@ class BalancedDataset(IBalancedDataset):
                         output[key] += subsets[key]
             return output
 
-    def __len__(self) -> int:
-        return len(self._indeces_to_use)
+    def eval_only_indeces(self) -> Iterable[int]:
+        return np.array(self._eval_only_unlabeled_indeces).astype(int)
+        # return self._eval_only_unlabeled_indeces
 
-    def __getitem__(self, index: int) -> Tuple[int, torch.Tensor, torch.Tensor]:
-        """Returns a tuple (index: int, X: torch.Tensor, Y: torch.Tensor)"""
-        audio_data = self._dataset[index]
-        features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
-        labels = self._label_accessor(audio_data, features)
-        return index, features, labels
+    def train_indeces(self) -> Iterable[int]:
+        return np.array(self._train_indeces_to_use).astype(int)
+        # return self._train_indeces_to_use
 
-    def eval() -> None:
-        pass
+def print_label_distribution_stats(dataset: DatasetBalancer):
+    print(f"Num both antrhopogenic and biogenic: {len(dataset._both_labels_indeces)}")
+    print(f"Num just anthropogenic: {len(dataset._anthropogenic_indeces)}")
+    print(f"Num just biogenic: {len(dataset._biophonic_indeces)}")
+    print(f"Num unlabeled: {(len(dataset._neither_labels_indeces))}")
 
-    def train() -> None:
-        pass
-    # def classes(self) -> Mapping[str, int]:
-    #     return self._dataset.classes()
-
-    def example_shape(self) -> tuple[int, ...]:
-        if len(self) > 0:
-            audio_data = self._dataset[0]
-            features = self._feature_accessor(audio_data)
-            return features.shape
-        else:
-            warnings.warn("The TensorAudioDataset has length 0, this will likely cause unexpected results")
-            return None
-
-    def label_shape(self) -> tuple[int, ...]:
-        if len(self) > 0:
-            audio_data = self._dataset[0]
-            features = self._feature_accessor(audio_data)
-            labels = self._label_accessor(audio_data, features)
-            return labels.shape
-        else:
-            warnings.warn("The TensorAudioDataset has length 0, this will likely cause unexpected results")
-            return None
-
-def print_label_distribution_stats(dataset: BalancedDataset):
-    print(f"Num both antrhopogenic and biogenic: {len(balanced_dataset._both_labels_indeces)}")
-    print(f"Num just anthropogenic: {len(balanced_dataset._anthropogenic_indeces)}")
-    print(f"Num just biogenic: {len(balanced_dataset._biophonic_indeces)}")
-    print(f"Num unlabeled: {(len(balanced_dataset._neither_labels_indeces))}")
-
-import sklearn
-import sklearn.model_selection
-class CustomKFolder(sklearn.model_selection.KFold):
+class BalancedKFolder(sklearn.model_selection.KFold):
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
         super().__init__(n_splits, shuffle=shuffle, random_state=random_state)
 
-    def split(self, balanced_dataset: IBalancedDataset):
-        super().sp
-        return super().split(X, y, groups)
-
+    def split(self, filelength_dataset: FileLengthTensorAudioDataset):
+        if filelength_dataset is None:
+            raise ValueError("Input dataset is None")
         
+        if not isinstance(filelength_dataset, FileLengthTensorAudioDataset):
+            raise TypeError
+        
+        if filelength_dataset._dataset is None:
+            raise ValueError
+
+        if not isinstance(filelength_dataset._dataset, ICustomDataset):
+            raise TypeError
+        
+        balancer = DatasetBalancer(filelength_dataset._dataset)
+
+        all_training_indeces = balancer.train_indeces()
+        eval_only_indeces = balancer.eval_only_indeces()
+        
+        error_indeces = [idx for idx in eval_only_indeces if idx in all_training_indeces]
+        if len(error_indeces) != 0:
+            raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.\n{error_indeces}")
+
+        for (train, eval) in super().split(all_training_indeces):
+            eval_indexes = np.concatenate([eval, eval_only_indeces], axis=0, dtype=int)
+            yield (train, eval_indexes)
 
 if __name__ == "__main__":
-    # clip_duration_seconds = 10.0
-    # clip_overlap_seconds = 2.0
-    # dataset = ClippedDataset(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds)
-    # balanced_dataset = BalancedDataset(
+    clip_duration_seconds = 10.0
+    clip_overlap_seconds = 2.0
+    dataset = ClippedDataset(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds)
+    
+    balancer = DatasetBalancer(dataset)
+    for idx in balancer.eval_only_indeces():
+        element = dataset[idx]
+        labels = element.labels.source_class.unique()
+        assert len(labels) == 0
+    
+    # tensordataset = FileLengthTensorAudioDataset(
     #     dataset, 
     #     feature_accessor=MelSpectrogramFeatureAccessor(), 
     #     label_accessor=BinaryLabelAccessor()
     # )
 
-    from sklearn.model_selection import KFold
-    folds = KFold(n_splits=5, shuffle=True)
-    balanced_dataset = [chr(i) for i in range(100, 200)]
-    print(folds)
-    for fold, (training_indeces, test_indeces) in enumerate(folds.split(balanced_dataset)):
-        
-    exit()
+    # folds = BalancedKFolder(n_splits=5)
+    # folds.split(tensordataset)
+    # for fold, (train, eval) in enumerate(folds.split(tensordataset)):
+    #     for idx in eval:
+    #         print(tensordataset._dataset[idx].labels.source_class.unique())
 
-    
-
-    print_label_distribution_stats(balanced_dataset)
+    # print_label_distribution_stats(tensordataset)
