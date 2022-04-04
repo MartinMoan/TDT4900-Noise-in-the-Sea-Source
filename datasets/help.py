@@ -49,6 +49,8 @@ class IndexMe:
                 self[i] = value
         elif type(index) == int:
             raw_index = self._indeces[index]
+            raw_value = self._raw_values[index]
+            
             return self._raw_values[raw_index]
 
     def __len__(self):
