@@ -118,7 +118,7 @@ def train(args):
     # Try to run using limited dataset, to verify everything works as expected.
     # But don't log metrics to sheets during verification
     SHEET_ID = config.SHEET_ID
-    config.SHEET_ID = "1815131867"
+    config.SHEET_ID = config.VERIFICATION_SHEET_ID
     trainer.kfoldcv(
         model, 
         None,
