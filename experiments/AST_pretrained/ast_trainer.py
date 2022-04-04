@@ -7,20 +7,58 @@ Finetuning task is input (batch_size, T-second, M-mel-band spectrogram) tensor o
 import argparse
 import pathlib
 import sys
+from typing import Type, Union
 
 import torch
 from rich import print
 import git
+import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from GLIDER import GLIDER
 from clipping import ClippedDataset
+from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
 import trainer
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
 from IMetricComputer import BinaryMetricComputer
+from IDatasetBalancer import BalancedKFolder, DatasetBalancer
 from ASTWrapper import ASTWrapper
+
+class DatasetLimiter(torch.utils.data.Dataset):
+    def __init__(self, dataset: ICustomDataset, limit: Union[float, int], randomize: bool = False, balanced=True) -> None:
+        self._dataset = dataset
+        self._balanced = balanced
+        self._dataset_indeces = self._get_subset_indeces(dataset, limit, randomize)
+
+    def _get_subset_indeces(self, dataset, limit, randomize):
+        _num_in_subset = None
+        
+        if type(limit) == float:
+            if limit > 1.0 or limit < 0.0:
+                raise ValueError(limit)
+            _num_in_subset = int(limit * len(dataset))
+        elif type(limit) == int:
+            _num_in_subset = limit
+        else:
+            raise TypeError
+
+        raw_indeces = np.arange(0, len(dataset))
+        if randomize: 
+            choices = np.random.choice(raw_indeces, _num_in_subset, replace=False, )
+            return list(choices)
+        else:
+            return list(range(0, _num_in_subset))
+
+    def __len__(self):
+        return len(self._dataset_indeces)
+
+    def __getitem__(self, index):
+        if index > len(self):
+            raise IndexError(index)
+        raw_index = self._dataset_indeces[index]
+        return self._dataset[raw_index]
 
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
@@ -44,9 +82,6 @@ def load_model():
 def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # clip_nsamples = 1024 # Required by/due to the ASTModel pretraining
-    # overlap_nsamples = int(clip_nsamples * 0.25)
-
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
     nmels = 128
     hop_length = 512
@@ -57,12 +92,6 @@ def train(args):
     clip_dataset = ClippedDataset(
         clip_nsamples = clip_length_samples, 
         overlap_nsamples = clip_overlap_samples
-    )
-
-    dataset = FileLengthTensorAudioDataset(
-        dataset=clip_dataset, 
-        label_accessor=BinaryLabelAccessor(), 
-        feature_accessor=MelSpectrogramFeatureAccessor()
     )
 
     lr                  =   args.learning_rate
@@ -90,12 +119,6 @@ def train(args):
 
     model.freeze_pretrained_parameters()
 
-    # idx, X, Y = dataset[0]
-    # print(X.shape)
-    # Yhat = model(X)
-    # print(Yhat.shape)
-    # exit()
-
     model = torch.nn.DataParallel(model)
 
     metrics_computer    =   BinaryMetricComputer(clip_dataset.classes())
@@ -112,6 +135,19 @@ def train(args):
     clip_overlap_sec = clip_overlap_samples / sampling_rate
 
     print(f"Using device: {device}")
+
+    limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=True, )
+    print(len(limited_dataset))
+    for i in range(len(limited_dataset)):
+        print(limited_dataset[i])
+    exit()
+
+    dataset = FileLengthTensorAudioDataset(
+        dataset=clip_dataset, 
+        label_accessor=BinaryLabelAccessor(), 
+        feature_accessor=MelSpectrogramFeatureAccessor()
+    )
+
     trainer.kfoldcv(
         model, 
         None,
@@ -122,7 +158,8 @@ def train(args):
         batch_size=batch_size, 
         num_workers=num_workers,
         train_kwargs=train_kwargs, 
-        tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"}
+        tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"},
+        folder_ref=BalancedKFolder
     )
 
 def main():
