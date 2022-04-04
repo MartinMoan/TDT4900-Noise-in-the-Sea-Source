@@ -68,7 +68,7 @@ class ClippedDataset(ICustomDataset):
             percentage = ((i - start) / (stop - start)) * 100
             part = math.ceil((stop - start) * 0.025)
             if (i - start) % part == 0:
-                print(proc.name, f"{percentage:.2f}%")
+                print(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
             try:
                 # file_index = math.floor(i / self._num_clips_per_file)
                 audiodata = self._load(i)

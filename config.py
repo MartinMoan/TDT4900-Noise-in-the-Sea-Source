@@ -116,6 +116,7 @@ if not CHECKPOINTS_PATH.exists():
 SCOPES = ['https://www.googleapis.com/auth/drive']
 SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
 SHEET_ID = int(os.environ.get(f"{ENV.upper()}_SHEET_ID"))
+SHEETS_LOGGING_ENABLED=True
 
 LOCAL_RESULTS_FILENAME = f"{ENV}_results.csv".lower()
 LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILENAME)

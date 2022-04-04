@@ -78,7 +78,7 @@ class DatasetBalancer(IDatasetBalancer):
             part = math.ceil((end - start) * 0.025)
             if (i - start) % part == 0:
                 percentage = ((i - start) / (end - start)) * 100
-                print(f"Balancing: {proc.name} {percentage:.2f}%")
+                print(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
                 
             labeled_audio_data: LabeledAudioData = dataset[i]
             class_presence = labeled_audio_data.labels.source_class.unique()
@@ -178,17 +178,3 @@ if __name__ == "__main__":
         element = dataset[idx]
         labels = element.labels.source_class.unique()
         assert len(labels) == 0
-    
-    # tensordataset = FileLengthTensorAudioDataset(
-    #     dataset, 
-    #     feature_accessor=MelSpectrogramFeatureAccessor(), 
-    #     label_accessor=BinaryLabelAccessor()
-    # )
-
-    # folds = BalancedKFolder(n_splits=5)
-    # folds.split(tensordataset)
-    # for fold, (train, eval) in enumerate(folds.split(tensordataset)):
-    #     for idx in eval:
-    #         print(tensordataset._dataset[idx].labels.source_class.unique())
-
-    # print_label_distribution_stats(tensordataset)
