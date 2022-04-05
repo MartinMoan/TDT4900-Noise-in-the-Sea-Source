@@ -47,7 +47,7 @@ class DatasetBalancer(IDatasetBalancer):
     Args:
         FileLengthTensorAudioDataset (_type_): _description_
     """
-    def __init__(self, dataset: ICustomDataset) -> None:
+    def __init__(self, dataset: ICustomDataset, verbose=True) -> None:
         super().__init__()
         self._dataset = dataset
         self._split_labels: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
@@ -58,13 +58,41 @@ class DatasetBalancer(IDatasetBalancer):
         self._biophonic_indeces: Iterable[int] = self._split_labels["biophonic"]
 
         average_num_examples_per_label: float = np.mean([len(self._both_labels_indeces), len(self._anthropogenic_indeces), len(self._biophonic_indeces)])
-        _num_unlabeled_to_use = min(len(self._neither_labels_indeces), int(average_num_examples_per_label))
+        min_size = np.min([len(self._split_labels[key]) for key in self._split_labels.keys()], axis=0)
+        if min_size == 0:
+            raise Exception(f"Unable to balance dataset, because there is a label presence pair that has no values: {str({key: len(self._split_labels[key]) for key in self._split_labels.keys()})}")
 
-        self._unlabeled_indeces_to_use = np.random.choice(self._neither_labels_indeces, size=_num_unlabeled_to_use, replace=False)
-        self._eval_only_unlabeled_indeces = [idx for idx in self._neither_labels_indeces if idx not in self._unlabeled_indeces_to_use] # The remaining unlabeled indeces should only be used during eval, in conjunction with normal labeled instances. 
+        self._indeces_for_training = {}
+        self._indeces_for_eval = {}
+        for key in self._split_labels.keys():
+            indeces: Iterable[int] = np.array(self._split_labels[key])
+            train_part = np.random.choice(indeces, size=min_size, replace=False)
+            eval_part = indeces[~np.isin(indeces, train_part)]
+            self._indeces_for_training[key] = train_part
+            self._indeces_for_eval[key] = eval_part
 
-        self._labeled_indeces = np.concatenate([self._both_labels_indeces, self._anthropogenic_indeces, self._biophonic_indeces], axis=0)
-        self._train_indeces_to_use = np.concatenate((self._labeled_indeces, self._unlabeled_indeces_to_use), axis=0)
+        if verbose:
+            print(f"{self.__class__.__name__} class/label-presence distribution:")
+            print("The instances under for training and eval will be split according to the current fold train/test split. And the eval only instances will be added to the test part of the split for every fold.")
+            print("---- FOR TRAINING AND EVAL ---- ")
+            for key in self._indeces_for_training.keys():
+                print(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
+            
+            print("---- FOR EVAL ONLY ---- ")
+            print("")
+            for key in self._indeces_for_eval.keys():
+                print(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
+            print("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
+            for key in self._split_labels.keys():
+                print(f"Number of instances with label '{key}': {len(self._split_labels[key])}")
+
+            num_for_training = np.sum([len(self._indeces_for_training[key]) for key in self._indeces_for_training.keys()])
+            num_for_eval = np.sum([len(self._indeces_for_eval[key]) for key in self._indeces_for_eval.keys()])
+            print(f"Total number of instances for training: {num_for_training}")
+            print(f"Total number of instances for eval: {num_for_eval}")
+            print(f"Total number of instances for both training and eval: {(num_for_training + num_for_eval)}")
+            print(f"Input dataset length: {len(self._dataset)}")
+            print(f"The number of instances is as expected?: {(num_for_training + num_for_eval) == len(self._dataset)}")
 
     def _split_by_labels_poolfunc(self, dataset: ICustomDataset, start: int, end: int) -> Mapping[str, Iterable[int]]:
         proc = multiprocessing.current_process()
@@ -125,12 +153,12 @@ class DatasetBalancer(IDatasetBalancer):
             return output
 
     def eval_only_indeces(self) -> Iterable[int]:
-        return np.array(self._eval_only_unlabeled_indeces).astype(int)
-        # return self._eval_only_unlabeled_indeces
+        indeces = np.concatenate([self._indeces_for_eval[key] for key in self._indeces_for_eval], axis=0)
+        return indeces.astype(int)
 
     def train_indeces(self) -> Iterable[int]:
-        return np.array(self._train_indeces_to_use).astype(int)
-        # return self._train_indeces_to_use
+        indeces = np.concatenate([self._indeces_for_eval[key] for key in self._indeces_for_eval], axis=0)
+        return indeces.astype(int)
 
 def print_label_distribution_stats(dataset: DatasetBalancer):
     print(f"Num both antrhopogenic and biogenic: {len(dataset._both_labels_indeces)}")
@@ -166,7 +194,7 @@ class BalancedKFolder(sklearn.model_selection.KFold):
 
         for (train, eval) in super().split(all_training_indeces):
             eval_indexes = np.concatenate([eval, eval_only_indeces], axis=0, dtype=int)
-            yield (train, eval_indexes)
+            yield (train, eval)
 
 if __name__ == "__main__":
     clip_duration_seconds = 10.0

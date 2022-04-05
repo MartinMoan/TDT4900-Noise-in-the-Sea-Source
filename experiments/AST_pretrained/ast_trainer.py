@@ -112,7 +112,7 @@ def train(args):
     dataset = FileLengthTensorAudioDataset(
         dataset=clip_dataset, 
         label_accessor=BinaryLabelAccessor(), 
-        feature_accessor=MelSpectrogramFeatureAccessor()
+        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)
     )
 
     # Try to run using limited dataset, to verify everything works as expected.
