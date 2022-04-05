@@ -157,7 +157,7 @@ class DatasetBalancer(IDatasetBalancer):
         return indeces.astype(int)
 
     def train_indeces(self) -> Iterable[int]:
-        indeces = np.concatenate([self._indeces_for_eval[key] for key in self._indeces_for_eval], axis=0)
+        indeces = np.concatenate([self._indeces_for_training[key] for key in self._indeces_for_training], axis=0)
         return indeces.astype(int)
 
 def print_label_distribution_stats(dataset: DatasetBalancer):
@@ -190,7 +190,7 @@ class BalancedKFolder(sklearn.model_selection.KFold):
         
         error_indeces = [idx for idx in eval_only_indeces if idx in all_training_indeces]
         if len(error_indeces) != 0:
-            raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.\n{error_indeces}")
+            raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
 
         for (train, eval) in super().split(all_training_indeces):
             eval_indexes = np.concatenate([eval, eval_only_indeces], axis=0, dtype=int)
