@@ -144,6 +144,10 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
         else:
             warnings.warn("The TensorAudioDataset has length 0, this will likely cause unexpected results")
             return None
+    
+    def __repr__(self):
+        relevant_values = {"_dataset": repr(self._dataset)}
+        return repr(relevant_values)
 
 if __name__ == "__main__":
     from GLIDER import GLIDER

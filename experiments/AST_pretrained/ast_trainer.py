@@ -16,7 +16,7 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from GLIDER import GLIDER
-from clipping import ClippedDataset
+from clipping import ClippedDataset, ClippingCacheDecorator
 from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
 import trainer
@@ -55,7 +55,7 @@ def train(args):
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, nmels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
-    clip_dataset = ClippedDataset(
+    clip_dataset = ClippingCacheDecorator(
         clip_nsamples = clip_length_samples, 
         overlap_nsamples = clip_overlap_samples
     )
@@ -85,7 +85,11 @@ def train(args):
 
     model.freeze_pretrained_parameters()
 
-    model = torch.nn.DataParallel(model)
+    if torch.cuda.device_count() > 1:
+        # Use all the available GPUs with DataParallel
+        model = torch.nn.DataParallel(model)
+    
+    model.to(device)
 
     metrics_computer    =   BinaryMetricComputer(clip_dataset.classes())
 

@@ -104,15 +104,6 @@ if os.environ.get("VIRTUAL_DATASET_LOADING") is None:
     warnings.warn("Evironment variable VIRTUAL_DATASET_LOADING is missing, using default value False")
 VIRTUAL_DATASET_LOADING = os.environ.get("VIRTUAL_DATASET_LOADING").strip().lower() == "true"
 
-# Saver.py
-DEFAULT_PARAMETERS_PATH = REPO_DIR.joinpath("models", "parameters").absolute()
-if not DEFAULT_PARAMETERS_PATH.exists():
-    DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
-
-CHECKPOINTS_PATH = REPO_DIR.joinpath("models", "checkpoints").absolute()
-if not CHECKPOINTS_PATH.exists():
-    CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
-
 SCOPES = ['https://www.googleapis.com/auth/drive']
 SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
 SHEET_ID = int(os.environ.get(f"{ENV.upper()}_SHEET_ID"))
@@ -121,6 +112,16 @@ VERIFICATION_SHEET_ID = int(os.environ.get("VERIFICATION_SHEET_ID"))
 LOCAL_RESULTS_FILENAME = f"{ENV}_results.csv".lower()
 LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILENAME)
 
-CACHE_DIR = pathlib.Path.home().joinpath(".nits", "cache")
+HOME_PROJECT_DIR = pathlib.Path.home().joinpath(".nits")
+CACHE_DIR = HOME_PROJECT_DIR.joinpath("cache")
 if not CACHE_DIR.exists():
     CACHE_DIR.mkdir(parents=False, exist_ok=False)
+
+# Saver.py
+DEFAULT_PARAMETERS_PATH = HOME_PROJECT_DIR.joinpath("models", "parameters").absolute()
+if not DEFAULT_PARAMETERS_PATH.exists():
+    DEFAULT_PARAMETERS_PATH.mkdir(parents=True, exist_ok=False)
+
+CHECKPOINTS_PATH = HOME_PROJECT_DIR.joinpath("models", "checkpoints").absolute()
+if not CHECKPOINTS_PATH.exists():
+    CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
