@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
+import os
 from datetime import datetime, timedelta
 import pathlib
 import sys
 import math
+from types import MethodType
 import warnings
 import multiprocessing
 from multiprocessing.pool import ThreadPool, Pool
 from typing import Iterable, Mapping
+import pickle
+import hashlib
+
 
 from rich import print
 import pandas as pd
@@ -14,11 +19,26 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from ICustomDataset import ICustomDataset
+from cacher import Cacher
 from audiodata import LabeledAudioData
 from ITensorAudioDataset import MelSpectrogramFeatureAccessor
 
+CLIPPING_CACHE_DIR = config.CACHE_DIR.joinpath("clipping")
+
+if not CLIPPING_CACHE_DIR.exists():
+    CLIPPING_CACHE_DIR.mkdir(parents=True, exist_ok=False)
+
+class ClippingCacheDecorator(ICustomDataset):
+    def __new__(cls, *args, force_recache=False, **kwargs) -> ICustomDataset:
+        return Cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, **kwargs)
+
 class ClippedDataset(ICustomDataset):
-    def __init__(self, clip_duration_seconds = None, clip_overlap_seconds = None, clip_nsamples: int = None, overlap_nsamples = None) -> None:
+    def __init__(self, 
+        clip_duration_seconds: float = None, 
+        clip_overlap_seconds: float = None, 
+        clip_nsamples: int = None, 
+        overlap_nsamples: int = None) -> None:
+
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
 
@@ -175,20 +195,26 @@ class ClippedDataset(ICustomDataset):
         num_channels = self._audiofiles.num_channels.max()
         return [(num_channels, num_samples) for _ in range(len(self))]
 
+    def __repr__(self):
+        relevant_values = {"clip_duration": self._clip_duration, "_clip_overlap": self._clip_duration}
+        return repr(relevant_values)
+
+
 if __name__ == "__main__":
-    dataset = ClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
-    from matplotlib import pyplot as plt
-    spectrogram_computer = MelSpectrogramFeatureAccessor(n_mels=128, n_fft=2048, hop_length=512)
-    for i in range(len(dataset)):
-        audiodata = dataset[i]
-        print(audiodata)
-        labels = audiodata.labels
-        print(labels)
-        if len(labels) > 0:
-            spect = spectrogram_computer(audiodata)
-            spect = spect.squeeze()
-            classes = ", ".join(labels.source_class_specific.unique())
-            plt.suptitle(audiodata.filepath.name)
-            plt.title(classes) 
-            plt.imshow(spect, aspect="auto", extent=[0, spect.shape[1], 0, spect.shape[0]])
-            plt.show()
+    dataset = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
+    d2 = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.4)
+    # from matplotlib import pyplot as plt
+    # spectrogram_computer = MelSpectrogramFeatureAccessor(n_mels=128, n_fft=2048, hop_length=512)
+    # for i in range(len(dataset)):
+    #     audiodata = dataset[i]
+    #     print(audiodata)
+    #     labels = audiodata.labels
+    #     print(labels)
+    #     if len(labels) > 0:
+    #         spect = spectrogram_computer(audiodata)
+    #         spect = spect.squeeze()
+    #         classes = ", ".join(labels.source_class_specific.unique())
+    #         plt.suptitle(audiodata.filepath.name)
+    #         plt.title(classes) 
+    #         plt.imshow(spect, aspect="auto", extent=[0, spect.shape[1], 0, spect.shape[0]])
+    #         plt.show()

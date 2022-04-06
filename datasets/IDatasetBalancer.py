@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 import abc
+import enum
+import os
+import hashlib
+import sys
+import pathlib
+from tabnanny import verbose
 from typing import Iterable, Mapping
+import pickle
 
 import sklearn
 from ICustomDataset import ICustomDataset
 from glider.audiodata import LabeledAudioData
-from glider.clipping import ClippedDataset
+from glider.clipping import ClippedDataset, ClippingCacheDecorator
 from ITensorAudioDataset import ITensorAudioDataset, FileLengthTensorAudioDataset, ILabelAccessor, IFeatureAccessor, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from cacher import Cacher
 import multiprocessing
 from multiprocessing import Pool
 import math
@@ -14,6 +22,10 @@ import numpy as np
 from rich import print
 import sklearn
 import sklearn.model_selection
+import git
+
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
 
 class IDatasetBalancer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -24,6 +36,16 @@ class IDatasetBalancer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def train_indeces() -> Iterable[int]:
         raise NotImplementedError
+
+BALANCER_CACHE_DIR = config.CACHE_DIR.joinpath("balancing")
+if not BALANCER_CACHE_DIR.exists():
+    BALANCER_CACHE_DIR.mkdir(parents=True, exist_ok=False)
+
+class BalancerCacheDecorator(IDatasetBalancer):
+    def __new__(cls, dataset: ICustomDataset, force_recache=False, **kwargs) -> IDatasetBalancer:
+        hashable_arguments = repr(dataset).encode()
+        args = (dataset,)
+        return Cacher.cache(BALANCER_CACHE_DIR, DatasetBalancer, *args, hashable_arguments=hashable_arguments, force_recache=force_recache, **kwargs)
 
 class DatasetBalancer(IDatasetBalancer):
     """A ITensorAudioDataset implentation that ensures that the number of unlabeled instances to use for training is equal to the average size of each of the types of labeled instances. 
@@ -154,10 +176,12 @@ class DatasetBalancer(IDatasetBalancer):
 
     def eval_only_indeces(self) -> Iterable[int]:
         indeces = np.concatenate([self._indeces_for_eval[key] for key in self._indeces_for_eval], axis=0)
+        np.random.shuffle(indeces)
         return indeces.astype(int)
 
     def train_indeces(self) -> Iterable[int]:
         indeces = np.concatenate([self._indeces_for_training[key] for key in self._indeces_for_training], axis=0)
+        np.random.shuffle(indeces)
         return indeces.astype(int)
 
 def print_label_distribution_stats(dataset: DatasetBalancer):
@@ -183,7 +207,7 @@ class BalancedKFolder(sklearn.model_selection.KFold):
         if not isinstance(filelength_dataset._dataset, ICustomDataset):
             raise TypeError
         
-        balancer = DatasetBalancer(filelength_dataset._dataset)
+        balancer = BalancerCacheDecorator(filelength_dataset._dataset)
 
         all_training_indeces = balancer.train_indeces()
         eval_only_indeces = balancer.eval_only_indeces()
@@ -191,18 +215,25 @@ class BalancedKFolder(sklearn.model_selection.KFold):
         error_indeces = [idx for idx in eval_only_indeces if idx in all_training_indeces]
         if len(error_indeces) != 0:
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
-
+        
         for (train, eval) in super().split(all_training_indeces):
-            eval_indexes = np.concatenate([eval, eval_only_indeces], axis=0, dtype=int)
-            yield (train, eval)
+            eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
+            yield (all_training_indeces[train], eval_indeces)
 
 if __name__ == "__main__":
     clip_duration_seconds = 10.0
     clip_overlap_seconds = 2.0
-    dataset = ClippedDataset(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds)
+    dataset = ClippingCacheDecorator(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds)
     
-    balancer = DatasetBalancer(dataset)
-    for idx in balancer.eval_only_indeces():
-        element = dataset[idx]
-        labels = element.labels.source_class.unique()
-        assert len(labels) == 0
+    d = FileLengthTensorAudioDataset(
+        dataset, 
+        BinaryLabelAccessor(),
+        MelSpectrogramFeatureAccessor()
+    )
+
+    folder = BalancedKFolder(n_splits=5, shuffle=False)
+    import torch
+    for fold, (train_indeces, test_indeces) in enumerate(folder.split(d)):
+        for idx in test_indeces:
+            index, X, Y = d[idx]
+            print(Y)
