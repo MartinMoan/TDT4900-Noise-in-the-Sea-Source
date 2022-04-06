@@ -7,7 +7,7 @@ import multiprocessing
 
 import torch
 from torch.utils.data import DataLoader
-from torch.utils.data import SubsetRandomSampler
+from torch.utils.data import SubsetRandomSampler, SequentialSampler
 from rich import print
 import git
 import numpy as np
@@ -15,13 +15,13 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from GLIDER import GLIDER
-from clipping import ClippedDataset
+from clipping import ClippedDataset, ClippingCacheDecorator
 from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
 import trainer
 from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
 from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer
+from IDatasetBalancer import BalancedKFolder, DatasetBalancer, BalancerCacheDecorator
 from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
 
@@ -33,7 +33,7 @@ def main():
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, nmels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
-    clip_dataset = ClippedDataset(
+    clip_dataset = ClippingCacheDecorator(
         clip_nsamples = clip_length_samples, 
         overlap_nsamples = clip_overlap_samples
     )
@@ -48,10 +48,10 @@ def main():
 
     for fold, (training_samples, test_samples) in enumerate(folder.split(dataset)):
         print(f"Fold: {fold}")
-        # sampler = SubsetRandomSampler(training_samples)
-        # trainset = DataLoader(dataset, batch_size=16, sampler=sampler, num_workers=multiprocessing.cpu_count())
+        # sampler = SequentialSampler(training_samples)
+        # trainset = DataLoader(dataset, batch_size=64, sampler=sampler, num_workers=multiprocessing.cpu_count())
         # for batch, (index, X, Y) in enumerate(trainset):
-        #     print(X, X.shape, Y, Y.shape)
+        #     print(batch, torch.unique(Y))
 
         def cat(t1, t2):
             if t1 is None:
@@ -65,8 +65,10 @@ def main():
             num_workers=multiprocessing.cpu_count()
         )
         
+        all_ys = None
         for i, (index, X, Y) in enumerate(testset):
             print(X, X.shape, Y, Y.shape)
+            all_ys = cat(all_ys, Y)
         
 
 if __name__ == "__main__":

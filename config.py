@@ -120,3 +120,7 @@ VERIFICATION_SHEET_ID = int(os.environ.get("VERIFICATION_SHEET_ID"))
 
 LOCAL_RESULTS_FILENAME = f"{ENV}_results.csv".lower()
 LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILENAME)
+
+CACHE_DIR = pathlib.Path.home().joinpath(".nits", "cache")
+if not CACHE_DIR.exists():
+    CACHE_DIR.mkdir(parents=False, exist_ok=False)
