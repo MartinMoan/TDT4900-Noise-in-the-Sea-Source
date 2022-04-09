@@ -98,7 +98,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         mean = np.mean(S_db, axis=1).reshape((-1, 1))
         numerator = (S_db - mean)
         denominator = np.std(S_db, axis=1).reshape((-1, 1))
-        S_db = numerator * (1/denominator) # TODO: Fix 0 division error (replace with 0)
+        S_db = np.divide(numerator, denominator, out=np.zeros_like(S_db), where=(denominator!=0))
         return self._to_single_channel_batch(_to_tensor(S_db))
 
 class FileLengthTensorAudioDataset(ITensorAudioDataset):
