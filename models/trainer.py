@@ -80,6 +80,7 @@ def infer(
             return t2
         return torch.cat((t1, t2))
 
+    last_print = None
     model.eval()
     with torch.no_grad():
         truth = None
@@ -92,7 +93,9 @@ def infer(
 
             truth = cat(truth, Y)
             predictions = cat(predictions, Yhat)
-
+            if last_print is None or datetime.now() - last_print >= config.PRINT_INTERVAL_SECONDS:
+                print(f"Eval index {i} / {len(testset)} - testset index {index}")
+        print("Eval iterations complete!")
         return truth, predictions
 
 def train(
@@ -156,7 +159,7 @@ def train(
         average_epoch_loss = epoch_loss / len(trainset)
         checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
         # saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
-    
+    print("Train iterations complete!")
     return model, optimizer
         
 def log_fold(

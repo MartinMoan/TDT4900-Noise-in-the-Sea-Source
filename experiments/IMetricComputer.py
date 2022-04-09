@@ -29,6 +29,9 @@ class IMetricComputer(metaclass=abc.ABCMeta):
         Returns:
             Mapping[str, float]: a dict of {metric_name: metric_value} mappings
         """
+        print("Computing metrics...")
+        print(f"Truth matrix shape: {truth.shape}")
+        print(f"Prediction matrix shape: {preds.shape}")
         if len(self.metrics) == 0:
             raise Exception(f"{self.__class__.__name__} does not have any registered metric functions (self.metrics) returned iterable with length 0")
 
@@ -49,7 +52,8 @@ class IMetricComputer(metaclass=abc.ABCMeta):
         if num_failed == len(self.metrics) and len(self.metrics) != 0:
             caught_exceptions = "\n".join([str(ex) for ex in exceptions])
             raise Exception(f"{self.__class__.__name__}: No metrics could be computed.\n{caught_exceptions}")
-
+        print("Metric computation done!")
+        print(results)
         return results
 
 class BinaryMetricComputer(IMetricComputer):
