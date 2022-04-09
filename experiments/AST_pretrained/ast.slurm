@@ -21,3 +21,5 @@ conda activate TDT4900
 conda info --envs
 
 ENV=prod VIRTUAL_DATASET_LOADING=False python ast_trainer.py --learning-rate 0.0001 --weight-decay 0.00001 --epochs 3 --batch-size 16 --num-workers 32 --force-gpu
+
+echo "ast.slurm job done!"

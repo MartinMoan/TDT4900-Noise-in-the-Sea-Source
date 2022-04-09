@@ -129,6 +129,7 @@ def train(
             checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
         return model, optimizer
 
+    last_print = None
     model.train()
     for epoch in range(epochs):
         epoch_loss = 0
@@ -148,9 +149,10 @@ def train(
                 raise Exception("Loss is nan...")
             
             epoch_loss += current_loss
-            
-            print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
-            
+            if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+                print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
+                last_print = datetime.now()
+
         average_epoch_loss = epoch_loss / len(trainset)
         checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
         # saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
