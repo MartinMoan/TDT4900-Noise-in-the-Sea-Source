@@ -138,20 +138,20 @@ def train(args):
     )
 
     # Now start the training with full dataset
-    config.SHEET_ID = SHEET_ID
-    trainer.kfoldcv(
-        model, 
-        None,
-        dataset, # The primary change
-        metrics_computer,
-        device,
-        from_checkpoint=from_checkpoint,
-        batch_size=batch_size, 
-        num_workers=num_workers,
-        train_kwargs=train_kwargs, 
-        tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"},
-        folder_ref=BalancedKFolder
-    )
+    # config.SHEET_ID = SHEET_ID
+    # trainer.kfoldcv(
+    #     model, 
+    #     None,
+    #     dataset, # The primary change
+    #     metrics_computer,
+    #     device,
+    #     from_checkpoint=from_checkpoint,
+    #     batch_size=batch_size, 
+    #     num_workers=num_workers,
+    #     train_kwargs=train_kwargs, 
+    #     tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"},
+    #     folder_ref=BalancedKFolder
+    # )
 
 def main():
     args = init_args()

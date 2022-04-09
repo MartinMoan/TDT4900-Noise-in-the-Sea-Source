@@ -125,7 +125,7 @@ class DatasetBalancer(IDatasetBalancer):
         neither = []
         
         for i in range(start, min(end, len(dataset))):
-            part = math.ceil((end - start) * 0.025)
+            part = math.ceil((end - start) * 0.05)
             if (i - start) % part == 0:
                 percentage = ((i - start) / (end - start)) * 100
                 print(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
