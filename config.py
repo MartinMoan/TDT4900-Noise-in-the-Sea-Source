@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import timedelta
 from inspect import trace
 from logging import warning
 import pathlib
@@ -128,3 +129,5 @@ if not DEFAULT_PARAMETERS_PATH.exists():
 CHECKPOINTS_PATH = HOME_PROJECT_DIR.joinpath("models", "checkpoints").absolute()
 if not CHECKPOINTS_PATH.exists():
     CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
+
+PRINT_INTERVAL_SECONDS = 10
