@@ -86,7 +86,7 @@ class ClippedDataset(ICustomDataset):
         
         for i in range(start, min(stop, self._virtual_length())):
             percentage = ((i - start) / (stop - start)) * 100
-            part = math.ceil((stop - start) * 0.025)
+            part = math.ceil((stop - start) * 0.05)
             if (i - start) % part == 0:
                 print(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
             try:
