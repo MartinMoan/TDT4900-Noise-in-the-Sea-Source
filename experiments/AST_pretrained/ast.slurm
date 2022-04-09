@@ -5,10 +5,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
-#SBATCH --output="ast.slurm.out"
+#SBATCH --output="~/.nits/logs/ast.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
