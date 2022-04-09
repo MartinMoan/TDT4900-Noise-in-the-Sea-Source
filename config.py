@@ -113,6 +113,9 @@ LOCAL_RESULTS_FILENAME = f"{ENV}_results.csv".lower()
 LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILENAME)
 
 HOME_PROJECT_DIR = pathlib.Path.home().joinpath(".nits")
+if not HOME_PROJECT_DIR.exists():
+    HOME_PROJECT_DIR.mkdir(parents=False, exist_ok=False)
+    
 CACHE_DIR = HOME_PROJECT_DIR.joinpath("cache")
 if not CACHE_DIR.exists():
     CACHE_DIR.mkdir(parents=False, exist_ok=False)
