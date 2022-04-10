@@ -93,8 +93,9 @@ def infer(
 
             truth = cat(truth, Y)
             predictions = cat(predictions, Yhat)
-            if last_print is None or datetime.now() - last_print >= config.PRINT_INTERVAL_SECONDS:
+            if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
                 print(f"Eval index {i} / {len(testset)} - testset index {index}")
+                last_print = datetime.now()
         print("Eval iterations complete!")
         return truth, predictions
 
