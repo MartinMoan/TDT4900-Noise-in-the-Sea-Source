@@ -35,3 +35,4 @@ dependencies:
   - timm=0.4.9
   - wget
   - zipp
+  - pydrive

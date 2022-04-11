@@ -42,7 +42,7 @@ class Cacher:
         cache_list = [path for path in cache_dir.glob("**/*.pickle")]
         pickle_path = cache_dir.joinpath(pickle_filename).absolute()
         
-        if not force_recache and not config.ENV == "prod" and pickle_path in cache_list:
+        if not force_recache and pickle_path in cache_list:
             print(f"Pickling {obj_ref.__name__} object from {pickle_path}")
             with open(pickle_path, "rb") as binary_file:
                 obj = pickle.load(binary_file)

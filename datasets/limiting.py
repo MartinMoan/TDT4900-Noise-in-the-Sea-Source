@@ -13,7 +13,7 @@ from clipping import ClippedDataset
 from ICustomDataset import ICustomDataset
 from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
 from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer
+from IDatasetBalancer import BalancedKFolder, DatasetBalancer, BalancerCacheDecorator
 from ASTWrapper import ASTWrapper
 
 class DatasetLimiter(ICustomDataset):
@@ -45,7 +45,7 @@ class DatasetLimiter(ICustomDataset):
         num_in_subset = self._parse_subset_size(limit)
         raw_indeces = np.arange(0, len(dataset))
         if balance:
-            balancer = DatasetBalancer(dataset)
+            balancer = BalancerCacheDecorator(dataset)
             splits = balancer._split_labels
             num_classes = len(splits.keys()) # both, neither, anthropogenic, biophonic
             n_per_class = int(num_in_subset / num_classes)
