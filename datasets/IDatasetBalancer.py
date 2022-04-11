@@ -216,10 +216,28 @@ class BalancedKFolder(sklearn.model_selection.KFold):
         if len(error_indeces) != 0:
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
         
-        for (train, eval) in super().split(all_training_indeces):
+        for (train, eval_indeces) in super().split(all_training_indeces):
             # eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
-            eval_indeces = eval.astype(int)
             yield (all_training_indeces[train], eval_indeces)
+
+class BalancedDatasetDecorator(ICustomDataset):
+    def __init__(self, dataset: ICustomDataset, force_recarche=False, **kwargs) -> None:
+        super().__init__()
+        self._dataset = dataset
+        balancer = BalancerCacheDecorator(dataset, force_recache=force_recarche, **kwargs)
+        self._indeces = balancer.train_indeces()
+
+    def __len__(self) -> int:
+        return len(self._indeces)
+    
+    def __getitem__(self, index: int) -> LabeledAudioData:
+        return self._dataset[self._indeces[index]]
+    
+    def classes(self) -> Mapping[str, int]:
+        return self._dataset.classes()
+
+    def example_shapes(self) -> Iterable[tuple[int, ...]]:
+        return self._dataset.example_shapes()
 
 if __name__ == "__main__":
     clip_duration_seconds = 10.0
