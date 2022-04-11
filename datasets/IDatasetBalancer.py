@@ -217,7 +217,8 @@ class BalancedKFolder(sklearn.model_selection.KFold):
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
         
         for (train, eval) in super().split(all_training_indeces):
-            eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
+            # eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
+            eval_indeces = eval.astype(int)
             yield (all_training_indeces[train], eval_indeces)
 
 if __name__ == "__main__":
