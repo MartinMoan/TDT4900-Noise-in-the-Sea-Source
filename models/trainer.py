@@ -58,6 +58,13 @@ def _verify_arguments(
     if num_workers <= 0:
         raise Exception(f"Argument num_workers has invalid value ({num_workers}), must be positive integer greater than 0")
 
+    all_same_values = True
+    for i in range(len(dataset)):
+        index, X, Y = dataset[i]
+        if len(list(set(Y.numpy()))) != 1:
+            
+
+
 # def evaluate(model: torch.nn.Module, testset: torch.utils.data.DataLoader, threshold: int = 0.5, device: str = None):
 def infer(
     model: torch.nn.Module, 
