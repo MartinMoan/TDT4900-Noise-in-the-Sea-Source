@@ -44,49 +44,29 @@ def main():
         overlap_nsamples = clip_overlap_samples
     )
 
-    limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=False, balanced=True)
-    limited_tensordatataset = FileLengthTensorAudioDataset(
-        dataset = limited_dataset,
+    # limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=False, balanced=True)
+    # limited_tensordatataset = FileLengthTensorAudioDataset(
+    #     dataset = limited_dataset,
+    #     label_accessor=BinaryLabelAccessor(),
+    #     feature_accessor=MelSpectrogramFeatureAccessor()
+    # )
+
+    tensordataset = FileLengthTensorAudioDataset(
+        dataset=clip_dataset,
         label_accessor=BinaryLabelAccessor(),
         feature_accessor=MelSpectrogramFeatureAccessor()
     )
     
-    for i in range(len(limited_tensordatataset)):
-        _, X, Y = limited_tensordatataset[i]
-        audiodata = limited_tensordatataset._dataset[i]
-        print(audiodata)
-        print(audiodata.labels.source_class.unique())
-        print(audiodata.labels)
-        print(audiodata.samples.shape, len(audiodata.samples) / audiodata.sampling_rate)
-        import librosa
-        samples, sr = librosa.load(audiodata.filepath, sr=None)
-        print(sr)
+    for i in range(len(tensordataset)):
+        _, X, Y = tensordataset[i]
+        audiodata = tensordataset._dataset[i]
+        if set(Y.numpy()) != set([0.0]):
+            print(Y)
         
-        start_time = datetime(2022, 1, 1, 0,0,0,0)
-        a = LabeledAudioData(
-            _index = i,
-            filepath=audiodata.filepath,
-            num_channels=audiodata.num_channels,
-            sampling_rate=sr,
-            file_start_time=start_time,
-            file_end_time=start_time+timedelta(seconds=len(samples)/sr),
-            clip_duration=len(samples)/sr,
-            clip_offset=0,
-            all_labels=audiodata.all_labels,
-            labels_dict=audiodata.labels_dict
-        )
-        feature = MelSpectrogramFeatureAccessor()
-        Xfull = feature(a)
-        print(Xfull.shape)
-        print(Y)
-        img = torch.squeeze(X)
-        imgfull = torch.squeeze(Xfull)
-        plt.imshow(img, aspect="auto")
-        plt.show()
-        plt.imshow(imgfull, aspect="auto", cmap="viridis")
-        plt.show()
-        exit()
-
+        if i % 50 == 0:
+            print(i, len(tensordataset))
+        # import librosa
+        # samples, sr = librosa.load(audiodata.filepath, sr=None)
 
 if __name__ == "__main__":
     main()
