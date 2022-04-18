@@ -30,7 +30,7 @@ from verifier import IDatasetVerifier
 _started_at = datetime.now()
 
 def verify_arguments(
-    model_ref: torch.nn.Module, 
+    model_ref: Union[Type[torch.nn.Module], torch.nn.Module], 
     model_kwargs: Mapping, 
     dataset: ITensorAudioDataset, 
     dataset_verifier: IDatasetVerifier,
@@ -39,8 +39,15 @@ def verify_arguments(
     batch_size: int = 8, 
     num_workers: int = 1):
     
-    model = model_ref(**model_kwargs)
+    model = None
     
+    if isinstance(model_ref, type):
+        model = model_ref(**model_kwargs)
+    elif isinstance(model_ref, torch.nn.Module):
+        model = model_ref
+    else:
+        raise TypeError(f"Argument model_ref has invalid type, must be torch.nn.Module instance or type reference, but received {type(model_ref)}")
+
     if not isinstance(model, torch.nn.Module):
         raise Exception("Argument model_ref does not point to the initializer (__init__) method of a torch.nn.Module")
     
@@ -58,14 +65,17 @@ def verify_arguments(
     if num_workers <= 0:
         raise Exception(f"Argument num_workers has invalid value ({num_workers}), must be positive integer greater than 0")
 
-    valid, unique_feature_values, unique_label_values = dataset_verifier.verify(dataset)
-    if not valid:
-        raise Exception(f"The dataset verifier {dataset_verifier.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}.")
-    else:
-        print(f"Success!The dataset was verified by {dataset_verifier.__class__.__name__}")
-        print(f"Num. unique feature values: {len(unique_feature_values)}")
-        print(f"Num. unique label values: {len(unique_label_values)}")
-        print(f"Unique feature values: {len(unique_feature_values)}")
+    dataset_verifier.verify(dataset)
+    # if not valid:
+    #     error_msg = f"The dataset verifier {dataset_verifier.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
+    #     # error_msg += f"\n{unique_feature_values}"
+    #     error_msg += f"\n{unique_label_values}"
+    #     raise Exception(error_msg)
+    # else:
+    #     print(f"Success!The dataset was verified by {dataset_verifier.__class__.__name__}")
+    #     print(f"Num. unique feature values: {len(unique_feature_values)}")
+    #     print(f"Num. unique label values: {len(unique_label_values)}")
+    #     print(f"Unique feature values: {len(unique_feature_values)}")
 
 def eval(
     model: torch.nn.Module, 

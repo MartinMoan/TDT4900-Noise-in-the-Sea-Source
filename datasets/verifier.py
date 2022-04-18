@@ -96,24 +96,34 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             results = [task.get() for task in tasks]
             return results
 
-    def _valid_label_stats(self, label_value_counts: Iterable[ValueCount]) -> bool:
+    def _valid_label_stats(self, label_value_counts: Iterable[ValueCount]) -> Tuple[bool, str]:
         # total = np.sum([valuecount.count for valuecount in label_value_counts])
+        message = "Label values are valid!"
         valid = True
         if len(label_value_counts) != 4:
             valid = False
+            message = f"\n\tThere are not 4 unique types of label/class pairs ([0, 0], [0, 1], [1, 0] and [1, 1]). Found {len(label_value_counts)}"
         
         count = None
         for valuecount in label_value_counts:
             if valuecount.count == 0:
                 valid = False
+                message += f"\n\tThere are no instances of the label/class pair {valuecount.values} - {valuecount}"
             if count is None:
                 count = valuecount.count
             elif valuecount.count != count:
                 valid = False
-        return valid
+                message += f"\n\tThe number of label/class pairs is not equal for all label/class pairs. Expected {count} instances for all label/class pairs but found {valuecount.count} instances of {valuecount.values}"
+        if not valid:
+            message = "The label values are invalid!" + message
+        return valid, message
 
-    def _valid_feature_values(self, unique_features: set) -> bool:
-        return len(unique_features) != 0
+    def _valid_feature_values(self, unique_features: set) -> Tuple[bool, str]:
+        valid = (len(unique_features) != 0)
+        message = "Features are valid: The number of unique feature values is not 0"
+        if valid:
+            message = f"Features are invalid! : The number of unique feature values is 0 ({len(unique_features)})"
+        return valid, message
 
     def _getstats(self, dataset: ITensorAudioDataset) -> Tuple[set, Iterable[ValueCount]]:
         results = BinaryTensorDatasetVerifier.binjob_async(dataset, self._verify)
@@ -129,9 +139,15 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             
     def verify(self, dataset: ITensorAudioDataset) -> Tuple[bool, set, Iterable[ValueCount]]:
         unique_features, label_value_counts = self._getstats(dataset)
-        valid_labels = self._valid_label_stats(label_value_counts=label_value_counts)
-        valid_features = self._valid_feature_values(unique_features)
-        return (valid_labels and valid_features), unique_features, label_value_counts
+        valid_labels, labels_status_message = self._valid_label_stats(label_value_counts=label_value_counts)
+        valid_features, features_status_message = self._valid_feature_values(unique_features)
+        valid = (valid_labels and valid_features)
+        if not valid: 
+            error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
+            error_msg += f"Features values status:\n{features_status_message}"
+            error_msg += f"Label values status:\n{labels_status_message}"
+            raise Exception(error_msg)
+        return valid, unique_features, label_value_counts
         
 if __name__ == "__main__":
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining

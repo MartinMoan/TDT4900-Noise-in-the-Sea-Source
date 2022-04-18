@@ -7,6 +7,7 @@ Finetuning task is input (batch_size, T-second, M-mel-band spectrogram) tensor o
 import argparse
 import pathlib
 import sys
+from tabnanny import verbose
 
 import torch
 from rich import print
@@ -25,6 +26,7 @@ from IMetricComputer import BinaryMetricComputer
 from IDatasetBalancer import BalancedKFolder, DatasetBalancer
 from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
+from verifier import BinaryTensorDatasetVerifier
 
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
@@ -41,9 +43,6 @@ def init_args():
     parser.add_argument("-cp", "--checkpoint", type=str, default=None, help="Path to the checkpoint directory to load model, optimizer and local variables from.")
     parser.add_argument("--from-checkpoint", action="store_true", default=False, help="Wheter to load model, optimizer and local variables from checkpoint. If -cp (--checkpoint) argument is provided, will use that value as the path to load from")
     return parser.parse_args()
-
-def load_model():
-    pass
 
 def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -113,11 +112,7 @@ def train(args):
         feature_accessor=MelSpectrogramFeatureAccessor()
     )
 
-    dataset = FileLengthTensorAudioDataset(
-        dataset=clip_dataset, 
-        label_accessor=BinaryLabelAccessor(), 
-        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)
-    )
+    dataset_verifier = BinaryTensorDatasetVerifier(verbose=verbose)
 
     # Try to run using limited dataset, to verify everything works as expected.
     # But don't log metrics to sheets during verification
@@ -128,6 +123,7 @@ def train(args):
         None,
         limited_tensordatataset, # The primary change
         metrics_computer,
+        dataset_verifier,
         device,
         from_checkpoint=from_checkpoint,
         batch_size=batch_size, 
@@ -137,6 +133,12 @@ def train(args):
         folder_ref=BalancedKFolder
     )
 
+    dataset = FileLengthTensorAudioDataset(
+        dataset=clip_dataset, 
+        label_accessor=BinaryLabelAccessor(), 
+        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)
+    )
+
     # Now start the training with full dataset
     config.SHEET_ID = SHEET_ID
     trainer.kfoldcv(
@@ -144,6 +146,7 @@ def train(args):
         None,
         dataset, # The primary change
         metrics_computer,
+        dataset_verifier,
         device,
         from_checkpoint=from_checkpoint,
         batch_size=batch_size, 
