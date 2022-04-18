@@ -45,12 +45,12 @@ class ValueCount:
     def __repr__(self) -> str:
         return self.__str__()
 
-class IDatasetVerifyer(metaclass=abc.ABCMeta):
+class IDatasetVerifier(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def verify(self, dataset: ITensorAudioDataset) -> Tuple[bool, Mapping[str, any]]:
         raise NotImplementedError
 
-class BinaryTensorDatasetVerifyer(IDatasetVerifyer):
+class BinaryTensorDatasetVerifier(IDatasetVerifier):
     def __init__(self, verbose: bool = True) -> None:
         self._verbose = verbose
 
@@ -71,7 +71,7 @@ class BinaryTensorDatasetVerifyer(IDatasetVerifyer):
                 percentage = ((i - start) / (end - start)) * 100
                 part = math.ceil((end - start) * 0.05)
                 if (i - start) % part == 0:
-                    print(f"VerificationWorker PID {proc.pid} - {percentage:.2f}% - {i - start} {end - start}")
+                    print(f"[{self.__class__.__name__}]: VerificationWorker PID {proc.pid} - {percentage:.2f}%")
         return unique_feature_values, unique_label_values
 
     def _flatten(self, existing: Iterable[ValueCount], output: Iterable[ValueCount] = []) -> Iterable[ValueCount]:
@@ -116,11 +116,12 @@ class BinaryTensorDatasetVerifyer(IDatasetVerifyer):
         return len(unique_features) != 0
 
     def _getstats(self, dataset: ITensorAudioDataset) -> Tuple[set, Iterable[ValueCount]]:
-        results = BinaryTensorDatasetVerifyer.binjob_async(dataset, self._verify)
-        print("results", results)
+        results = BinaryTensorDatasetVerifier.binjob_async(dataset, self._verify)
         label_value_counts = []
         unique_feature_values = set([])
-        for feature_values, label_values in results:
+        for index, (feature_values, label_values) in enumerate(results):
+            if self._verbose:
+                print(f"[{self.__class__.__name__}]: Verification aggregation - {((index + 1) / len(results) * 100.0):.1f}%")
             label_value_counts = self._flatten(label_values, label_value_counts)
             unique_feature_values = unique_feature_values.union(feature_values)
         
@@ -153,6 +154,6 @@ if __name__ == "__main__":
         feature_accessor=MelSpectrogramFeatureAccessor()
     )
 
-    verifier = BinaryTensorDatasetVerifyer()
+    verifier = BinaryTensorDatasetVerifier(verbose=True)
     valid, unique_features, label_stats = verifier.verify(tensordataset)
-    print(valid, unique_features, label_stats)
+    print(valid)
