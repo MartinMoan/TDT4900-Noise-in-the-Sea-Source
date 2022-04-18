@@ -25,20 +25,20 @@ from checkpointer import checkpoint, load, clear_checkpoints
 import tracker
 from ITensorAudioDataset import ITensorAudioDataset
 from IMetricComputer import IMetricComputer
+from verifier import IDatasetVerifier
 
 _started_at = datetime.now()
 
-def _verify_arguments(
+def verify_arguments(
     model_ref: torch.nn.Module, 
     model_kwargs: Mapping, 
     dataset: ITensorAudioDataset, 
+    dataset_verifier: IDatasetVerifier,
     device: str, 
     kfolds: int = 5, 
     batch_size: int = 8, 
-    num_workers: int = 1, 
-    train_kwargs: Mapping = {}, 
-    eval_kwargs: Mapping = {}, 
-    tracker_kwargs: Mapping = {}):
+    num_workers: int = 1):
+    
     model = model_ref(**model_kwargs)
     
     if not isinstance(model, torch.nn.Module):
@@ -58,15 +58,16 @@ def _verify_arguments(
     if num_workers <= 0:
         raise Exception(f"Argument num_workers has invalid value ({num_workers}), must be positive integer greater than 0")
 
-    all_same_values = True
-    for i in range(len(dataset)):
-        index, X, Y = dataset[i]
-        if len(list(set(Y.numpy()))) != 1:
-            
+    valid, unique_feature_values, unique_label_values = dataset_verifier.verify(dataset)
+    if not valid:
+        raise Exception(f"The dataset verifier {dataset_verifier.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}.")
+    else:
+        print(f"Success!The dataset was verified by {dataset_verifier.__class__.__name__}")
+        print(f"Num. unique feature values: {len(unique_feature_values)}")
+        print(f"Num. unique label values: {len(unique_label_values)}")
+        print(f"Unique feature values: {len(unique_feature_values)}")
 
-
-# def evaluate(model: torch.nn.Module, testset: torch.utils.data.DataLoader, threshold: int = 0.5, device: str = None):
-def infer(
+def eval(
     model: torch.nn.Module, 
     dataset: ITensorAudioDataset, 
     test_samples, 
@@ -187,6 +188,7 @@ def kfoldcv(
     model_kwargs: Union[Mapping, None],
     dataset: ITensorAudioDataset, 
     metric_computer: IMetricComputer,
+    dataset_verifier: IDatasetVerifier,
     device: str,
     from_checkpoint: Union[bool, pathlib.PosixPath] = False,
     kfolds: int = 5, 
@@ -196,6 +198,17 @@ def kfoldcv(
     tracker_kwargs: Mapping = {},
     folder_ref: type = KFold):
     
+    verify_arguments(
+        model_ref=model_ref,
+        model_kwargs=model_kwargs,
+        dataset=dataset,
+        dataset_verifier=dataset_verifier,
+        device=device,
+        kfolds=kfolds,
+        batch_size=batch_size,
+        num_workers=num_workers
+    )
+
     started_at = datetime.now()
     folds = folder_ref(n_splits=kfolds, shuffle=True)
     
@@ -216,7 +229,7 @@ def kfoldcv(
 
         model, optimizer = train(model, dataset, training_samples, from_checkpoint=from_checkpoint, batch_size=batch_size, num_workers=num_workers, **train_kwargs)
         
-        truth, predictions = infer(model, dataset, test_samples, batch_size, num_workers, device=device)
+        truth, predictions = eval(model, dataset, test_samples, batch_size, num_workers, device=device)
         metrics = metric_computer(truth, predictions)
         
         log_fold(
