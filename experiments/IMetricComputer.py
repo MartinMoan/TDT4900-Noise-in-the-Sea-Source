@@ -11,6 +11,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+from logger import ILogger, Logger
 
 class IMetricComputer(metaclass=abc.ABCMeta):
     @property
@@ -29,9 +30,13 @@ class IMetricComputer(metaclass=abc.ABCMeta):
         Returns:
             Mapping[str, float]: a dict of {metric_name: metric_value} mappings
         """
-        print("Computing metrics...")
-        print(f"Truth matrix shape: {truth.shape}")
-        print(f"Prediction matrix shape: {preds.shape}")
+        logger = None
+        if hasattr(self, "logger") and isinstance(self.logger, Logger):
+            logger = self.logger
+        logger = Logger()
+        logger.log("Computing metrics...")
+        logger.log(f"Truth matrix shape: {truth.shape}")
+        logger.log(f"Prediction matrix shape: {preds.shape}")
         if len(self.metrics) == 0:
             raise Exception(f"{self.__class__.__name__} does not have any registered metric functions (self.metrics) returned iterable with length 0")
 
@@ -52,14 +57,15 @@ class IMetricComputer(metaclass=abc.ABCMeta):
         if num_failed == len(self.metrics) and len(self.metrics) != 0:
             caught_exceptions = "\n".join([str(ex) for ex in exceptions])
             raise Exception(f"{self.__class__.__name__}: No metrics could be computed.\n{caught_exceptions}")
-        print("Metric computation done!")
-        print(results)
+        logger.log("Metric computation done!")
+        logger.log(results)
         return results
 
 class BinaryMetricComputer(IMetricComputer):
-    def __init__(self, class_dict, threshold: float = 0.5):
+    def __init__(self, class_dict, threshold: float = 0.5, logger: ILogger = Logger()):
         self._threshold = threshold
         self._class_dict = class_dict
+        self.logger = logger
 
     def _apply_threshold(self, multiplabel_indicator: torch.Tensor) -> torch.Tensor:
         preds = multiplabel_indicator
@@ -88,6 +94,7 @@ class BinaryMetricComputer(IMetricComputer):
         Returns:
             Mapping[str, Union[list, float, str]]: Mapping of metric_name: metric_value(s)/error_message
         """
+        self.logger.log("Beginning metric computation...")
         self._check_is_2d("truth", truth)
         self._check_is_2d("preds", preds)
 

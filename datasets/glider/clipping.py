@@ -22,6 +22,7 @@ from ICustomDataset import ICustomDataset
 from cacher import Cacher
 from audiodata import LabeledAudioData
 from ITensorAudioDataset import MelSpectrogramFeatureAccessor
+from logger import ILogger, Logger
 
 CLIPPING_CACHE_DIR = config.CACHE_DIR.joinpath("clipping")
 
@@ -30,14 +31,18 @@ if not CLIPPING_CACHE_DIR.exists():
 
 class ClippingCacheDecorator(ICustomDataset):
     def __new__(cls, *args, force_recache=False, **kwargs) -> ICustomDataset:
-        return Cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, **kwargs)
+        cacher = Cacher()
+        return cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, **kwargs)
 
 class ClippedDataset(ICustomDataset):
     def __init__(self, 
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
-        overlap_nsamples: int = None) -> None:
+        overlap_nsamples: int = None,
+        logger: ILogger = Logger()) -> None:
+
+        self.logger = logger
 
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
@@ -88,7 +93,7 @@ class ClippedDataset(ICustomDataset):
             percentage = ((i - start) / (stop - start)) * 100
             part = math.ceil((stop - start) * 0.05)
             if (i - start) % part == 0:
-                print(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
+                self.logger.log(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
             try:
                 # file_index = math.floor(i / self._num_clips_per_file)
                 audiodata = self._load(i)
@@ -97,7 +102,7 @@ class ClippedDataset(ICustomDataset):
                 else:
                     valid_indeces.append(i)
             except Exception as ex:
-                print(i, ex)
+                self.logger.log(i, ex)
                 invalid_indeces.append(i)
         return valid_indeces, invalid_indeces
 
@@ -203,18 +208,3 @@ class ClippedDataset(ICustomDataset):
 if __name__ == "__main__":
     dataset = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
     d2 = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.4)
-    # from matplotlib import pyplot as plt
-    # spectrogram_computer = MelSpectrogramFeatureAccessor(n_mels=128, n_fft=2048, hop_length=512)
-    # for i in range(len(dataset)):
-    #     audiodata = dataset[i]
-    #     print(audiodata)
-    #     labels = audiodata.labels
-    #     print(labels)
-    #     if len(labels) > 0:
-    #         spect = spectrogram_computer(audiodata)
-    #         spect = spect.squeeze()
-    #         classes = ", ".join(labels.source_class_specific.unique())
-    #         plt.suptitle(audiodata.filepath.name)
-    #         plt.title(classes) 
-    #         plt.imshow(spect, aspect="auto", extent=[0, spect.shape[1], 0, spect.shape[0]])
-    #         plt.show()

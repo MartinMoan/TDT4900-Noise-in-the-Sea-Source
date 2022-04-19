@@ -26,6 +26,7 @@ import tracker
 from ITensorAudioDataset import ITensorAudioDataset
 from IMetricComputer import IMetricComputer
 from verifier import IDatasetVerifier
+from logger import ILogger, Logger
 
 _started_at = datetime.now()
 
@@ -66,16 +67,6 @@ def verify_arguments(
         raise Exception(f"Argument num_workers has invalid value ({num_workers}), must be positive integer greater than 0")
 
     dataset_verifier.verify(dataset)
-    # if not valid:
-    #     error_msg = f"The dataset verifier {dataset_verifier.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
-    #     # error_msg += f"\n{unique_feature_values}"
-    #     error_msg += f"\n{unique_label_values}"
-    #     raise Exception(error_msg)
-    # else:
-    #     print(f"Success!The dataset was verified by {dataset_verifier.__class__.__name__}")
-    #     print(f"Num. unique feature values: {len(unique_feature_values)}")
-    #     print(f"Num. unique label values: {len(unique_label_values)}")
-    #     print(f"Unique feature values: {len(unique_feature_values)}")
 
 def eval(
     model: torch.nn.Module, 
@@ -83,7 +74,8 @@ def eval(
     test_samples, 
     batch_size: int, 
     num_workers: int, 
-    device: str = None):
+    device: str = None, 
+    logger: ILogger = Logger()):
     
     testset = DataLoader(dataset, batch_size=batch_size, sampler=SubsetRandomSampler(test_samples), num_workers=num_workers)
 
@@ -112,9 +104,9 @@ def eval(
             truth = cat(truth, Y)
             predictions = cat(predictions, Yhat)
             if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
-                print(f"Eval index {i} / {len(testset)} - testset index {index}")
+                logger.log(f"Eval index {i} / {len(testset)} - testset index {index}")
                 last_print = datetime.now()
-        print("Eval iterations complete!")
+        logger.log("Eval iterations complete!")
         return truth, predictions
 
 def train(
@@ -130,7 +122,8 @@ def train(
     loss_ref: Type[torch.nn.Module] = torch.nn.BCELoss, 
     optimizer_ref: Type[torch.nn.Module] = torch.optim.Adamax, 
     device: str = None,
-    checkpoint_td: timedelta = timedelta(seconds=2)):
+    checkpoint_td: timedelta = timedelta(seconds=2),
+    logger: ILogger = Logger()):
     
     sampler = SubsetRandomSampler(training_samples)
     trainset = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
@@ -143,13 +136,6 @@ def train(
             model, optimizer, _ = load(model, optimizer, locals())
         elif type(from_checkpoint) == str or type(from_checkpoint) == pathlib.PosixPath:
             model, optimizer, _ = load(model, optimizer, locals(), checkpoint_dir=from_checkpoint)
-
-    if config.ENV == "dev":
-        for epoch in range(epochs):
-            for batch in range(len(trainset)):
-                print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss -1 (simulated loss)")
-            checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
-        return model, optimizer
 
     last_print = None
     model.train()
@@ -172,26 +158,28 @@ def train(
             
             epoch_loss += current_loss
             if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
-                print(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
+                logger.log(f"\t\ttraining epoch {epoch} batch {batch} / {len(trainset)} loss {current_loss}")
                 last_print = datetime.now()
 
         average_epoch_loss = epoch_loss / len(trainset)
         checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
         # saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
-    print("Train iterations complete!")
+    logger.log("Train iterations complete!")
     return model, optimizer
         
 def log_fold(
     model: torch.nn.Module, 
     fold: int, 
     metrics: Mapping[str, float],
-    *args, **kwargs):
+    *args, 
+    logger: ILogger = Logger(), 
+    **kwargs):
     try:
         saved_path = saver.save(model, mode="fold_eval")
         model_params_path = saved_path.absolute()
         tracker.track(metrics, model.__class__.__name__, model_params_path, *args, fold=fold, **kwargs)
     except Exception as ex:
-        print(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
+        logger.log(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
 def kfoldcv(
     model_ref: Union[Type[torch.nn.Module], torch.nn.Module], 
@@ -206,7 +194,8 @@ def kfoldcv(
     num_workers: int = 1, 
     train_kwargs: Mapping = {}, 
     tracker_kwargs: Mapping = {},
-    folder_ref: type = KFold):
+    folder_ref: type = KFold,
+    logger: ILogger = Logger()):
     
     verify_arguments(
         model_ref=model_ref,
@@ -223,9 +212,9 @@ def kfoldcv(
     folds = folder_ref(n_splits=kfolds, shuffle=True)
     
     for fold, (training_samples, test_samples) in enumerate(folds.split(dataset)):
-        print("----------------------------------------")
-        print(f"Start fold {fold}")
-        print()
+        logger.log("----------------------------------------")
+        logger.log(f"Start fold {fold}")
+        logger.log()
         
         model = None
         if isinstance(model_ref, type):
@@ -256,7 +245,7 @@ def kfoldcv(
             tracker_kwargs=tracker_kwargs
         )
 
-        print(f"End fold {fold}")
-        print("----------------------------------------")
+        logger.log(f"End fold {fold}")
+        logger.log("----------------------------------------")
     
     clear_checkpoints(model, optimizer)

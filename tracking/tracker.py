@@ -112,9 +112,11 @@ if __name__ == "__main__":
     import time
     for i in range(5):
         metrics = {
-            "ametric": 0.42,
-            "anothermetric": 0.99999,
-            "lastmetric": 121342141241.1
+            'accuracy': 0.35,
+            'precision': {'Biophonic': 0.0, 'Anthropogenic': 1.0},
+            'f1': {'Biophonic': 0.0, 'Anthropogenic': 0.2857142857142857},
+            'roc_auc': {'Biophonic': 0.5, 'Anthropogenic': 0.5833333333333334},
+            'recall': {'Biophonic': 0.0, 'Anthropogenic': 0.16666666666666666}
         }
         model = "TrackingTestModel"
         model_parameters_path = "/no/parameters/exits.pth"

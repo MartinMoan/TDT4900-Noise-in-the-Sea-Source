@@ -110,6 +110,8 @@ SPREADSHEET_ID = os.environ.get(f"{ENV.upper()}_SPREADSHEET_ID")
 SHEET_ID = int(os.environ.get(f"{ENV.upper()}_SHEET_ID"))
 VERIFICATION_SHEET_ID = int(os.environ.get("VERIFICATION_SHEET_ID"))
 
+CACHING_ENABLED = os.environ.get("CACHING_ENABLED").strip().lower() == "true"
+
 LOCAL_RESULTS_FILENAME = f"{ENV}_results.csv".lower()
 LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILENAME)
 
