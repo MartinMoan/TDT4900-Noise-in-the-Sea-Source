@@ -15,6 +15,7 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from rich import print
+from logger import Logger
 
 def _create_checkpoint_dirname(started_at: datetime, model: torch.nn.Module, optimizer: torch.nn.Module) -> pathlib.PosixPath:
     timestamp = started_at.strftime("%Y%m%d_%H%M%S_%f")
@@ -71,10 +72,11 @@ def load(model: torch.nn.Module, optimizer: torch.nn.Module, local_variables: Ma
     return model, optimizer, local_variables
 
 def clear_checkpoints(model: torch.nn.Module, optimizer: torch.nn.Module) -> None:
+    logger = Logger()
     dirs = _dirs_with_model_optimizer_values(model, optimizer)
-    print("Clearing checkpoints...")
+    logger.log("Clearing checkpoints...")
     for directory in dirs:
-        print(f"Deleting checkpoint directory {directory}...")
+        logger.log(f"Deleting checkpoint directory {directory}...")
         shutil.rmtree(directory)
 
 def checkpoint(

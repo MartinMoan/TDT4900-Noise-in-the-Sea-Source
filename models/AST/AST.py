@@ -9,6 +9,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+from logger import ILogger, Logger
 
 pretrained_models_path = pathlib.Path.home().joinpath("pretrained_models")
 if not pretrained_models_path.exists():
@@ -47,14 +48,14 @@ class ASTModel(nn.Module):
     :param audioset_pretrain: if use full AudioSet and ImageNet pretrained model
     :param model_size: the model size of AST, should be in [tiny224, small224, base224, base384], base224 and base 384 are same model, but are trained differently during ImageNet pretraining.
     """
-    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True):
+    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, logger: ILogger = Logger()):
 
         super(ASTModel, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
-
+        self.logger = logger
         # if verbose == True:
-        #     print('---------------AST Model Summary---------------')
-        #     print('ImageNet pretraining: {:s}, AudioSet pretraining: {:s}'.format(str(imagenet_pretrain),str(audioset_pretrain)))
+        #     self.logger.log('---------------AST Model Summary---------------')
+        #     self.logger.log('ImageNet pretraining: {:s}, AudioSet pretraining: {:s}'.format(str(imagenet_pretrain),str(audioset_pretrain)))
         # override timm input shape restriction
         timm.models.vision_transformer.PatchEmbed = PatchEmbed
 
@@ -81,8 +82,8 @@ class ASTModel(nn.Module):
             num_patches = f_dim * t_dim
             self.v.patch_embed.num_patches = num_patches
             if verbose == True:
-                print('frequncey stride={:d}, time stride={:d}'.format(fstride, tstride))
-                print('number of patches={:d}'.format(num_patches))
+                self.logger.log('frequncey stride={:d}, time stride={:d}'.format(fstride, tstride))
+                self.logger.log('number of patches={:d}'.format(num_patches))
 
             # the linear projection layer
             new_proj = torch.nn.Conv2d(1, self.original_embedding_dim, kernel_size=(16, 16), stride=(fstride, tstride))
@@ -128,7 +129,7 @@ class ASTModel(nn.Module):
                 # this model performs 0.4593 mAP on the audioset eval set
                 audioset_mdl_url = 'https://www.dropbox.com/s/cv4knew8mvbrnvq/audioset_0.4593.pth?dl=1'
                 # wget.download(audioset_mdl_url, out='../../pretrained_models/audioset_10_10_0.4593.pth')
-                print(f"Doawnloading AST AudioSet pretrained model parameters from {audioset_mdl_url} to {audioset_path.absolute()}\nThis may take a while...")
+                self.logger.log(f"Doawnloading AST AudioSet pretrained model parameters from {audioset_mdl_url} to {audioset_path.absolute()}\nThis may take a while...")
                 import requests
                 res = requests.get(audioset_mdl_url, allow_redirects=True)
                 with open(audioset_path, "wb") as file:
@@ -148,8 +149,8 @@ class ASTModel(nn.Module):
             num_patches = f_dim * t_dim
             self.v.patch_embed.num_patches = num_patches
             if verbose == True:
-                print('frequncey stride={:d}, time stride={:d}'.format(fstride, tstride))
-                print('number of patches={:d}'.format(num_patches))
+                self.logger.log('frequncey stride={:d}, time stride={:d}'.format(fstride, tstride))
+                self.logger.log('number of patches={:d}'.format(num_patches))
 
             new_pos_embed = self.v.pos_embed[:, 2:, :].detach().reshape(1, 1212, 768).transpose(1, 2).reshape(1, 768, 12, 101)
             # if the input sequence length is larger than the original audioset (10s), then cut the positional embedding

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import abc
+from ast import arg
 import enum
 import os
 import hashlib
@@ -26,6 +27,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+from logger import Logger, ILogger
 
 class IDatasetBalancer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -45,7 +47,8 @@ class BalancerCacheDecorator(IDatasetBalancer):
     def __new__(cls, dataset: ICustomDataset, force_recache=False, **kwargs) -> IDatasetBalancer:
         hashable_arguments = repr(dataset).encode()
         args = (dataset,)
-        return Cacher.cache(BALANCER_CACHE_DIR, DatasetBalancer, *args, hashable_arguments=hashable_arguments, force_recache=force_recache, **kwargs)
+        cacher = Cacher()
+        return cacher.cache(BALANCER_CACHE_DIR, DatasetBalancer, *args, hashable_arguments=hashable_arguments, force_recache=force_recache, **kwargs)
 
 class DatasetBalancer(IDatasetBalancer):
     """A ITensorAudioDataset implentation that ensures that the number of unlabeled instances to use for training is equal to the average size of each of the types of labeled instances. 
@@ -69,8 +72,10 @@ class DatasetBalancer(IDatasetBalancer):
     Args:
         FileLengthTensorAudioDataset (_type_): _description_
     """
-    def __init__(self, dataset: ICustomDataset, verbose=True) -> None:
+    def __init__(self, dataset: ICustomDataset, verbose=True, logger: ILogger = Logger()) -> None:
         super().__init__()
+        self.logger = logger
+        
         self._dataset = dataset
         self._split_labels: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
 
@@ -92,29 +97,30 @@ class DatasetBalancer(IDatasetBalancer):
             eval_part = indeces[~np.isin(indeces, train_part)]
             self._indeces_for_training[key] = train_part
             self._indeces_for_eval[key] = eval_part
-
+        
         if verbose:
-            print(f"{self.__class__.__name__} class/label-presence distribution:")
-            print("The instances under for training and eval will be split according to the current fold train/test split. And the eval only instances will be added to the test part of the split for every fold.")
-            print("---- FOR TRAINING AND EVAL ---- ")
+            self.logger.log(f"{self.__class__.__name__} class/label-presence distribution:")
+            self.logger.log(f"Size of dataset: {len(self._dataset)}")
+            self.logger.log("The instances under for training and eval will be split according to the current fold train/test split. And the eval only instances will be added to the test part of the split for every fold.")
+            self.logger.log("---- FOR TRAINING AND EVAL ---- ")
             for key in self._indeces_for_training.keys():
-                print(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
+                self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
             
-            print("---- FOR EVAL ONLY ---- ")
-            print("")
+            self.logger.log("---- FOR EVAL ONLY ---- ")
+            self.logger.log("")
             for key in self._indeces_for_eval.keys():
-                print(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
-            print("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
+                self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
+            self.logger.log("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
             for key in self._split_labels.keys():
-                print(f"Number of instances with label '{key}': {len(self._split_labels[key])}")
+                self.logger.log(f"Number of instances with label '{key}': {len(self._split_labels[key])}")
 
             num_for_training = np.sum([len(self._indeces_for_training[key]) for key in self._indeces_for_training.keys()])
             num_for_eval = np.sum([len(self._indeces_for_eval[key]) for key in self._indeces_for_eval.keys()])
-            print(f"Total number of instances for training: {num_for_training}")
-            print(f"Total number of instances for eval: {num_for_eval}")
-            print(f"Total number of instances for both training and eval: {(num_for_training + num_for_eval)}")
-            print(f"Input dataset length: {len(self._dataset)}")
-            print(f"The number of instances is as expected?: {(num_for_training + num_for_eval) == len(self._dataset)}")
+            self.logger.log(f"Total number of instances for training: {num_for_training}")
+            self.logger.log(f"Total number of instances for eval: {num_for_eval}")
+            self.logger.log(f"Total number of instances for both training and eval: {(num_for_training + num_for_eval)}")
+            self.logger.log(f"Input dataset length: {len(self._dataset)}")
+            self.logger.log(f"The number of instances is as expected?: {(num_for_training + num_for_eval) == len(self._dataset)}")
 
     def _split_by_labels_poolfunc(self, dataset: ICustomDataset, start: int, end: int) -> Mapping[str, Iterable[int]]:
         proc = multiprocessing.current_process()
@@ -128,7 +134,7 @@ class DatasetBalancer(IDatasetBalancer):
             part = math.ceil((end - start) * 0.05)
             if (i - start) % part == 0:
                 percentage = ((i - start) / (end - start)) * 100
-                print(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
+                self.logger.log(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
                 
             labeled_audio_data: LabeledAudioData = dataset[i]
             class_presence = labeled_audio_data.labels.source_class.unique()
@@ -183,12 +189,6 @@ class DatasetBalancer(IDatasetBalancer):
         indeces = np.concatenate([self._indeces_for_training[key] for key in self._indeces_for_training], axis=0)
         np.random.shuffle(indeces)
         return indeces.astype(int)
-
-def print_label_distribution_stats(dataset: DatasetBalancer):
-    print(f"Num both antrhopogenic and biogenic: {len(dataset._both_labels_indeces)}")
-    print(f"Num just anthropogenic: {len(dataset._anthropogenic_indeces)}")
-    print(f"Num just biogenic: {len(dataset._biophonic_indeces)}")
-    print(f"Num unlabeled: {(len(dataset._neither_labels_indeces))}")
 
 class BalancedKFolder(sklearn.model_selection.KFold):
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None):

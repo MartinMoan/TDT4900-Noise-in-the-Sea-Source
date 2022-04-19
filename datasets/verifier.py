@@ -24,6 +24,7 @@ from audiodata import LabeledAudioData
 from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from limiting import DatasetLimiter
 from IDatasetBalancer import DatasetBalancer, BalancerCacheDecorator, BalancedDatasetDecorator
+from logger import Logger, ILogger
 
 class ValueCount:
     def __init__(self, values: Iterable[Union[float, int]], count: int = 0):
@@ -51,8 +52,9 @@ class IDatasetVerifier(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 class BinaryTensorDatasetVerifier(IDatasetVerifier):
-    def __init__(self, verbose: bool = True) -> None:
+    def __init__(self, verbose: bool = True, logger: ILogger = Logger()) -> None:
         self._verbose = verbose
+        self.logger = logger
 
     def _verify(self, dataset: ITensorAudioDataset, start: int, end: int) -> Tuple[set, Iterable[ValueCount]]:
         proc = multiprocessing.current_process()
@@ -71,7 +73,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
                 percentage = ((i - start) / (end - start)) * 100
                 part = math.ceil((end - start) * 0.05)
                 if (i - start) % part == 0:
-                    print(f"[{self.__class__.__name__}]: VerificationWorker PID {proc.pid} - {percentage:.2f}%")
+                    self.logger.log(f"VerificationWorker PID {proc.pid} - {percentage:.2f}%")
         return unique_feature_values, unique_label_values
 
     def _flatten(self, existing: Iterable[ValueCount], output: Iterable[ValueCount] = []) -> Iterable[ValueCount]:
@@ -131,7 +133,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         unique_feature_values = set([])
         for index, (feature_values, label_values) in enumerate(results):
             if self._verbose:
-                print(f"[{self.__class__.__name__}]: Verification aggregation - {((index + 1) / len(results) * 100.0):.1f}%")
+                self.logger.log(f"Verification aggregation - {((index + 1) / len(results) * 100.0):.1f}%")
             label_value_counts = self._flatten(label_values, label_value_counts)
             unique_feature_values = unique_feature_values.union(feature_values)
         

@@ -22,12 +22,14 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
+from logger import ILogger, Logger
 EXPECTED_SR = 128000
 EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
 EXPECTED_NUM_CHANNLES = 1
 
 class GLIDER(ICustomDataset):
-    def __init__(self, clip_duration_seconds: float = 10.0, overlap_seconds=0.0, verbose = False, suppress_warnings = None):
+    def __init__(self, clip_duration_seconds: float = 10.0, overlap_seconds=0.0, verbose = False, suppress_warnings = None, logger: ILogger = Logger()):
+        self.logger = logger
         self._labels = GLIDER._todatetime(pd.read_csv(config.PARSED_LABELS_PATH))
         self._audiofiles = GLIDER._todatetime(pd.read_csv(config.AUDIO_FILE_CSV_PATH))
         expected_num_samples = self._audiofiles.num_samples.max()
@@ -101,7 +103,7 @@ class GLIDER(ICustomDataset):
         )
         
         if self._verbose:
-            print(f"{index} / {len(self)}", audio_data)
+            self.logger.log(f"{index} / {len(self)}", audio_data)
             
         return audio_data
             

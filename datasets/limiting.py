@@ -45,23 +45,12 @@ class DatasetLimiter(ICustomDataset):
         num_in_subset = self._parse_subset_size(limit)
         raw_indeces = np.arange(0, len(dataset))
         if balance:
-            # balanced = BalancedDatasetDecorator(dataset)
-            balancer = BalancerCacheDecorator(dataset)
+            balancer = BalancerCacheDecorator(dataset, verbose=False, force_recache=False)
             splits = balancer._split_labels
             num_classes = len(splits.keys()) # both, neither, anthropogenic, biophonic
             n_per_class = int(num_in_subset / num_classes)
             class_numbers = {key: n_per_class for key in splits.keys()}
-            print(class_numbers)
             
-            if num_in_subset % num_classes != 0:
-                diff = int(num_in_subset % num_classes)
-                while diff > 0:
-                    for key in class_numbers.keys():
-                        class_numbers[key] += 1
-                        diff -= 1
-                        if diff <= 0:
-                            break
-                    
             for key in class_numbers.keys():
                 if class_numbers[key] > len(splits[key]):
                     excess = class_numbers[key] - len(splits[key])
