@@ -75,7 +75,7 @@ class DatasetBalancer(IDatasetBalancer):
     def __init__(self, dataset: ICustomDataset, verbose=True, logger: ILogger = Logger()) -> None:
         super().__init__()
         self.logger = logger
-        
+
         self._dataset = dataset
         self._split_labels: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
 
@@ -107,7 +107,6 @@ class DatasetBalancer(IDatasetBalancer):
                 self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
             
             self.logger.log("---- FOR EVAL ONLY ---- ")
-            self.logger.log("")
             for key in self._indeces_for_eval.keys():
                 self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
             self.logger.log("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")

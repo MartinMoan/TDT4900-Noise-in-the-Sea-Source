@@ -157,10 +157,9 @@ def train(args):
     model = instantiate_model(n_model_outputs, nmels, n_time_frames, device)
     logger.log("Model instantiated!")
 
-    logger.log(f"Starting {kfolds}-fold cross evaluation of AST pretrained model")
-    logger.log(f"Performing pre-training verification run. Will log results to SHEET ID {config.SHEET_ID}")
     # Now start the training with full dataset
     config.SHEET_ID = SHEET_ID
+    logger.log(f"Starting {kfolds}-fold cross evaluation (and finetuning) of AST pretrained model. Will log results to SHEET ID {config.SHEET_ID}")
     trainer.kfoldcv(
         model, 
         None,

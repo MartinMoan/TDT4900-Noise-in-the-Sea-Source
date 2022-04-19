@@ -6,6 +6,26 @@ import multiprocessing
 import re
 
 from rich import print
+import pprint
+import json
+
+def prettify(arg, indent=4):
+    def nested(a, i, recursion_counter=1):
+        ind = "".join([" " for i in range(int(i*recursion_counter))])
+        smallind = "".join([" " for i in range(int(i*(recursion_counter-1)))])
+        if type(a) == dict:
+            if len(a) == 0:
+                return ""
+            s = "{\n"
+            for key in a.keys():
+                value = nested(a[key], indent, recursion_counter=recursion_counter+1)
+                s += f"{ind}{key}: {value}\n"
+            s += smallind + "}"
+            return s
+        else:
+            return str(a)
+
+    return nested(arg, indent)
 
 class ILogger(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -47,11 +67,19 @@ class Logger(ILogger):
         spacer = "".join([" " for i in range(header_spacing)])
         header = f"{header}{spacer}:"
 
-        content = (str(*args) + str(**kwargs)).strip()
+        # args_s = "\n".join([pprint.pformat(arg, indent=4) for arg in args])
+        # kwargs_s = pprint.pformat(kwargs, indent=4)
+        # s = args_s + kwargs_s
+        args_s = "\n".join([prettify(arg, indent=4) for arg in args])
+        
+        kwargs_s = prettify(kwargs, indent=4)
+        content = (args_s + "\n" + kwargs_s).strip()
+        
+        # content = (pprint.pformat(args) + pprint.pformat(kwargs)).strip()
         lines = re.split(r"\n+", content)
         
         for i, line in enumerate(lines):
-            print(header, line.strip())
+            print(header, line)
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"
