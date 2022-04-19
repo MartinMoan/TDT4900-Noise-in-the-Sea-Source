@@ -27,6 +27,7 @@ from ITensorAudioDataset import ITensorAudioDataset
 from IMetricComputer import IMetricComputer
 from verifier import IDatasetVerifier
 from logger import ILogger, Logger
+from tracker import ITracker, Tracker
 
 _started_at = datetime.now()
 
@@ -173,6 +174,7 @@ def log_fold(
     metrics: Mapping[str, float],
     *args, 
     logger: ILogger = Logger(), 
+    tracker: ITracker = Tracker(),
     **kwargs):
     try:
         saved_path = saver.save(model, mode="fold_eval")
@@ -214,7 +216,6 @@ def kfoldcv(
     for fold, (training_samples, test_samples) in enumerate(folds.split(dataset)):
         logger.log("----------------------------------------")
         logger.log(f"Start fold {fold}")
-        logger.log()
         
         model = None
         if isinstance(model_ref, type):
