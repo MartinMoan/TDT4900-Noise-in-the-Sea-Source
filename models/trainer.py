@@ -28,12 +28,12 @@ from IMetricComputer import IMetricComputer
 from verifier import IDatasetVerifier
 from logger import ILogger, Logger
 from tracker import ITracker, Tracker
+from provider import IModelProvider, DefaultModelProvider
 
 _started_at = datetime.now()
 
 def verify_arguments(
-    model_ref: Union[Type[torch.nn.Module], torch.nn.Module], 
-    model_kwargs: Mapping, 
+    model_provider: IModelProvider,
     dataset: ITensorAudioDataset, 
     dataset_verifier: IDatasetVerifier,
     device: str, 
@@ -41,17 +41,10 @@ def verify_arguments(
     batch_size: int = 8, 
     num_workers: int = 1):
     
-    model = None
+    model = model_provider.instantiate()
     
-    if isinstance(model_ref, type):
-        model = model_ref(**model_kwargs)
-    elif isinstance(model_ref, torch.nn.Module):
-        model = model_ref
-    else:
-        raise TypeError(f"Argument model_ref has invalid type, must be torch.nn.Module instance or type reference, but received {type(model_ref)}")
-
     if not isinstance(model, torch.nn.Module):
-        raise Exception("Argument model_ref does not point to the initializer (__init__) method of a torch.nn.Module")
+        raise TypeError(f"The return type of the model_provider.instantiate() has invalid type, must be torch.nn.Module instance, but received {type(model)}")
     
     if not isinstance(dataset, ITensorAudioDataset):
         raise Exception("Argument dataset does not point to a BasicDataset object")
@@ -184,8 +177,7 @@ def log_fold(
         logger.log(f"An error occured when computing metrics or storing model: {traceback.format_exc()}")
 
 def kfoldcv(
-    model_ref: Union[Type[torch.nn.Module], torch.nn.Module], 
-    model_kwargs: Union[Mapping, None],
+    model_provider: IModelProvider,
     dataset: ITensorAudioDataset, 
     metric_computer: IMetricComputer,
     dataset_verifier: IDatasetVerifier,
@@ -200,8 +192,7 @@ def kfoldcv(
     logger: ILogger = Logger()):
     
     verify_arguments(
-        model_ref=model_ref,
-        model_kwargs=model_kwargs,
+        model_provider=model_provider,
         dataset=dataset,
         dataset_verifier=dataset_verifier,
         device=device,
@@ -217,13 +208,9 @@ def kfoldcv(
         logger.log("----------------------------------------")
         logger.log(f"Start fold {fold}")
         
-        model = None
-        if isinstance(model_ref, type):
-            model = model_ref(**model_kwargs)
-        elif isinstance(model_ref, torch.nn.Module):
-            model = model_ref
-        else:
-            raise TypeError(f"Argument model_ref has invalid type, must be torch.nn.Module instance or type reference, but received {type(model_ref)}")
+        model = model_provider.instantiate()
+        if not isinstance(model, torch.nn.Module):
+            raise TypeError(f"The return type of the model_provider.instantiate() has invalid type, must be torch.nn.Module instance, but received {type(model)}")
 
         model.to(device)
 
@@ -236,7 +223,7 @@ def kfoldcv(
             model, 
             fold, 
             metrics,
-            model_kwargs, 
+            model_provider.properties,
             train_kwargs,
             kfolds=kfolds, 
             device=device, 

@@ -28,14 +28,21 @@ def verify_args(decorated: FunctionType):
             raise ValueError(f"The function argument does not seem to support (at least) 3 args (iterable, start, end). Inspection found {len(spec.args)} arguments: {spec}")
         
         if spec.annotations:
-            first_arg = spec.args[0] # iterable 
-            second_arg = spec.args[1] # start
-            third_arg = spec.args[2] # end
+            specargs = spec.args[0:3]
+            if spec.args[0] == "self":
+                specargs = spec.args[1:4]
+            first_arg = specargs[0] # iterable 
+            second_arg = specargs[1] # start
+            third_arg = specargs[2] # end
             if first_arg in spec.annotations.keys():
-                annotation = str(spec.annotations[first_arg])
-                m = re.match(r"typing\.Iterable(\[.*\]){0,1}", annotation)
-                if m is None:
-                    raise ValueError(f"The first argument to type hint of the function argument suggests incorrect typing. Expected typing.Iterable but found {annotation}")
+                annotation = spec.annotations[first_arg]
+                if isinstance(annotation, type):
+                    if not hasattr(annotation, "__iter__") and not (hasattr(annotation, "__getitem__") and hasattr(annotation, "__len__")):
+                        raise ValueError(f"The type hint of the function argument suggests incorrect typing, must be an iterable but found {annotation}")
+                else:
+                    m = re.match(r"typing\.Iterable(\[.*\]){0,1}", str(annotation))
+                    if m is None:
+                        raise ValueError(f"The first argument to type hint of the function argument suggests incorrect typing. Expected typing.Iterable but found {annotation}")
             if second_arg in spec.annotations.keys():
                 annotation = spec.annotations[second_arg]
                 if annotation != int:
@@ -46,9 +53,14 @@ def verify_args(decorated: FunctionType):
                     raise ValueError(f"The third argument type hint of the function argument suggest incorrect typing. Excepted second argument to be start: int but found {third_arg} : {annotation}")
         
         _args = (self, iterable, function, *args)
-        decorated(*_args, **kwargs)
+        return decorated(*_args, **kwargs)
     
     return wrapper
+
+def progress(index: int, start: int, end: int, log_interval_percentage: float = 0.05) -> Tuple[bool, float]:
+    percentage = ((index - start) / (end - start)) * 100
+    part = math.ceil((end - start) * log_interval_percentage)
+    return (index - start) % part == 0, percentage
 
 class Binworker:
     def __init__(
@@ -71,14 +83,16 @@ class Binworker:
         self, 
         iterable: Iterable[any], 
         function: callable, 
+        aggregation_method: callable = default_aggregation,
         function_args: Tuple[any] = (), 
-        function_kwargs: Mapping[str, any] = {},
-        aggregation_method: callable = default_aggregation) -> Iterable[any]:
+        function_kwargs: Mapping[str, any] = {}) -> Iterable[any]:
+        
         """Split an iterable into (roughly) equally sized bins, and apply a function to each bin at the same time using multiple processes/threads. The results from each process/bin is aggregated and returned. 
 
         Args:
             iterable (Iterable[any]): The iterable to 
             function (callable): The function to apply to each bin. Must have signature (iterable: Iterable, bin_start: int, bin_end: int, *args, **kwargs) and must return an Iterable.
+            aggregation_method (callable): The function to use to aggregate the bined results. Must accept a single argument (results: Iterable[Iterable[any]])
             function_args (Tuple[any], optional): Positional arguments to pass to the function (other than the required positionals). Defaults to ().
             function_kwargs (Mapping[str, any], optional): Keyword arguments to pass to the function. Defaults to {}.
 
@@ -111,4 +125,5 @@ def noannotations(iterable, start, end):
 
 if __name__ == "__main__":
     worker = Binworker(pool_ref=multiprocessing.Pool)
-    worker.apply(np.arange(100), square)
+    res = worker.apply(np.arange(100), square)
+    print(res)

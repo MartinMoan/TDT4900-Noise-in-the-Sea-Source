@@ -28,6 +28,7 @@ from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
 from verifier import BinaryTensorDatasetVerifier
 from logger import Logger
+from provider import DefaultModelProvider
 
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
@@ -97,7 +98,7 @@ def train(args):
 
     kfolds              =   8
 
-    model = instantiate_model(n_model_outputs, nmels, n_time_frames, device)
+    model_provider      =   DefaultModelProvider(instantiate_model, (n_model_outputs, nmels, n_time_frames, device), verbose=args.verbose)
 
     metrics_computer    =   BinaryMetricComputer(clip_dataset.classes())
 
@@ -130,9 +131,8 @@ def train(args):
     logger.log(f"Performing pre-training verification run. Will log results to SHEET ID {config.SHEET_ID}")
     
     trainer.kfoldcv(
-        model, 
-        None,
-        limited_tensordatataset, # The primary change
+        model_provider,
+        limited_tensordatataset,
         metrics_computer,
         dataset_verifier,
         device,
@@ -145,7 +145,6 @@ def train(args):
         kfolds=2,
     )
     logger.log("Pre-training verification run completed without halting!")
-    
 
     dataset = FileLengthTensorAudioDataset(
         dataset=clip_dataset, 
@@ -153,16 +152,11 @@ def train(args):
         feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)
     )
 
-    logger.log("Instantiating new model for K-fold CV...")
-    model = instantiate_model(n_model_outputs, nmels, n_time_frames, device)
-    logger.log("Model instantiated!")
-
     # Now start the training with full dataset
     config.SHEET_ID = SHEET_ID
     logger.log(f"Starting {kfolds}-fold cross evaluation (and finetuning) of AST pretrained model. Will log results to SHEET ID {config.SHEET_ID}")
     trainer.kfoldcv(
-        model, 
-        None,
+        model_provider,
         dataset, # The primary change
         metrics_computer,
         dataset_verifier,

@@ -12,6 +12,8 @@ import config
 from ICustomDataset import ICustomDataset
 from glider.audiodata import LabeledAudioData 
 import warnings
+from logger import ILogger, Logger
+from audiodata import AudioData
 
 def _to_tensor(nparray: np.ndarray) -> torch.Tensor:
     return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
@@ -63,6 +65,14 @@ class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     def label_shape(self) -> tuple[int, ...]:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def __repr__(self) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def audiodata(self, index: int) -> AudioData:
+        raise NotImplementedError
+
 #####
 ##### Implementations:
 #####
@@ -77,10 +87,13 @@ class BinaryLabelAccessor(ILabelAccessor):
         return _to_tensor(audio_data.binary())
 
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
-    def __init__(self, n_mels: int = 128, n_fft: int = 2048, hop_length: int = 512) -> None:
+    def __init__(self, n_mels: int = 128, n_fft: int = 2048, hop_length: int = 512, scale_melbands=False, logger: ILogger = Logger(), verbose: bool = False) -> None:
         self._n_mels = n_mels
         self._n_fft = n_fft
         self._hop_length = hop_length
+        self._scale_melbands = scale_melbands
+        self.logger = logger
+        self.verbose = verbose
 
     def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    
         """Compute the Log-Mel Spectrogram of the input LabeledAudioData samples. Output will have shape (1, self._n_mels, 1 + int(len(samples) / self._hop_length))
@@ -94,11 +107,14 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         S_db = np.flip(S_db, axis=0)
         
         # Normalize across frequency bands (give every frequency band/bin 0 mean and unit variance)
-        # TODO: Handle exceptions where there is no variance within any freqency bin. E.g. "denominator" bellow is np.nan along one or more frequencies
-        mean = np.mean(S_db, axis=1).reshape((-1, 1))
-        numerator = (S_db - mean)
-        denominator = np.std(S_db, axis=1).reshape((-1, 1))
-        S_db = np.divide(numerator, denominator, out=np.zeros_like(S_db), where=(denominator!=0))
+        if self._scale_melbands:
+            if self.verbose:
+                self.logger.log(f"Scaling Mel-spectrogram across frequency bands to zero mean and unit variance")
+            mean = np.mean(S_db, axis=1).reshape((-1, 1))
+            numerator = (S_db - mean)
+            denominator = np.std(S_db, axis=1).reshape((-1, 1))
+            S_db = np.divide(numerator, denominator, out=np.zeros_like(S_db), where=(denominator!=0))
+
         return self._to_single_channel_batch(_to_tensor(S_db))
 
 class FileLengthTensorAudioDataset(ITensorAudioDataset):
@@ -148,6 +164,9 @@ class FileLengthTensorAudioDataset(ITensorAudioDataset):
     def __repr__(self):
         relevant_values = {"_dataset": repr(self._dataset)}
         return repr(relevant_values)
+
+    def audiodata(self, index: int) -> LabeledAudioData:
+        return self._dataset[index]
 
 if __name__ == "__main__":
     from GLIDER import GLIDER
