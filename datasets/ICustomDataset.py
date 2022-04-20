@@ -33,3 +33,7 @@ class ICustomDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def example_shapes(self) -> Iterable[tuple[int, ...]]:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def __repr__(self) -> str:
+        raise NotImplementedError

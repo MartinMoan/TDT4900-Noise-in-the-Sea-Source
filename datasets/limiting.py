@@ -97,5 +97,8 @@ class DatasetLimiter(ICustomDataset):
     def example_shapes(self) -> Iterable[tuple[int, ...]]:
         return self._dataset.example_shapes()
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(_dataset={repr(self._dataset)}, _dataset_indeces={repr(self._dataset_indeces)})"
+
 if __name__ == "__main__":
     clipped = ClippedDataset()
