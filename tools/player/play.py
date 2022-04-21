@@ -2,10 +2,12 @@
 import pathlib
 import argparse
 
-import simpleaudio as sa
+import sounddevice as sd
 import numpy as np
 import librosa
 from scipy import signal
+import time
+import os
 
 _AUDIOFILE_EXTENSIONS = [".wav", ".flac", ".mp3"]
 def _positive_integer(x):
@@ -54,26 +56,19 @@ def _resample(samples, sr):
     samples = signal.resample(samples, new_N)
     return samples, new_sr
 
+def play(samples, sr):
+    from scipy.io.wavfile import write
+    tempfilename = "tempfile.wav"
+    write(tempfilename, sr, samples)
+    import os
+    os.system(f"afplay {tempfilename} -v 100")
+
 def main():
     args = init_args()
     
     samples, sr = load_samples(args)
     samples, sr = _resample(samples, sr)
-    # samples = samples * 2
-    print(np.min(samples), np.max(samples))
-    
-    audio = samples * (2**15 - 1) / np.max(np.abs(samples))
-    audio = samples.astype(np.int16)
-    num_channels = 1
-    bytes_per_sample = 2
-    print(audio)
-    print(np.min(audio), np.max(audio))
-    print("Playgin audio...")
-    player = sa.play_buffer(audio, num_channels, bytes_per_sample, sr)
-    print(player.is_playing())
-    player.wait_done()
-    print(player.is_playing())
-    print("done")
+    play(samples, sr)
 
 
 if __name__ == "__main__":
