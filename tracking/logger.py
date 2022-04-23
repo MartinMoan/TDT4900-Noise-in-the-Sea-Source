@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-import abc
+import gc
+import sys
 import inspect 
 import pathlib
 import multiprocessing
 import re
 
 from rich import print
-import pprint
-import json
+
+import git
+
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+from interfaces import ILogger
 
 def prettify(arg, indent=4):
     def nested(a, i, recursion_counter=1):
@@ -27,12 +31,21 @@ def prettify(arg, indent=4):
 
     return nested(arg, indent)
 
-class ILogger(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def log(self, *args, **kwargs) -> None:
-        raise NotImplementedError
-
 class Logger(ILogger):
+    # def __new__(cls):
+    #     frame = inspect.currentframe().f_back
+    #     caller = inspect.getframeinfo(frame)
+    #     path = pathlib.Path(caller.filename)
+    #     proc = multiprocessing.current_process()
+    #     loggers = [obj for obj in gc.get_objects() if isinstance(obj, ILogger)]
+    #     ids = [id(logger) for logger in loggers]
+    #     print(f"PID {proc.pid} ({path.name}:{caller.lineno}) Found {len(loggers)} existing loggers with ids: {ids}")
+
+    #     if len(loggers) == 0:
+    #         # print("No existing loggers was found, instantiating new logger")
+    #         return super().__new__(cls)
+    #     return loggers[0]
+
     def __init__(self) -> None:
         pass
 
@@ -77,7 +90,7 @@ class Logger(ILogger):
         
         # content = (pprint.pformat(args) + pprint.pformat(kwargs)).strip()
         lines = re.split(r"\n+", content)
-        
+
         for i, line in enumerate(lines):
             print(header, line)
 

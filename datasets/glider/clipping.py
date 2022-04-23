@@ -4,35 +4,30 @@ from datetime import datetime, timedelta
 import pathlib
 import sys
 import math
-from types import MethodType
 import warnings
 import multiprocessing
 from multiprocessing.pool import ThreadPool, Pool
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Tuple
 import pickle
 import hashlib
-
 
 from rich import print
 import pandas as pd
 import git
+import numpy as np
+
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from ICustomDataset import ICustomDataset
+from interfaces import ICustomDataset, ILogger, IAsyncWorker
 from cacher import Cacher
 from audiodata import LabeledAudioData
-from ITensorAudioDataset import MelSpectrogramFeatureAccessor
-from logger import ILogger, Logger
+from datasets.binjob import progress
 
-CLIPPING_CACHE_DIR = config.CACHE_DIR.joinpath("clipping")
-
-if not CLIPPING_CACHE_DIR.exists():
-    CLIPPING_CACHE_DIR.mkdir(parents=True, exist_ok=False)
-
-class ClippingCacheDecorator(ICustomDataset):
-    def __new__(cls, *args, force_recache=False, **kwargs) -> ICustomDataset:
-        cacher = Cacher()
-        return cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, **kwargs)
+class CachedClippedDataset(ICustomDataset):
+    def __new__(cls, *args, force_recache=False, worker: IAsyncWorker=None, logger: ILogger = None, **kwargs) -> ICustomDataset:
+        cacher = Cacher(logger=logger)
+        init_kwargs = {"worker": worker, "logger": logger, **kwargs}
+        return cacher.cache(ClippedDataset, init_args=args, init_kwargs=init_kwargs, hashable_arguments=kwargs)
 
 class ClippedDataset(ICustomDataset):
     def __init__(self, 
@@ -40,8 +35,11 @@ class ClippedDataset(ICustomDataset):
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
         overlap_nsamples: int = None,
-        logger: ILogger = Logger()) -> None:
+        worker: IAsyncWorker = None,
+        logger: ILogger = None,
+        ) -> None:
 
+        self.worker = worker
         self.logger = logger
 
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
@@ -84,15 +82,14 @@ class ClippedDataset(ICustomDataset):
 
         self._verify_files()
 
-    def _verify(self, start: int, stop: int):
+    def _verify(self, virtual_indeces: Iterable[int], start: int, stop: int) -> Tuple[Iterable[int], Iterable[int]]:
         valid_indeces = []
         invalid_indeces = []
         proc = multiprocessing.current_process()
         
-        for i in range(start, min(stop, self._virtual_length())):
-            percentage = ((i - start) / (stop - start)) * 100
-            part = math.ceil((stop - start) * 0.05)
-            if (i - start) % part == 0:
+        for i in range(start, min(len(virtual_indeces), stop)):
+            should_log, percentage = progress(i, start, stop)
+            if should_log:
                 self.logger.log(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
             try:
                 # file_index = math.floor(i / self._num_clips_per_file)
@@ -106,27 +103,17 @@ class ClippedDataset(ICustomDataset):
                 invalid_indeces.append(i)
         return valid_indeces, invalid_indeces
 
+    def _agg(self, results: Iterable[Tuple[Iterable[int], Iterable[int]]]) -> Tuple[Iterable[int], Iterable[int]]:
+        valid, invalid = [], []
+        for valid_indeces, invalid_indeces in results:
+            valid += valid_indeces
+            invalid += invalid_indeces
+        return valid, invalid
+
     def _verify_files(self):
-        n_processes = multiprocessing.cpu_count()
-        with Pool(processes=n_processes) as pool:
-            bin_size = math.ceil(self._virtual_length() / n_processes)
-            
-            bins = [(start, (start + bin_size)) for start in range(0, self._virtual_length(), bin_size)]
-
-            tasks = []
-            for bin in bins:
-                start, stop = bin
-                tasks.append(pool.apply_async(self._verify, (start, stop)))
-            
-            valid_indeces_results = []
-            invalid_indeces_results = []
-            for task in tasks:
-                valid_indeces, invalid_indeces = task.get()
-                valid_indeces_results += valid_indeces
-                invalid_indeces_results += invalid_indeces
-
-            self._valid_clip_indeces = valid_indeces_results
-            self._invalid_clip_indeces = invalid_indeces_results
+        valid_indeces, invalid_indeces = self.worker.apply(range(0, self._virtual_length()), self._verify, aggregation_method=self._agg)
+        self._valid_clip_indeces = np.sort(valid_indeces, axis=0)
+        self._invalid_clip_indeces = np.sort(invalid_indeces, axis=0)
                 
     def _preprocess_tabular_data(self):
         # ensure time columns are datetime/np.datetime64 objects
@@ -201,10 +188,18 @@ class ClippedDataset(ICustomDataset):
         return [(num_channels, num_samples) for _ in range(len(self))]
 
     def __repr__(self):
-        relevant_values = {"clip_duration": self._clip_duration, "_clip_overlap": self._clip_duration}
-        return repr(relevant_values)
+        relevant_attributes = ["_clip_duration", "_clip_overlap", "_classes", "_max_file_duration", "_num_clips_per_file", "_valid_clip_indeces"]
+        relevant_values = {key: getattr(self, key) for key in relevant_attributes}
+        out = f"{self.__class__.__name__}( {repr(relevant_values)} )"
+        return repr(out)
+
+    def __str__(self):
+        relevant_attributes = ["_clip_duration", "_clip_overlap", "_classes", "_max_file_duration", "_num_clips_per_file", "_valid_clip_indeces"]
+        relevant_values = {key: str(getattr(self, key)) for key in relevant_attributes}
+        out = f"{self.__class__.__name__}( {str(relevant_values)} )"
+        return str(out)
 
 
 if __name__ == "__main__":
-    dataset = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
-    d2 = ClippingCacheDecorator(clip_duration_seconds=10.0, clip_overlap_seconds=4.4)
+    dataset = CachedClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
+    d2 = CachedClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.4)
