@@ -22,9 +22,7 @@ class ITracker(metaclass=abc.ABCMeta):
         metrics: Mapping[str, float], 
         model: str, 
         model_parameters_path: Union[str, pathlib.PosixPath], 
-        *args, 
-        order: Iterable[str] = None, 
-        col_order: Iterable[str] = None, 
+        *args,
         **kwargs) -> None:
 
         raise NotImplementedError

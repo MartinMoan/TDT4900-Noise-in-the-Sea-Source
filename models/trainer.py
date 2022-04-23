@@ -28,7 +28,7 @@ from IMetricComputer import IMetricComputer
 from verifier import IDatasetVerifier
 from logger import ILogger, Logger
 from tracker import ITracker, Tracker
-from provider import IModelProvider, DefaultModelProvider
+from modelprovider import IModelProvider
 
 _started_at = datetime.now()
 

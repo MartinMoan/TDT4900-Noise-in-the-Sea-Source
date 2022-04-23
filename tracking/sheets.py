@@ -14,15 +14,20 @@ import git
 REPO_DIR = pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)
 sys.path.insert(0, str(REPO_DIR))
 import config
+from logger import ILogger, Logger
 
 class SheetClient:
-    def __init__(self) -> None:
+    def __init__(self, logger: ILogger = Logger()) -> None:
+        self.logger = logger
         self._client = self._authenticate()
+        self.logger.log(f"Opening spreadsheet by key: {config.SPREADSHEET_ID}")
         self._spreadsheet = self._client.open_by_key(config.SPREADSHEET_ID)
+        self.logger.log(f"Opening sheet by SHEET ID {config.SHEET_ID}")
         self._sheet = self._spreadsheet.get_worksheet_by_id(config.SHEET_ID)
 
     def _authenticate(self) -> gspread.Client:
         credentials_path = REPO_DIR.joinpath("credentials.json")
+        self.logger.log(f"Reading Google Sheets credentials from: {credentials_path}")
         creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
         client = gspread.authorize(creds)
         return client

@@ -28,7 +28,7 @@ from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
 from verifier import BinaryTensorDatasetVerifier
 from logger import Logger
-from provider import DefaultModelProvider
+from modelprovider import DefaultModelProvider
 
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
