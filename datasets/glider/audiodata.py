@@ -36,11 +36,11 @@ class AudioData:
 
     @property
     def start_time(self) -> datetime:
-        return self.file_start_time + timedelta(seconds=self.clip_offset)
+        return self.file_start_time + timedelta(seconds=float(self.clip_offset))
 
     @property
     def end_time(self) -> datetime:
-        return self.start_time + timedelta(seconds=self.clip_duration)
+        return self.start_time + timedelta(seconds=float(self.clip_duration))
 
 @dataclass
 class LabeledAudioData(AudioData):
@@ -50,8 +50,8 @@ class LabeledAudioData(AudioData):
 
     @property
     def labels(self):
-        start_time = self.file_start_time + timedelta(seconds=self.clip_offset)
-        end_time = start_time + timedelta(seconds=self.clip_duration)
+        start_time = self.file_start_time + timedelta(seconds=float(self.clip_offset))
+        end_time = start_time + timedelta(seconds=float(self.clip_duration))
         return self.all_labels[(self.all_labels.start_time <= end_time) & (self.all_labels.end_time >= start_time)]    
     
     def label_roll(self, N=None) -> np.ndarray:

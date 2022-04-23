@@ -1,41 +1,29 @@
 #!/usr/bin/env python3
-from email.mime import audio
 import sys
 import pathlib
-import abc
 from typing import Mapping, Iterable, Union, Tuple
+import multiprocessing
+import warnings
+
 import git
-from matplotlib.pyplot import isinteractive
 from sklearn.preprocessing import scale
 import torch
 import numpy as np
-import multiprocessing
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from ITensorAudioDataset import ITensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset, FileLengthTensorAudioDataset
-from glider.audiodata import LabeledAudioData 
-from logger import ILogger, Logger
-from binjob import Binworker, progress
-from limiting import DatasetLimiter
-from clipping import ClippingCacheDecorator
-from cacher import Cacher
-from audiodata import AudioData
-import warnings
+from interfaces import IScaler, ITransformer, ITensorAudioDataset, ILogger
+from tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset, TensorAudioDataset
+from glider.audiodata import LabeledAudioData, AudioData
+from tracking.logger import Logger
+from datasets.binjob import Binworker, progress
+from datasets.limiting import DatasetLimiter
+from datasets.glider.clipping import CachedClippedDataset
+from datasets.cacher import Cacher
 
 TRANSFORMER_CACHE_DIR = config.CACHE_DIR.joinpath("normalization")
 if not TRANSFORMER_CACHE_DIR.exists():
     TRANSFORMER_CACHE_DIR.mkdir(parents=True, exist_ok=False)
-
-class IScaler(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def transform(self, index: int, X: torch.Tensor, Y: torch.Tensor) -> Tuple[int, torch.Tensor, torch.Tensor]:
-        raise NotImplementedError
-
-class ITransformer(IScaler, metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def fit(self, dataset: ITensorAudioDataset) -> IScaler:
-        raise NotImplementedError
 
 class StandardScalerTransformer(ITransformer):
     def __init__(self, logger: ILogger = Logger(), verbose: bool = False) -> None:
@@ -90,23 +78,28 @@ class StandardScalerTransformer(ITransformer):
         return f"{self.__class__.__name__}(_fitted={self._fitted}, _mean={self._mean}, _stddev={self._stddev})"
 
 class CahcedStandardScalerTransformerDecorator(ITransformer):
-    def __init__(self, decorated: StandardScalerTransformer = None, force_recache: bool = False, **kwargs):
+    def __init__(self, *args, decorated: StandardScalerTransformer = None, force_recache: bool = False, **kwargs):
         if decorated is None:
             decorated = StandardScalerTransformer(**kwargs)
         self._decorated = decorated
         self._force_recache = force_recache
-
+        self.logger = logger
+        self._init_args = args
+        self._init_kwargs = kwargs
+        
     def fit(self, dataset: ITensorAudioDataset) -> IScaler:
-        hashable_arguments = repr((self._decorated, dataset)).encode()
+        hashable_arguments = {"decorated": self._decorated, "dataset": dataset}
         cacher = Cacher()
-        scaler = cacher.cache(TRANSFORMER_CACHE_DIR, StandardScalerTransformer, hashable_arguments=hashable_arguments, force_recache=self._force_recache)
+        cache_dir = cacher.cache_dir()
+        scaler = cacher.cache(StandardScalerTransformer, init_args=self._init_args, init_kwargs=self._init_kwargs, hashable_arguments=hashable_arguments, force_recache=self._force_recache)
         self._decorated = scaler
 
         if self._decorated._fitted:
             return self._decorated
         
         self._decorated = self._decorated.fit(dataset)
-        pickle_path = cacher.hash(TRANSFORMER_CACHE_DIR, hashable_arguments=hashable_arguments)
+        pickle_path = cacher.hash(StandardScalerTransformer, cache_dir, Cacher._append_defaults(hashable_arguments))
+        
         cacher.dump(self._decorated, pickle_path)
         return self._decorated
 
@@ -160,13 +153,36 @@ class TransformedTensorDataset(ITensorAudioDataset):
 
 if __name__ == "__main__":
     n_mels = 128
-    clip_dataset = ClippingCacheDecorator(
+    from datasets.binjob import Binworker
+    from tracking.logger import Logger
+    from datasets.balancing import CachedDatasetBalancer, DatasetBalancer
+
+    worker = Binworker(timeout_seconds=120)
+    logger = Logger()
+
+    clip_dataset = CachedClippedDataset(
+        worker=worker,
+        logger=logger,
         clip_duration_seconds = 60,
         clip_overlap_seconds = 20
     )
 
-    limited_dataset = DatasetLimiter(clip_dataset, limit=100, randomize=False, balanced=True) # If randomize=True, the transform will never be cahced (because the fitted dataset changes between sessions, due to randomization)
-    limited_tensordatataset = FileLengthTensorAudioDataset(
+    balancer = CachedDatasetBalancer(
+        clip_dataset,
+        logger=logger,
+        worker=worker,
+        force_recache=False
+    )
+
+    limited_dataset = DatasetLimiter(
+        clip_dataset, 
+        limit=100, 
+        randomize=False, 
+        balanced=True,
+        balancer=balancer
+    ) # If randomize=True, the transform will never be cahced (because the fitted dataset changes between sessions, due to randomization)
+
+    limited_tensordatataset = TensorAudioDataset(
         dataset = limited_dataset,
         label_accessor=BinaryLabelAccessor(),
         feature_accessor=MelSpectrogramFeatureAccessor(n_mels=n_mels)
@@ -186,13 +202,15 @@ if __name__ == "__main__":
     for i in range(len(scaled_dataset)):
         index, X, Y = scaled_dataset[i]
         audiodata = scaled_dataset.audiodata(i)
-
+        class_info = audiodata.labels.source_class_specific.unique()
         start_sec = (audiodata.start_time - audiodata.file_start_time).seconds
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         scale = 0.8
         fig = plt.figure(figsize=(1920*scale*px, 1080*scale*px))
-        plt.imshow(X.squeeze(), cmap="viridis", aspect="auto", extent=(start_sec, start_sec + audiodata.clip_duration, 0, hz_to_mel(audiodata.sampling_rate / 2)))
-        plt.title(audiodata.filepath)
+        extent = (start_sec, start_sec + audiodata.clip_duration, 0, hz_to_mel(audiodata.sampling_rate / 2))
+        plt.imshow(X.squeeze(), cmap="viridis", aspect="auto", extent=extent)
+        plt.suptitle(audiodata.filepath)
+        plt.title(", ".join(class_info))
         plt.ylabel("Mel Frequency")
         plt.xlabel("Time after recording start [sec]")
         image_name = f"{audiodata.filepath.stem}_start_{start_sec}_end_{(start_sec + int(audiodata.clip_duration))}.png"

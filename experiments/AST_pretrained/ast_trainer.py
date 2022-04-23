@@ -10,25 +10,21 @@ import sys
 from tabnanny import verbose
 
 import torch
-from rich import print
 import git
-import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from GLIDER import GLIDER
-from clipping import ClippedDataset, ClippingCacheDecorator
-from ICustomDataset import ICustomDataset
-from audiodata import LabeledAudioData
-import trainer
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
+from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
+from datasets.glider.audiodata import LabeledAudioData
+from models import trainer
+from datasets.tensordataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from IMetricComputer import BinaryMetricComputer
 from IDatasetBalancer import BalancedKFolder, DatasetBalancer
 from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
 from verifier import BinaryTensorDatasetVerifier
 from logger import Logger
-from provider import DefaultModelProvider
+from modelprovider import DefaultModelProvider
 
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
@@ -81,7 +77,7 @@ def train(args):
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, nmels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
-    clip_dataset = ClippingCacheDecorator(
+    clip_dataset = CachedClippedDataset(
         clip_nsamples = clip_length_samples, 
         overlap_nsamples = clip_overlap_samples
     )

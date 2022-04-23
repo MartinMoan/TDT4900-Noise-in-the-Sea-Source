@@ -20,9 +20,10 @@ import re
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from ICustomDataset import ICustomDataset
+from interfaces.ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
-from logger import ILogger, Logger
+from interfaces import ILogger
+from tracking.logger import Logger
 EXPECTED_SR = 128000
 EXPECTED_OUTPUT_NUM_SAMPLES = 76800000
 EXPECTED_NUM_CHANNLES = 1
@@ -138,6 +139,9 @@ class GLIDER(ICustomDataset):
 
     def __str__(self):
         return f"GLIDER(BasicDataset) object with {len(self)} instances"
+
+    def __repr__(self):
+        raise NotImplementedError
 
 if __name__ == "__main__":
     dataset = GLIDER(clip_duration_seconds=10.0, verbose=True, suppress_warnings=True)

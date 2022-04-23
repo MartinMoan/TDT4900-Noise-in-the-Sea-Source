@@ -16,7 +16,7 @@ dotenv.load_dotenv()
 import git
 from rich import print
 
-import CustomWarnings
+from tracking import CustomWarnings
 ENV = os.environ.get("ENV", "dev")
 if ENV == "dev":
     # warnings.warn = CustomWarnings.warn

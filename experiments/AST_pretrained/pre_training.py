@@ -21,7 +21,7 @@ from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
 from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from limiting import DatasetLimiter
-from IDatasetBalancer import DatasetBalancer, BalancerCacheDecorator, BalancedDatasetDecorator
+from IDatasetBalancer import DatasetBalancer, CahcedDatasetBalancer, BalancedDatasetDecorator
 
 def main():
     # config.HOME_PROJECT_DIR.joinpath("ExampleImages")

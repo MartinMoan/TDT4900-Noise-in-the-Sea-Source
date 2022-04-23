@@ -5,7 +5,7 @@ from multiprocessing.pool import ThreadPool
 import re
 from types import FunctionType
 
-from typing import Iterable, Tuple, Mapping, Union
+from typing import Iterable, Tuple, Mapping, Union, Callable
 import math
 
 import numpy as np
@@ -13,7 +13,8 @@ import inspect
 
 from rich import print
 
-from logger import Logger
+from interfaces import IAsyncWorker
+from tracking.logger import Logger
 
 def verify_args(decorated: FunctionType):
     def wrapper(
@@ -62,28 +63,23 @@ def progress(index: int, start: int, end: int, log_interval_percentage: float = 
     part = math.ceil((end - start) * log_interval_percentage)
     return (index - start) % part == 0, percentage
 
-class Binworker:
+class Binworker(IAsyncWorker):
     def __init__(
         self, 
         pool_ref: any = multiprocessing.pool.Pool, 
-        n_processes: int = multiprocessing.cpu_count()) -> None:
+        n_processes: int = multiprocessing.cpu_count(),
+        timeout_seconds: float = None) -> None:
         
         self.pool_ref = pool_ref
         self.n_processes = n_processes
-
-    def default_aggregation(results: Iterable[Iterable[any]]) -> Iterable[any]:
-        output = []
-        for iterable in results:
-            for result in iterable:
-                output.append(result)
-        return output
+        self.timeout_seconds = timeout_seconds
 
     @verify_args
     def apply(
         self, 
         iterable: Iterable[any], 
-        function: callable, 
-        aggregation_method: callable = default_aggregation,
+        function: Callable[[Iterable[any], int, int, Tuple[any], Mapping[str, any]], Iterable[any]], 
+        aggregation_method: Callable[[Iterable[Iterable[any]]], Iterable[any]] = IAsyncWorker.default_aggregation, 
         function_args: Tuple[any] = (), 
         function_kwargs: Mapping[str, any] = {}) -> Iterable[any]:
         
@@ -108,7 +104,7 @@ class Binworker:
                 task = pool.apply_async(function, args=(iterable, start, end, *function_args), kwds=function_kwargs)
                 tasks.append(task)
             
-            results = [task.get() for task in tasks]
+            results = [task.get(timeout=self.timeout_seconds) for task in tasks]
 
             return aggregation_method(results)
 

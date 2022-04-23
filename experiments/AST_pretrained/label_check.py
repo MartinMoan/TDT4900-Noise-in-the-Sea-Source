@@ -21,7 +21,7 @@ from audiodata import LabeledAudioData
 import trainer
 from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
 from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer, BalancerCacheDecorator
+from IDatasetBalancer import BalancedKFolder, DatasetBalancer, CachedDatasetBalancer
 from ASTWrapper import ASTWrapper
 from limiting import DatasetLimiter
 

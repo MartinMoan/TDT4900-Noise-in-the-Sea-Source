@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 import sys
 import pathlib
-from typing import Union, Mapping, Iterable
+from typing import Union, Mapping, Iterable, Type
 
 import git
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from audiodata import LabeledAudioData
-from clipping import ClippedDataset
-from ICustomDataset import ICustomDataset
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
-from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer, BalancerCacheDecorator
-from ASTWrapper import ASTWrapper
+from datasets.glider.audiodata import LabeledAudioData
+from datasets.glider.clipping import ClippedDataset
+from interfaces import ICustomDataset, IDatasetBalancer
+from datasets.balancing import CachedDatasetBalancer
 
 class DatasetLimiter(ICustomDataset):
-    def __init__(self, dataset: ICustomDataset, limit: Union[float, int], randomize: bool = False, balanced=True) -> None:
+    def __init__(self, dataset: ICustomDataset, limit: Union[float, int], balancer: IDatasetBalancer, randomize: bool = False, balanced=True) -> None:
         self._dataset = dataset
+        self.balancer = balancer
         self._dataset_indeces = self._get_subset_indeces(dataset, limit, randomize, balanced)
 
     def _parse_subset_size(self, limit: Union[float, int]) -> int:
@@ -45,8 +42,7 @@ class DatasetLimiter(ICustomDataset):
         num_in_subset = self._parse_subset_size(limit)
         raw_indeces = np.arange(0, len(dataset))
         if balance:
-            balancer = BalancerCacheDecorator(dataset, verbose=False, force_recache=False)
-            splits = balancer._split_labels
+            splits = self.balancer._split_labels
             num_classes = len(splits.keys()) # both, neither, anthropogenic, biophonic
             n_per_class = int(num_in_subset / num_classes)
             class_numbers = {key: n_per_class for key in splits.keys()}
