@@ -12,9 +12,14 @@ import numpy as np
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
+# import config
+from globalcontainer import GlobalContainer
+from globalconfig import GlobalConfiguration
 from sheets import SheetClient
-from logger import ILogger, Logger
+from logger import ILogger
+
+LOGGED_AT_COLUMN = "created_at"
+from dependency_injector.wiring import Provide, inject
 
 class ITracker(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -28,9 +33,11 @@ class ITracker(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 class Tracker(ITracker):
-    def __init__(self, logger: ILogger = Logger()) -> None:
+    @inject
+    def __init__(self, logger: ILogger = Provide[GlobalContainer.logger], config: GlobalConfiguration = Provide[GlobalContainer.config]) -> None:
         super().__init__()
         self.logger = logger
+        self.config = config
 
     def track(
         self,
@@ -47,16 +54,15 @@ class Tracker(ITracker):
         data = self._add_optional_values(data, *args, **kwargs)
 
         if col_order is None:
-            rem = set(data.keys()) - set([config.LOGGED_AT_COLUMN])
-            col_order = [config.LOGGED_AT_COLUMN] + list(rem)
+            rem = set(data.keys()) - set([self.config.LOGGED_AT_COLUMN])
+            col_order = [self.config.LOGGED_AT_COLUMN] + list(rem)
         if order is None:
-            order = [config.LOGGED_AT_COLUMN]
+            order = [self.config.LOGGED_AT_COLUMN]
 
         self.logger.log(f"Tracking data:\n", data)
-        client = SheetClient()
+        client = SheetClient(logger=self.logger, config = self.config)
         client.add_row(data)
         client.format(order_by=order, col_order=col_order)
-        
 
     def _get_all_dicts(self, *args):
         return [arg for arg in args if type(arg) == dict]
@@ -111,7 +117,7 @@ class Tracker(ITracker):
         return output
 
     def _add_required_values(self, data: Mapping[str, any], metrics: Mapping[str, float], model: str, model_parameters_path: Union[str, pathlib.PosixPath]):
-        data[config.LOGGED_AT_COLUMN] = datetime.now().strftime(config.DATETIME_FORMAT)
+        data[self.config.LOGGED_AT_COLUMN] = datetime.now().strftime(self.config.DATETIME_FORMAT)
         data["model"] = model
         data["model_parameters_path"] = str(model_parameters_path)
 
@@ -127,6 +133,9 @@ class Tracker(ITracker):
         return data
 
 if __name__ == "__main__":
+    container = GlobalContainer()
+    container.init_resources()
+    container.wire(modules=[__name__])
     print("Beginning to test tracking...")
     import time
     tracker = Tracker()

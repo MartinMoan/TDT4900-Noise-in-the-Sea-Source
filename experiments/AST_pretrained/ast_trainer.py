@@ -15,21 +15,23 @@ import git
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from GLIDER import GLIDER
-from clipping import ClippedDataset, ClippingCacheDecorator
-from ICustomDataset import ICustomDataset
-from audiodata import LabeledAudioData
-import trainer
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
-from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer
-from ASTWrapper import ASTWrapper
-from limiting import DatasetLimiter
-from verifier import BinaryTensorDatasetVerifier
-from logger import Logger
-from modelprovider import DefaultModelProvider
+# import config
+# from GLIDER import GLIDER
+# from clipping import ClippedDataset, ClippingCacheDecorator
+# from ICustomDataset import ICustomDataset
+# from audiodata import LabeledAudioData
+# import trainer
+# from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
+# from IMetricComputer import BinaryMetricComputer
+# from IDatasetBalancer import BalancedKFolder, DatasetBalancer
+# from ASTWrapper import ASTWrapper
+# from limiting import DatasetLimiter
+# from verifier import BinaryTensorDatasetVerifier
+# from logger import Logger
+# from modelprovider import DefaultModelProvider
 
+print(GLIDER)
+exit()
 def init_args():
     parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
     parser.add_argument("-lr", "--learning-rate", type=float, default=0.001, help="Learning rate")
@@ -37,7 +39,6 @@ def init_args():
     parser.add_argument("-e", "--epochs", type=int, default=3, help="training epochs")
     parser.add_argument("-bs", "--batch-size", type=int, default=16, help="batch size")
     parser.add_argument("-nw", "--num-workers", type=int, default=8, help="num workers for dataloaders")
-    parser.add_argument("--prediction-threshold", type=float, default=0.5, help="Prediction confidence threshold. Any prediction with a confidence less than this is not considered a correct prediction (only relevant during evaluation, has no effect on training).")
     parser.add_argument("--force-gpu", action="store_true", default=False, help="Force using CUDA cores. If no CUDA cores are available, will raise an exception and halt the program.")
     parser.add_argument("-cd", "--clip-duration-seconds", type=float, default=10.0, help="The clip duration in seconds to use for the glider audio data.")
     parser.add_argument("-co", "--clip-overlap-seconds", type=float, default=2.0, help="The clip overlap in seconds. Every clip will overlap the pervious clip with this number of seconds.")

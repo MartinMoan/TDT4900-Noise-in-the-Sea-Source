@@ -46,7 +46,7 @@ def cleanup_tmp_files():
     for verified in verified_files:
         info = get_wav_info(verified)
         month = info["start_time"].strftime("%B")
-        data_dir = config._GLIDER_DATASET_DIRECTORY.joinpath(month)
+        data_dir = config.GLIDER_DATASET_DIRECTORY.joinpath(month)
 
         if not data_dir.exists() and not data_dir.is_file():
             data_dir.mkdir(parents=False, exist_ok=False)

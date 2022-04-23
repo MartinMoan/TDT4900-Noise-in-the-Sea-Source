@@ -1,85 +1,31 @@
 #!/usr/bin/env python3
-import sys, pathlib, abc
-from tkinter import Label
+import sys
+import pathlib
+import warnings
 from typing import Mapping, Iterable, Union
+
 import git
 import torch
 import numpy as np
 import librosa
+from dependency_injector.wiring import Provide, inject
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from ICustomDataset import ICustomDataset
-from glider.audiodata import LabeledAudioData 
-import warnings
-from logger import ILogger, Logger
-from audiodata import AudioData
+from interfaces.ILabelAccessor import ILabelAccessor
+from interfaces.IFeatureAccessor import IFeatureAccessor
+from interfaces.ITensorAudioDataset import ITensorAudioDataset
+from interfaces.ICustomDataset import ICustomDataset
+from glider.audiodata import LabeledAudioData
+from logger import ILogger
+
+from globalconfig import GlobalConfiguration
+from globalcontainer import GlobalContainer
 
 def _to_tensor(nparray: np.ndarray) -> torch.Tensor:
     return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
 
-class ILabelAccessor(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        raise NotImplementedError
-
-class IFeatureAccessor(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:
-        raise NotImplementedError
-
-    def _to_single_channel_batch(self, tensor: torch.Tensor) -> torch.Tensor:
-        return tensor.view(1, *tensor.shape)
-
-class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
-    @classmethod
-    def __subclasshook__(cls, subclass):
-        return (
-            hasattr(subclass, "__getitem__") and callable(subclass.__getitem__) and 
-            hasattr(subclass, "__len__") and callable(subclass.__len__) and
-            hasattr(subclass, "classes") and callable(subclass.classes) and 
-            hasattr(subclass, "example_shape") and callable(subclass.example_shape) or
-            NotImplemented
-        )
-
-    @abc.abstractmethod
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Get the X, Y (input, truth) pytorch Tensors"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def __len__(self) -> int:
-        """Get the length of the audio dataset"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def classes(self) -> Mapping[str, int]:
-        """Get a dict of with classname: index pairs"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def example_shape(self) -> tuple[int, ...]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def label_shape(self) -> tuple[int, ...]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def __repr__(self) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def audiodata(self, index: int) -> AudioData:
-        raise NotImplementedError
-
-#####
-##### Implementations:
-#####
-
 class LabelRollAccessor(ILabelAccessor):
     def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        # return _to_tensor(audio_data.label_roll())
         return super().__call__(audio_data, features)
 
 class BinaryLabelAccessor(ILabelAccessor):
@@ -87,19 +33,30 @@ class BinaryLabelAccessor(ILabelAccessor):
         return _to_tensor(audio_data.binary())
 
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
-    def __init__(self, n_mels: int = 128, n_fft: int = 2048, hop_length: int = 512, scale_melbands=False, logger: ILogger = Logger(), verbose: bool = False) -> None:
+    @inject
+    def __init__(
+        self, 
+        n_mels: int = 128, 
+        n_fft: int = 2048, 
+        hop_length: int = 512, 
+        scale_melbands=False, 
+        verbose: bool = False,
+        logger: ILogger = Provide[GlobalContainer.logger], 
+        config: GlobalConfiguration = Provide[GlobalContainer.config]) -> None:
+
         self._n_mels = n_mels
         self._n_fft = n_fft
         self._hop_length = hop_length
         self._scale_melbands = scale_melbands
         self.logger = logger
+        self.config = config
         self.verbose = verbose
 
     def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    
         """Compute the Log-Mel Spectrogram of the input LabeledAudioData samples. Output will have shape (1, self._n_mels, 1 + int(len(samples) / self._hop_length))
         """
         samples, sr = audio_data.samples, audio_data.sampling_rate
-        if config.VIRTUAL_DATASET_LOADING:
+        if self.config.VIRTUAL_DATASET_LOADING:
             output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
             return torch.zeros((1, *output_shape), dtype=torch.float32, requires_grad=False)
 
@@ -117,7 +74,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
 
         return self._to_single_channel_batch(_to_tensor(S_db))
 
-class FileLengthTensorAudioDataset(ITensorAudioDataset):
+class TensorAudioDataset(ITensorAudioDataset):
     def __init__(self, dataset: ICustomDataset, label_accessor: ILabelAccessor, feature_accessor: IFeatureAccessor) -> None:
         if not isinstance(dataset, ICustomDataset):
             raise TypeError(f"Argument dataset has invalid type. Expected {ICustomDataset} but received {type(dataset)}")
@@ -173,7 +130,7 @@ if __name__ == "__main__":
     from rich import print
     glider = GLIDER(clip_duration_seconds = 10.0)
 
-    dataset = FileLengthTensorAudioDataset(dataset=glider, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
+    dataset = TensorAudioDataset(dataset=glider, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
     _indeces = [40414, 146869, 78997, 162159, 174450, 75375, 80172, 11896, 45205, 212519, 75177, 228142, 88527, 128200, 153709, 117738, 50659, 10586, 122117, 180314, 81489, 58191, 94471, 82012, 199068, 244187, 232152, 233318, 23947, 182991, 635, 215504, 64169, 226989, 12302, 136440, 244239, 28445, 46475, 120555, 80150, 163527, 246924, 135159, 188942, 228160, 106653, 36583, 53382, 34099, 36762, 146038, 83628, 140742, 231528, 67522, 93338, 248063, 87903, 113978, 55655, 88584, 126586, 131694]
     indeces = [idx for idx in _indeces if idx < len(dataset)]
     print(len(dataset))

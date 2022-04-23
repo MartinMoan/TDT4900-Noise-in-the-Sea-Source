@@ -13,22 +13,27 @@ import git
 
 REPO_DIR = pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)
 sys.path.insert(0, str(REPO_DIR))
-import config
+from globalcontainer import GlobalContainer
+from globalconfig import GlobalConfiguration
 from logger import ILogger, Logger
 
+from dependency_injector.wiring import Provide, inject
+
 class SheetClient:
-    def __init__(self, logger: ILogger = Logger()) -> None:
+    @inject
+    def __init__(self, logger: ILogger = Provide[GlobalContainer.logger], config: GlobalConfiguration = Provide[GlobalContainer.config]) -> None:
         self.logger = logger
+        self.config = config
         self._client = self._authenticate()
-        self.logger.log(f"Opening spreadsheet by key: {config.SPREADSHEET_ID}")
-        self._spreadsheet = self._client.open_by_key(config.SPREADSHEET_ID)
-        self.logger.log(f"Opening sheet by SHEET ID {config.SHEET_ID}")
-        self._sheet = self._spreadsheet.get_worksheet_by_id(config.SHEET_ID)
+        self.logger.log(f"Opening spreadsheet by key: {self.config.SPREADSHEET_ID}")
+        self._spreadsheet = self._client.open_by_key(self.config.SPREADSHEET_ID)
+        self.logger.log(f"Opening sheet by SHEET ID {self.config.SHEET_ID}")
+        self._sheet = self._spreadsheet.get_worksheet_by_id(self.config.SHEET_ID)
 
     def _authenticate(self) -> gspread.Client:
         credentials_path = REPO_DIR.joinpath("credentials.json")
         self.logger.log(f"Reading Google Sheets credentials from: {credentials_path}")
-        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, self.config.SCOPES)
         client = gspread.authorize(creds)
         return client
 
@@ -96,7 +101,7 @@ class SheetClient:
         json_request = {
                     "moveDimension": {
                         "source": {
-                            "sheetId": config.SHEET_ID,
+                            "sheetId": self.config.SHEET_ID,
                             "dimension": "COLUMNS",
                             "startIndex": from_col_idx,
                             "endIndex": from_col_idx+1
@@ -134,7 +139,7 @@ class SheetClient:
                 if "properties" in sheet:
                     properties = sheet["properties"]
                     if "sheetId" in properties:
-                        if properties["sheetId"] == config.SHEET_ID:
+                        if properties["sheetId"] == self.config.SHEET_ID:
                             return sheet
         return {}
 
@@ -146,16 +151,16 @@ class SheetClient:
         cols = self.get_column_names()
         banded_range = {
             'range': {
-                'sheetId': config.SHEET_ID,
+                'sheetId': self.config.SHEET_ID,
                 'startRowIndex': 0,
                 'endRowIndex': len(rows),
                 'startColumnIndex': 0,
                 'endColumnIndex': len(cols),
             },
             'rowProperties': {
-                'headerColor': config.HEADER_BACKGROUND_COLOR,
-                'firstBandColor': config.ODD_ROW_BACKGROUND_COLOR,
-                'secondBandColor': config.EVEN_ROW_BACKGROUND_COLOR
+                'headerColor': self.config.HEADER_BACKGROUND_COLOR,
+                'firstBandColor': self.config.ODD_ROW_BACKGROUND_COLOR,
+                'secondBandColor': self.config.EVEN_ROW_BACKGROUND_COLOR
             },
         }
         if banded_range_id is not None:
@@ -186,7 +191,7 @@ class SheetClient:
         resize_request = {
             "autoResizeDimensions": {
                 "dimensions": {
-                    "sheetId": config.SHEET_ID,
+                    "sheetId": self.config.SHEET_ID,
                     "dimension": "COLUMNS",
                     "startIndex": 0,
                     "endIndex": len(cols)
@@ -204,7 +209,8 @@ class SheetClient:
         self.set_alternating_colors()
         self.autosize_columns()
 
-def main():
+@inject
+def main(config: GlobalConfiguration = Provide[GlobalContainer.config]):
     from datetime import datetime
     client = SheetClient()
     data = {
@@ -219,4 +225,8 @@ def main():
     client.format(order_by=[("created_at", "des")], col_order=col_order)
 
 if __name__ == "__main__":
+    container = GlobalContainer()
+    container.init_resources()
+    container.wire(modules=[__name__])
+
     main()

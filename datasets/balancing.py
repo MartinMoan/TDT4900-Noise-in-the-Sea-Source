@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
-import abc
-from ast import arg
-import enum
-import os
-import hashlib
 import sys
 import pathlib
 from tabnanny import verbose
 from typing import Iterable, Mapping
-import pickle
 
 import sklearn
-from ICustomDataset import ICustomDataset
 from glider.audiodata import LabeledAudioData
-from glider.clipping import ClippedDataset, ClippingCacheDecorator
-from ITensorAudioDataset import ITensorAudioDataset, FileLengthTensorAudioDataset, ILabelAccessor, IFeatureAccessor, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from cacher import Cacher
 import multiprocessing
 from multiprocessing import Pool
@@ -24,31 +15,34 @@ from rich import print
 import sklearn
 import sklearn.model_selection
 import git
+from dependency_injector.wiring import Provide, inject
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
 from logger import Logger, ILogger
+from interfaces.ICustomDataset import ICustomDataset
+from interfaces.IDatasetBalancer import IDatasetBalancer
 
-class IDatasetBalancer(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def eval_only_indeces() -> Iterable[int]:
-        """Set the dataset to eval mode, the dataset ouput will not be balanced."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def train_indeces() -> Iterable[int]:
-        raise NotImplementedError
-
-BALANCER_CACHE_DIR = config.CACHE_DIR.joinpath("balancing")
-if not BALANCER_CACHE_DIR.exists():
-    BALANCER_CACHE_DIR.mkdir(parents=True, exist_ok=False)
+from globalcontainer import GlobalContainer, ApplicationContainer
+from globalconfig import GlobalConfiguration
 
 class BalancerCacheDecorator(IDatasetBalancer):
-    def __new__(cls, dataset: ICustomDataset, force_recache=False, **kwargs) -> IDatasetBalancer:
+    @inject
+    def __new__(
+        cls, 
+        dataset: ICustomDataset, 
+        force_recache=False, 
+        config: GlobalConfiguration = Provide[GlobalContainer.config], 
+        logger: ILogger = Provide[GlobalContainer.logger],
+        **kwargs) -> IDatasetBalancer:
+
+        BALANCER_CACHE_DIR = config.CACHE_DIR.joinpath("balancing")
+        if not BALANCER_CACHE_DIR.exists():
+            BALANCER_CACHE_DIR.mkdir(parents=True, exist_ok=False)
+            
         hashable_arguments = repr(dataset).encode()
         args = (dataset,)
-        cacher = Cacher()
-        return cacher.cache(BALANCER_CACHE_DIR, DatasetBalancer, *args, hashable_arguments=hashable_arguments, force_recache=force_recache, **kwargs)
+        cacher = Cacher(logger=logger, config=config)
+        return cacher.cache(BALANCER_CACHE_DIR, DatasetBalancer, *args, hashable_arguments=hashable_arguments, logger=logger, config=config, force_recache=force_recache, **kwargs)
 
 class DatasetBalancer(IDatasetBalancer):
     """A ITensorAudioDataset implentation that ensures that the number of unlabeled instances to use for training is equal to the average size of each of the types of labeled instances. 
@@ -67,10 +61,6 @@ class DatasetBalancer(IDatasetBalancer):
     In either case how to interpret the 'neither' class is important to ensure that the performance of models trained using the data is not affected by label/class imbalance. Because the 'neither' class is dominant within the GLIDER dataset.
 
     However, the instance balancing should only be used during training, and not during evaluation. 
-    
-
-    Args:
-        FileLengthTensorAudioDataset (_type_): _description_
     """
     def __init__(self, dataset: ICustomDataset, verbose=True, logger: ILogger = Logger()) -> None:
         super().__init__()
@@ -190,14 +180,15 @@ class DatasetBalancer(IDatasetBalancer):
         return indeces.astype(int)
 
 class BalancedKFolder(sklearn.model_selection.KFold):
-    def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
+    def __init__(self, n_splits=5, *, shuffle=False, random_state=None, balancer: IDatasetBalancer = Provide[ApplicationContainer.balancer]):
         super().__init__(n_splits, shuffle=shuffle, random_state=random_state)
+        self.balancer = balancer
 
-    def split(self, filelength_dataset: FileLengthTensorAudioDataset):
+    def split(self, filelength_dataset: TensorAudioDataset):
         if filelength_dataset is None:
             raise ValueError("Input dataset is None")
         
-        if not isinstance(filelength_dataset, FileLengthTensorAudioDataset):
+        if not isinstance(filelength_dataset, TensorAudioDataset):
             raise TypeError
         
         if filelength_dataset._dataset is None:
@@ -205,11 +196,9 @@ class BalancedKFolder(sklearn.model_selection.KFold):
 
         if not isinstance(filelength_dataset._dataset, ICustomDataset):
             raise TypeError
-        
-        balancer = BalancerCacheDecorator(filelength_dataset._dataset)
 
-        all_training_indeces = balancer.train_indeces()
-        eval_only_indeces = balancer.eval_only_indeces()
+        all_training_indeces = self.balancer.train_indeces()
+        eval_only_indeces = self.balancer.eval_only_indeces()
         
         error_indeces = [idx for idx in eval_only_indeces if idx in all_training_indeces]
         if len(error_indeces) != 0:
@@ -238,20 +227,33 @@ class BalancedDatasetDecorator(ICustomDataset):
     def example_shapes(self) -> Iterable[tuple[int, ...]]:
         return self._dataset.example_shapes()
 
-if __name__ == "__main__":
+@inject
+def main(config: GlobalConfiguration = Provide[GlobalContainer.config], logger: ILogger = Provide[GlobalContainer.logger]):
     clip_duration_seconds = 10.0
     clip_overlap_seconds = 2.0
-    dataset = ClippingCacheDecorator(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds)
+    dataset = ClippingCacheDecorator(clip_duration_seconds=clip_duration_seconds, clip_overlap_seconds=clip_overlap_seconds, config=config, logger=logger)
     
-    d = FileLengthTensorAudioDataset(
+    d = TensorAudioDataset(
         dataset, 
         BinaryLabelAccessor(),
         MelSpectrogramFeatureAccessor()
     )
 
     folder = BalancedKFolder(n_splits=5, shuffle=False)
-    import torch
     for fold, (train_indeces, test_indeces) in enumerate(folder.split(d)):
         for idx in test_indeces:
             index, X, Y = d[idx]
             print(Y)
+
+if __name__ == "__main__":
+    from ITensorAudioDataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+    from glider.clipping import ClippingCacheDecorator
+    container = GlobalContainer()
+    container.init_resources()
+    container.wire(modules=[__name__])
+
+    application_container = ApplicationContainer()
+    application_container.balancer = DatasetBalancer
+
+    main()    
+    

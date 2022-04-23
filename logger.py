@@ -23,7 +23,7 @@ def prettify(arg, indent=4):
             s += smallind + "}"
             return s
         else:
-            return str(a)
+            return repr(a)
 
     return nested(arg, indent)
 

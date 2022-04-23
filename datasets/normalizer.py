@@ -13,7 +13,7 @@ import multiprocessing
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from ITensorAudioDataset import ITensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset, FileLengthTensorAudioDataset
+from ITensorAudioDataset import ITensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset, TensorAudioDataset
 from glider.audiodata import LabeledAudioData 
 from logger import ILogger, Logger
 from binjob import Binworker, progress
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     )
 
     limited_dataset = DatasetLimiter(clip_dataset, limit=100, randomize=False, balanced=True) # If randomize=True, the transform will never be cahced (because the fitted dataset changes between sessions, due to randomization)
-    limited_tensordatataset = FileLengthTensorAudioDataset(
+    limited_tensordatataset = TensorAudioDataset(
         dataset = limited_dataset,
         label_accessor=BinaryLabelAccessor(),
         feature_accessor=MelSpectrogramFeatureAccessor(n_mels=n_mels)

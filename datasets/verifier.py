@@ -21,7 +21,7 @@ from ITensorAudioDataset import ITensorAudioDataset
 from clipping import ClippedDataset, ClippingCacheDecorator
 from ICustomDataset import ICustomDataset
 from audiodata import LabeledAudioData
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from ITensorAudioDataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from limiting import DatasetLimiter
 from IDatasetBalancer import DatasetBalancer, BalancerCacheDecorator, BalancedDatasetDecorator
 from logger import Logger, ILogger
@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
     limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=False, balanced=True)
 
-    tensordataset = FileLengthTensorAudioDataset(
+    tensordataset = TensorAudioDataset(
         dataset=limited_dataset,
         label_accessor=BinaryLabelAccessor(),
         feature_accessor=MelSpectrogramFeatureAccessor()

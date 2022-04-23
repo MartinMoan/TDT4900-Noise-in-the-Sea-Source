@@ -9,21 +9,26 @@ from typing import Type, Mapping
 
 import git
 
+from dependency_injector.wiring import Provide, inject
+
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
 from logger import Logger, ILogger
 
+from globalcontainer import GlobalContainer
+from globalconfig import GlobalConfiguration
+
 class Cacher:
-    def __init__(self, logger: ILogger = Logger()) -> None:
+    def __init__(self, logger: ILogger = Provide[GlobalContainer.logger], config: GlobalConfiguration = Provide[GlobalContainer.config]) -> None:
         self.logger = logger
+        self.config = config
         
-    def _get_hashable_arguments(*args, **kwargs):
+    def _get_hashable_arguments(self, *args, **kwargs):
         input_arguments = tuple([arg for arg in args] + [kwargs[key] for key in kwargs.keys()])
         uname = os.uname()
         
         hashable_arguments = tuple((
-            str(config.ENV),
-            "VIRTUAL_DATASET_LOADING_ENABLED" if config.VIRTUAL_DATASET_LOADING else "VIRTUAL_DATASET_LOADING_DISABLED",
+            str(self.config.ENV),
+            "VIRTUAL_DATASET_LOADING_ENABLED" if self.config.VIRTUAL_DATASET_LOADING else "VIRTUAL_DATASET_LOADING_DISABLED",
             str(uname.nodename),
             *input_arguments
         ))
@@ -32,7 +37,7 @@ class Cacher:
     def hash(self, cache_dir: pathlib.PosixPath, *args, hashable_arguments: tuple[any] = None, **kwargs):
         hasher = hashlib.sha256()
         if hashable_arguments is None:
-            hasher.update(repr(Cacher._get_hashable_arguments(*args, **kwargs)).encode())
+            hasher.update(repr(self._get_hashable_arguments(*args, **kwargs)).encode())
         else:
             hasher.update(hashable_arguments)
         pickle_hash = hasher.hexdigest()
@@ -52,7 +57,7 @@ class Cacher:
         pickle_path = self.hash(cache_dir, *args, hashable_arguments=hashable_arguments, **kwargs)
         cache_list = [path for path in cache_dir.glob("**/*.pickle")]
         
-        if not config.CACHING_ENABLED:
+        if not self.config.CACHING_ENABLED:
             self.logger.log(f"Caching is disabled")
             return self._instantiate(obj_ref, pickle_path, *args, **kwargs)
         if force_recache:

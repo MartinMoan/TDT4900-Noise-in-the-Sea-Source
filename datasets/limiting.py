@@ -11,7 +11,7 @@ import config
 from audiodata import LabeledAudioData
 from clipping import ClippedDataset
 from ICustomDataset import ICustomDataset
-from ITensorAudioDataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
+from ITensorAudioDataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor, ITensorAudioDataset
 from IMetricComputer import BinaryMetricComputer
 from IDatasetBalancer import BalancedKFolder, DatasetBalancer, BalancerCacheDecorator
 from ASTWrapper import ASTWrapper

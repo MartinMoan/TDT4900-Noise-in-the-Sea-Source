@@ -13,9 +13,12 @@ import numpy as np
 import git
 from rich import print
 
-sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
+# sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+# import config
+from config import Config
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, __version__
+
+config = Config()
 
 def get_container_client():
     return ContainerClient.from_container_url(config.DATASET_URL)
@@ -100,8 +103,9 @@ def download_missing_files():
     downloader = MultiThreadAzureBlobDownloader()
     print(f"There are {len(local_filenames)} local audiofiles.")
     print(f"With {len(missing_blobs)} files present in blobstorage not present amongst local files")
-    downloaded_files = downloader.download(missing_blobs)
-    return downloaded_files
+    # downloaded_files = downloader.download(missing_blobs)
+    # return downloaded_files
+    return []
 
 # def cleanup_tempfiles():
 #     tmp_files = list(config.TMP_DATA_DIR.glob("**/*.wav"))
@@ -118,7 +122,7 @@ def download_missing_files():
 #             continue
 
 #         month_name = timestamp.strftime("%B")
-#         destination = config._GLIDER_DATASET_DIRECTORY.joinpath(month_name, file.name)
+#         destination = config.GLIDER_DATASET_DIRECTORY.joinpath(month_name, file.name)
 #         if not destination.parent.exists():
 #             destination.parent.mkdir(parents=False, exist_ok=True)
 #         shutil.move(file, destination)

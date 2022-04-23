@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
+import sys
+import pathlib
 import abc
 from typing import Iterable, Mapping
-import sys
-import torch
-from glider.audiodata import LabeledAudioData
 
+import git
+import torch
+
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+
+from datasets.glider.audiodata import LabeledAudioData
 
 class ICustomDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     @classmethod

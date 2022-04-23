@@ -1,51 +1,52 @@
 #!/usr/bin/env python3
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pathlib
 import sys
 import math
-from types import MethodType
 import warnings
 import multiprocessing
-from multiprocessing.pool import ThreadPool, Pool
+from multiprocessing.pool import Pool
 from typing import Iterable, Mapping
-import pickle
-import hashlib
 
-
-from rich import print
 import pandas as pd
 import git
+from dependency_injector.wiring import Provide, inject
+
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from ICustomDataset import ICustomDataset
+
+from globalcontainer import GlobalContainer
+from globalcontainer import GlobalConfiguration
+
+from interfaces.ICustomDataset import ICustomDataset
+
 from cacher import Cacher
-from audiodata import LabeledAudioData
-from ITensorAudioDataset import MelSpectrogramFeatureAccessor
-from logger import ILogger, Logger
-
-CLIPPING_CACHE_DIR = config.CACHE_DIR.joinpath("clipping")
-
-if not CLIPPING_CACHE_DIR.exists():
-    CLIPPING_CACHE_DIR.mkdir(parents=True, exist_ok=False)
+from .audiodata import LabeledAudioData
+from logger import ILogger
 
 class ClippingCacheDecorator(ICustomDataset):
-    def __new__(cls, *args, force_recache=False, **kwargs) -> ICustomDataset:
+    @inject
+    def __new__(cls, *args, force_recache=False, config: GlobalConfiguration = Provide[GlobalContainer.config], **kwargs) -> ICustomDataset:
+        CLIPPING_CACHE_DIR = config.CACHE_DIR.joinpath("clipping")
+        if not CLIPPING_CACHE_DIR.exists():
+            CLIPPING_CACHE_DIR.mkdir(parents=True, exist_ok=False)
         cacher = Cacher()
-        return cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, **kwargs)
+        return cacher.cache(CLIPPING_CACHE_DIR, ClippedDataset, *args, force_recache=force_recache, config=config, **kwargs)
 
 class ClippedDataset(ICustomDataset):
+    @inject
     def __init__(self, 
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
         overlap_nsamples: int = None,
-        logger: ILogger = Logger()) -> None:
-
+        logger: ILogger = Provide[GlobalContainer.logger],
+        config: GlobalConfiguration = Provide[GlobalContainer.config]) -> None:
+        
         self.logger = logger
+        self.config = config
 
-        self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
-        self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
+        self._audiofiles = pd.read_csv(self.config.AUDIO_FILE_CSV_PATH)
+        self._labels = pd.read_csv(self.config.PARSED_LABELS_PATH)
 
         self._preprocess_tabular_data()
 
@@ -141,14 +142,14 @@ class ClippedDataset(ICustomDataset):
         
         # Remove any files from self._audilfiles that cannot be found in local dataset directory
         # and ensure that all filename values in the self._audiofiles dataframe are PosixPath objects. 
-        local_audiofiles = config.list_local_audiofiles()
+        local_audiofiles = self.config.list_local_audiofiles()
         if len(local_audiofiles) != len(self._audiofiles):
             if len(local_audiofiles) > len(self._audiofiles):
-                warnings.warn(f"There are local files that do not exist among the described in the csv at {config.PARSED_LABELS_PATH}")
+                warnings.warn(f"There are local files that do not exist among the described in the csv at {self.config.PARSED_LABELS_PATH}")
             elif len(local_audiofiles) < len(self._audiofiles):
-                warnings.warn(f"There are files described in the csv at {config.PARSED_LABELS_PATH} that do not exist in any subdirectory of {config.DATASET_DIRECTORY}")
+                warnings.warn(f"There are files described in the csv at {self.config.PARSED_LABELS_PATH} that do not exist in any subdirectory of {self.config.DATASET_DIRECTORY}")
         
-        self._audiofiles.filename = [config.DATASET_DIRECTORY.joinpath(path) for path in self._audiofiles.filename.values]    
+        self._audiofiles.filename = [self.config.DATASET_DIRECTORY.joinpath(path) for path in self._audiofiles.filename.values]    
         self._audiofiles = self._audiofiles[self._audiofiles.filename.isin(local_audiofiles)]
 
         # sort according to start- and end times
