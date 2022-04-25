@@ -32,27 +32,9 @@ def prettify(arg, indent=4):
     return nested(arg, indent)
 
 class Logger(ILogger):
-    # def __new__(cls):
-    #     frame = inspect.currentframe().f_back
-    #     caller = inspect.getframeinfo(frame)
-    #     path = pathlib.Path(caller.filename)
-    #     proc = multiprocessing.current_process()
-    #     loggers = [obj for obj in gc.get_objects() if isinstance(obj, ILogger)]
-    #     ids = [id(logger) for logger in loggers]
-    #     print(f"PID {proc.pid} ({path.name}:{caller.lineno}) Found {len(loggers)} existing loggers with ids: {ids}")
-
-    #     if len(loggers) == 0:
-    #         # print("No existing loggers was found, instantiating new logger")
-    #         return super().__new__(cls)
-    #     return loggers[0]
-
-    def __init__(self) -> None:
-        pass
-
     def log(self, *args, **kwargs):
         tag = ""
         stack = inspect.stack()
-        # print(stack)
         
         caller_locals = stack[1][0].f_locals
         if "self" in caller_locals:
@@ -80,15 +62,11 @@ class Logger(ILogger):
         spacer = "".join([" " for i in range(header_spacing)])
         header = f"{header}{spacer}:"
 
-        # args_s = "\n".join([pprint.pformat(arg, indent=4) for arg in args])
-        # kwargs_s = pprint.pformat(kwargs, indent=4)
-        # s = args_s + kwargs_s
         args_s = "\n".join([prettify(arg, indent=4) for arg in args])
         
         kwargs_s = prettify(kwargs, indent=4)
         content = (args_s + "\n" + kwargs_s).strip()
         
-        # content = (pprint.pformat(args) + pprint.pformat(kwargs)).strip()
         lines = re.split(r"\n+", content)
 
         for i, line in enumerate(lines):

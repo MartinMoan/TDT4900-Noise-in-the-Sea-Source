@@ -58,7 +58,7 @@ def _resample(samples, sr):
 
 def play(samples, sr):
     from scipy.io.wavfile import write
-    tempfilename = "tempfile.wav"
+    tempfilename = pathlib.Path.home().joinpath("tempfile.wav")
     write(tempfilename, sr, samples)
     import os
     os.system(f"afplay {tempfilename} -v 100")
