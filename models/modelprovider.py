@@ -53,6 +53,8 @@ class DefaultModelProvider(IModelProvider):
                     parameters[key] = self.model_kwargs[key]
                 else:
                     parameters[key] = value.default
+        print(parameters)
+        exit()
         return parameters
 
 class SomeModel(torch.nn.Module):

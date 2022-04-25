@@ -31,4 +31,4 @@ class MockModelProvider(IModelProvider):
 
     @property
     def properties(self) -> Mapping[str, any]:
-        return {f"provider": "{self.__class__.__name__}"}
+        return {f"provider": self.__class__.__name__}

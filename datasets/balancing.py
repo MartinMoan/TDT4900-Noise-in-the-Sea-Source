@@ -7,7 +7,7 @@ import hashlib
 import sys
 import pathlib
 from tabnanny import verbose
-from typing import Iterable, Mapping, Type
+from typing import Iterable, Mapping, Type, Tuple
 import pickle
 
 import sklearn
@@ -22,7 +22,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker, IFolder
+from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker, IFolder, ILoggerFactory
 from tracking.logger import Logger
 from glider.audiodata import LabeledAudioData
 from glider.clipping import CachedClippedDataset
@@ -31,20 +31,16 @@ from cacher import Cacher
 from datasets.binjob import progress
 
 class CachedDatasetBalancer(IDatasetBalancer):
-    def __new__(cls, dataset: ICustomDataset, logger: ILogger, worker: IAsyncWorker, force_recache=False, **kwargs) -> IDatasetBalancer:
-        cacher = Cacher(logger=logger)
-        init_args = (dataset, logger, worker)
+    def __new__(cls, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, force_recache=False, **kwargs) -> IDatasetBalancer:
+        cacher = Cacher(logger_factory=logger_factory)
+        init_args = (dataset, logger_factory, worker)
         hashable_arguments = {"dataset": dataset}
-        balancer = cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
-        # balancer.logger = logger
-        # balancer.worker = worker
-        # balancer._dataset = dataset
-        return balancer
+        return cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
 
 class DatasetBalancer(IDatasetBalancer):
-    def __init__(self, dataset: ICustomDataset, logger: ILogger, worker: IAsyncWorker, verbose=True) -> None:
+    def __init__(self, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, verbose=True) -> None:
         super().__init__()
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
         self.worker = worker
 
         self._dataset = dataset
@@ -171,12 +167,23 @@ class DatasetBalancer(IDatasetBalancer):
         return indeces.astype(int)
 
 class BalancedKFolder(IFolder):
-    def __init__(self, n_splits=5, *, shuffle=False, random_state=None, balancer_ref: Type[IDatasetBalancer] = DatasetBalancer):
+    def __init__(
+        self, 
+        n_splits=5, 
+        *, 
+        shuffle=False, 
+        random_state=None, 
+        balancer_ref: Type[IDatasetBalancer] = DatasetBalancer,
+        balancer_args: Tuple[any, ...] = (),
+        balancer_kwargs: Mapping[str, any] = {}):
+
         super().__init__()
         self.n_splits = n_splits
         self.shuffle = shuffle
         self.random_state = random_state
         self._balancer_ref = balancer_ref
+        self._balancer_args = balancer_args
+        self._balancer_kwargs = balancer_kwargs
 
     def split(self, filelength_dataset: TensorAudioDataset):
         if filelength_dataset is None:
@@ -191,7 +198,7 @@ class BalancedKFolder(IFolder):
         if not isinstance(filelength_dataset._dataset, ICustomDataset):
             raise TypeError
         
-        balancer = self._balancer_ref(filelength_dataset._dataset)
+        balancer = self._balancer_ref(filelength_dataset._dataset, *self._balancer_args, **self._balancer_kwargs)
 
         all_training_indeces = balancer.train_indeces()
         eval_only_indeces = balancer.eval_only_indeces()

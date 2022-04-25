@@ -18,29 +18,35 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, ILogger, IAsyncWorker
+from interfaces import ICustomDataset, IAsyncWorker, ILoggerFactory
 from cacher import Cacher
 from audiodata import LabeledAudioData
 from datasets.binjob import progress
 
 class CachedClippedDataset(ICustomDataset):
-    def __new__(cls, *args, force_recache=False, worker: IAsyncWorker=None, logger: ILogger = None, **kwargs) -> ICustomDataset:
-        cacher = Cacher(logger=logger)
-        init_kwargs = {"worker": worker, "logger": logger, **kwargs}
-        return cacher.cache(ClippedDataset, init_args=args, init_kwargs=init_kwargs, hashable_arguments=kwargs)
+    def __new__(
+        cls, 
+        worker: IAsyncWorker, 
+        logger_factory: ILoggerFactory, 
+        force_recache=False, 
+        **kwargs) -> ICustomDataset:
+
+        cacher = Cacher(logger_factory=logger_factory)
+        init_kwargs = {"logger_factory": logger_factory, "worker": worker, **kwargs}
+        return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=kwargs, force_recache=force_recache)
 
 class ClippedDataset(ICustomDataset):
     def __init__(self, 
+        logger_factory: ILoggerFactory,
+        worker: IAsyncWorker,
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
-        overlap_nsamples: int = None,
-        worker: IAsyncWorker = None,
-        logger: ILogger = None,
+        overlap_nsamples: int = None
         ) -> None:
 
         self.worker = worker
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
 
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)

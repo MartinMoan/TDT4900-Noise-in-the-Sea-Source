@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from asyncio.log import logger
 import multiprocessing
 import sys
 import pathlib
@@ -64,11 +63,11 @@ class CrossEvaluator(ICrossEvaluator):
             metrics = self._metric_computer(truth, predictions)
             
             properties = {
-                "trainer": self._trainer.properties,
-                "folder": self._folder.properties,
-                "evaluator": self._evaluator.properties,
-                "model_provider": self._model_provider.properties, 
-                "dataset_provider": self._dataset_provider.properties
+                **self._trainer.properties,
+                **self._folder.properties,
+                **self._evaluator.properties,
+                **self._model_provider.properties, 
+                **self._dataset_provider.properties
             }
             
             model_parameters_path = self._saver.save(model, mode="fold_eval")
@@ -93,7 +92,7 @@ if __name__ == "__main__":
     from tracking.saver import Saver
     from datasets.folder import BasicKFolder
     from models.evaluator import Evaluator
-    from models.optimizer import AdamaxProvider
+    from models.optimizer import AdamaxProvider, GeneralOptimizerProvider
     from metrics import BinaryMetricComputer
     from datasets.balancing import BalancedKFolder, DatasetBalancer
     from tracking.loggerfactory import LoggerFactory
@@ -143,9 +142,10 @@ if __name__ == "__main__":
     
     folder = BasicKFolder(n_splits=kfolds, shuffle=True)
 
-    optimizer_provider = AdamaxProvider(
-        lr=lr,
-        weight_decay=weight_decay
+    optimizer_provider = GeneralOptimizerProvider(
+        optimizer_type=torch.optim.Adamax,
+        optimizer_args=(),
+        optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
     )
 
     trainer = Trainer(

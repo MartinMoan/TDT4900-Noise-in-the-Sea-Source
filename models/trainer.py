@@ -96,7 +96,6 @@ class Trainer(ITrainer):
     @property
     def properties(self) -> Mapping[str, any]:
         out = {
-            "logger": self.logger,
             "batch_size": self.batch_size,
             "num_workers": self.num_workers,
             "epochs": self.epochs,
