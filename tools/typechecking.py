@@ -9,7 +9,10 @@ from rich import print
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
 def verify(func):
+    print("func", func)
     def nested(*args, **kwargs):
+        print(args, kwargs)
+        print(dir(args[0]))
         spec = inspect.getfullargspec(func)
         names = spec.args
         named_args = {names[i]: args[i] for i in range(len(names))}
@@ -22,6 +25,6 @@ def verify(func):
                 if not isinstance(input_value, expected_type):
                     raise TypeError(f"Argument {arg} has incorrect type. Expected {expected_type} but received {type(input_value)}")
 
-        return func(*args, **kwargs)
+        func(*args, **kwargs)
     return nested
 
