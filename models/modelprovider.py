@@ -11,25 +11,15 @@ import torch
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from logger import ILogger, Logger
-
-class IModelProvider(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def instantiate(self) -> torch.nn.Module:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def properties(self) -> Mapping[str, any]:
-        raise NotImplementedError
+from interfaces import IModelProvider, ILoggerFactory
     
 class DefaultModelProvider(IModelProvider):
-    def __init__(self, model_ref: type, model_args: Tuple[any] = (), model_kwargs: Mapping[str, any] = {}, logger: ILogger = Logger(), verbose: bool = False) -> None:
+    def __init__(self, model_ref: type, model_args: Tuple[any] = (), model_kwargs: Mapping[str, any] = {}, logger_factory: ILoggerFactory = None, verbose: bool = False) -> None:
         super().__init__()
         self.model_ref = model_ref
         self.model_args = model_args
         self.model_kwargs = model_kwargs
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
         self.verbose = verbose
 
         sig = inspect.signature(self.model_ref)
@@ -73,7 +63,12 @@ class SomeModel(torch.nn.Module):
         return X
 
 if __name__ == "__main__":
-    provider = DefaultModelProvider(SomeModel, (1, 2, 3))
+    from tracking.loggerfactory import LoggerFactory
+    from tracking.logger import Logger
+
+    factory = LoggerFactory(logger_type=Logger)
+    logger = factory.create_logger()
+    provider = DefaultModelProvider(SomeModel, model_args=(1, 2, 3), logger_factory=factory)
     model = provider.instantiate()
-    print(provider.properties)
+    logger.log(provider.properties)
     

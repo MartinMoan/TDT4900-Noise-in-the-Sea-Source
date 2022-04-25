@@ -14,21 +14,31 @@ import git
 REPO_DIR = pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)
 sys.path.insert(0, str(REPO_DIR))
 import config
-from logger import ILogger, Logger
+from interfaces import ILoggerFactory
 
 class SheetClient:
-    def __init__(self, logger: ILogger = Logger()) -> None:
-        self.logger = logger
+    def __init__(
+        self, 
+        logger_factory: ILoggerFactory, 
+        spreadsheet_key: str, 
+        sheet_id: int,
+        scopes: Iterable[str] = ['https://www.googleapis.com/auth/drive']
+        ) -> None:
+        self.logger = logger_factory.create_logger()
+        self.spreadsheet_key = spreadsheet_key
+        self.sheet_id = sheet_id
+        self.scopes = scopes
+
         self._client = self._authenticate()
-        self.logger.log(f"Opening spreadsheet by key: {config.SPREADSHEET_ID}")
-        self._spreadsheet = self._client.open_by_key(config.SPREADSHEET_ID)
-        self.logger.log(f"Opening sheet by SHEET ID {config.SHEET_ID}")
-        self._sheet = self._spreadsheet.get_worksheet_by_id(config.SHEET_ID)
+        self.logger.log(f"Opening spreadsheet by key: {spreadsheet_key}")
+        self._spreadsheet = self._client.open_by_key(spreadsheet_key)
+        self.logger.log(f"Opening sheet by SHEET ID {sheet_id}")
+        self._sheet = self._spreadsheet.get_worksheet_by_id(sheet_id)
 
     def _authenticate(self) -> gspread.Client:
         credentials_path = REPO_DIR.joinpath("credentials.json")
         self.logger.log(f"Reading Google Sheets credentials from: {credentials_path}")
-        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, config.SCOPES)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, self.scopes)
         client = gspread.authorize(creds)
         return client
 
@@ -96,7 +106,7 @@ class SheetClient:
         json_request = {
                     "moveDimension": {
                         "source": {
-                            "sheetId": config.SHEET_ID,
+                            "sheetId": self.sheet_id,
                             "dimension": "COLUMNS",
                             "startIndex": from_col_idx,
                             "endIndex": from_col_idx+1
@@ -134,7 +144,7 @@ class SheetClient:
                 if "properties" in sheet:
                     properties = sheet["properties"]
                     if "sheetId" in properties:
-                        if properties["sheetId"] == config.SHEET_ID:
+                        if properties["sheetId"] == self.sheet_id:
                             return sheet
         return {}
 
@@ -146,7 +156,7 @@ class SheetClient:
         cols = self.get_column_names()
         banded_range = {
             'range': {
-                'sheetId': config.SHEET_ID,
+                'sheetId': self.sheet_id,
                 'startRowIndex': 0,
                 'endRowIndex': len(rows),
                 'startColumnIndex': 0,
@@ -186,7 +196,7 @@ class SheetClient:
         resize_request = {
             "autoResizeDimensions": {
                 "dimensions": {
-                    "sheetId": config.SHEET_ID,
+                    "sheetId": self.sheet_id,
                     "dimension": "COLUMNS",
                     "startIndex": 0,
                     "endIndex": len(cols)

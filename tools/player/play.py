@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import multiprocessing
 import pathlib
 import argparse
 
@@ -8,6 +9,10 @@ import librosa
 from scipy import signal
 import time
 import os
+from scipy.io.wavfile import write
+import os
+import subprocess
+from subprocess import Popen
 
 _AUDIOFILE_EXTENSIONS = [".wav", ".flac", ".mp3"]
 def _positive_integer(x):
@@ -57,11 +62,10 @@ def _resample(samples, sr):
     return samples, new_sr
 
 def play(samples, sr):
-    from scipy.io.wavfile import write
     tempfilename = pathlib.Path.home().joinpath("tempfile.wav")
     write(tempfilename, sr, samples)
-    import os
-    os.system(f"afplay {tempfilename} -v 100")
+    # return subprocess.run(["afplay", tempfilename, "-v", "100"], shell=True)
+    return Popen(["afplay", str(tempfilename), "-v", "100"])
 
 def main():
     args = init_args()
