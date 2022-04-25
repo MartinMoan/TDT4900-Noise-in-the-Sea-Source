@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from cProfile import label
 import sys
 import pathlib
 from typing import Mapping, Iterable
@@ -6,6 +7,7 @@ from typing import Mapping, Iterable
 import git
 import librosa
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 import numpy as np
 import noisereduce as nr
 
@@ -18,8 +20,8 @@ from tools.player import play
 import multiprocessing
 
 def p(samples, reduced, sr):
-    play.play(samples, sr)
-    play.play(reduced, sr)
+    proc = play.play(reduced, sr)
+    proc.wait()
 
 class LabelErrorCorrector(ICustomDataset):
     def __init__(self, decorated: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, ) -> None:
@@ -27,64 +29,101 @@ class LabelErrorCorrector(ICustomDataset):
         self._decorated = decorated
         self.logger = logger_factory.create_logger()
         self.worker = worker
+        self._procs = []
         self.correct_label_mismatch()
+    
+    def _play(self, samples, sr):
+        def run(*args):
+            if len(self._procs) != 0:
+                self._stop()
+            else:
+                proc = play.play(samples, sr)
+                self._procs.append(proc)
+        return run
+
+    def _stop(self):
+        for i, (proc) in enumerate(self._procs):
+            proc.terminate()
+            del self._procs[i]
+
+    def plot(self, labeled_audiodata: LabeledAudioData) -> None:
+        plt.switch_backend('TkAGG')
+        spectcomputer = MelSpectrogramFeatureAccessor()
+
+        samples, sr = labeled_audiodata.samples, labeled_audiodata.sampling_rate
+        spect = spectcomputer(labeled_audiodata)
+        rows = 6
+        
+        start, end = labeled_audiodata.start_time, labeled_audiodata.end_time
+        reduced = nr.reduce_noise(y=samples, sr=sr, prop_decrease=1.0)
+
+        axes = plt.axes([0.01, 1.0-(1.0/rows), 0.1, 0.05])
+        playbutton = Button(axes, "Play")
+        playbutton.on_clicked(self._play(samples, sr))
+        
+        axes2 = plt.axes([0.01,  0.15, 0.1, 0.05])
+        pl2 = Button(axes2, "Play filtered")
+        pl2.on_clicked(self._play(reduced, sr))
+
+        classes = labeled_audiodata.labels.source_class_specific.unique()
+        c = ", ".join(classes)
+        plt.suptitle(f"{labeled_audiodata.filepath}\n{start} {end}\n{c}")
+        plt.subplot(rows, 1, 1)
+        plt.imshow(spect.squeeze(), aspect="auto")
+        
+        plt.subplot(rows, 1, 2)
+        onset_envelope = librosa.onset.onset_strength(y=samples, sr=sr)
+        ts = librosa.times_like(onset_envelope, sr=sr)
+        plt.plot(ts, onset_envelope, label="Onset strength")
+        plt.xlim(0, max(ts))
+        plt.legend()
+
+        plt.subplot(rows, 1, 3)
+        rms = librosa.feature.rms(y=samples)[0]
+        times = librosa.times_like(rms, sr=sr)
+        plt.semilogy(times, rms, label="RMS")
+        plt.xlim(0, max(times))
+        plt.legend()
+
+        plt.subplot(rows, 1, 4)
+        zcr = librosa.feature.zero_crossing_rate(y=samples)[0]
+        times = librosa.times_like(zcr, sr=sr)
+        plt.plot(times, zcr, label="Zero-crossing-rate")
+        plt.xlim(0, max(times))
+        plt.legend()
+
+        plt.subplot(rows, 1, 5)
+        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=samples, sr=sr)
+        times = librosa.times_like(spectral_bandwidth, sr=sr)
+        plt.semilogy(times, spectral_bandwidth[0], label="Spectral bandwidth")
+        plt.xlim(0, max(times))
+        plt.legend()
+
+        plt.subplot(rows, 1, 6)
+
+        S = spectcomputer._compute(reduced, sr)
+        plt.imshow(S.squeeze(), aspect="auto")
+        # plt.tight_layout()
+
+        figM = plt.get_current_fig_manager()
+        figM.full_screen_toggle()
+        
+        plt.show()
+        self._stop()
+
+        self.logger.log(f"i: {labeled_audiodata._index}, n samples: {len(samples)}, sr: {sr}")
 
     def correct_label_mismatch(self):
-        spectcomputer = MelSpectrogramFeatureAccessor()
         noise_file = config._GLIDER_DATASET_DIRECTORY.joinpath("August", "pa0313au_001_180420_235932.wav")
-        noise_start_sec, noise_end_sec = 530, 580
-        noise, noise_sr = librosa.load(noise_file, sr=None, offset=noise_start_sec, duration=(noise_end_sec - noise_start_sec))
+        # noise_start_sec, noise_end_sec = 530, 580
+        # noise, noise_sr = librosa.load(noise_file, sr=None, offset=noise_start_sec, duration=(noise_end_sec - noise_start_sec))
         
-        for i in range(5, len(self._decorated)):
+        for i in range(100, len(self._decorated)):
             labeled_audiodata = self._decorated[i]
-            print(labeled_audiodata.clip_duration)
-            samples, sr = labeled_audiodata.samples, labeled_audiodata.sampling_rate
-            spect = spectcomputer(labeled_audiodata)
-            rows = 6
-            plt.subplot(rows, 1, 1)
-            plt.imshow(spect.squeeze(), aspect="auto")
+            print(i, labeled_audiodata.labels.source_class_specific)
+            if len(labeled_audiodata.labels.source_class_specific.unique()) != 0:
+                self.plot(labeled_audiodata)
             
-            plt.subplot(rows, 1, 2)
-            onset_envelope = librosa.onset.onset_strength(y=samples, sr=sr)
-            ts = librosa.times_like(onset_envelope, sr=sr)
-            plt.plot(ts, onset_envelope, label="Onset strength")
-            plt.xlim(0, max(ts))
-            plt.legend()
-
-            plt.subplot(rows, 1, 3)
-            rms = librosa.feature.rms(y=samples)[0]
-            times = librosa.times_like(rms, sr=sr)
-            plt.semilogy(times, rms, label="RMS")
-            plt.xlim(0, max(times))
-            plt.legend()
-
-            plt.subplot(rows, 1, 4)
-            zcr = librosa.feature.zero_crossing_rate(y=samples)[0]
-            times = librosa.times_like(zcr, sr=sr)
-            plt.plot(times, zcr, label="Zero-crossing-rate")
-            plt.xlim(0, max(times))
-            plt.legend()
-
-            plt.subplot(rows, 1, 5)
-            spectral_bandwidth = librosa.feature.spectral_bandwidth(y=samples, sr=sr)
-            times = librosa.times_like(spectral_bandwidth, sr=sr)
-            plt.semilogy(times, spectral_bandwidth[0], label="Spectral bandwidth")
-            plt.xlim(0, max(times))
-            plt.legend()
-
-            plt.subplot(rows, 1, 6)
-
-            reduced = nr.reduce_noise(y=samples, sr=sr, y_noise = noise)
-            S = spectcomputer._compute(reduced, sr)
-            plt.imshow(S.squeeze(), aspect="auto")
-
-            plt.tight_layout()
-            proc = multiprocessing.Process(target=p, args=(samples, reduced, sr))
-            proc.start()
-            plt.show()
-            proc.join()
-            exit()
-            self.logger.log(f"i: {i}, n samples: {len(samples)}, sr: {sr}")
 
     def __getitem__(self, index: int) -> LabeledAudioData:
         return super().__getitem__(index)
@@ -120,8 +159,8 @@ if __name__ == "__main__":
     clip_dataset = CachedClippedDataset(
         worker=worker,
         logger=logger,
-        clip_duration_seconds = 10,
-        clip_overlap_seconds = 4.0
+        clip_duration_seconds = 10.0,
+        clip_overlap_seconds = 3.0
     )
 
     balancer = CachedDatasetBalancer(
@@ -133,7 +172,7 @@ if __name__ == "__main__":
 
     limited_dataset = DatasetLimiter(
         clip_dataset, 
-        limit=100, 
+        limit=200, 
         randomize=False, 
         balanced=True,
         balancer=balancer

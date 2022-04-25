@@ -133,7 +133,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         
         return unique_feature_values, label_value_counts
             
-    def verify(self, dataset: ITensorAudioDataset) -> Tuple[bool, set, Iterable[ValueCount]]:
+    def verify(self, dataset: ITensorAudioDataset) -> bool:
         unique_features, label_value_counts = self._getstats(dataset)
         valid_labels, labels_status_message = self._valid_label_stats(label_value_counts=label_value_counts)
         valid_features, features_status_message = self._valid_feature_values(unique_features)
@@ -143,7 +143,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             error_msg += f"Features values status:\n{features_status_message}"
             error_msg += f"Label values status:\n{labels_status_message}"
             raise Exception(error_msg)
-        return valid, unique_features, label_value_counts
+        return valid
         
 if __name__ == "__main__":
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
@@ -177,8 +177,8 @@ if __name__ == "__main__":
     )
 
     verifier = BinaryTensorDatasetVerifier(verbose=True)
-    valid, unique_features, label_stats = verifier.verify(tensordataset)
-    print(valid, len(unique_features), label_stats)
+    valid = verifier.verify(tensordataset)
+    print(valid)
 
     # # Now without limiting
     # balanced = BalancedDatasetDecorator(clip_dataset, balancer=balancer)

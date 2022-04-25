@@ -79,7 +79,7 @@ class TensorAudioDataset(ITensorAudioDataset):
         audio_data = self._dataset[index]
         features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
         labels = self._label_accessor(audio_data, features)
-        return index, features, labels
+        return features, labels
 
     def __len__(self) -> int:
         return len(self._dataset)

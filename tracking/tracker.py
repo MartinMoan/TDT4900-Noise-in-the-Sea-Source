@@ -14,23 +14,14 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from sheets import SheetClient
-from logger import ILogger, Logger
-
-class ITracker(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def track(
-        metrics: Mapping[str, float], 
-        model: str, 
-        model_parameters_path: Union[str, pathlib.PosixPath], 
-        *args,
-        **kwargs) -> None:
-
-        raise NotImplementedError
+from logger import Logger
+from interfaces import ITracker, ILoggerFactory
 
 class Tracker(ITracker):
-    def __init__(self, logger: ILogger = Logger()) -> None:
+    def __init__(self, logger_factory: ILoggerFactory, client: SheetClient) -> None:
         super().__init__()
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
+        self.client = client
 
     def track(
         self,
@@ -53,10 +44,9 @@ class Tracker(ITracker):
             order = [config.LOGGED_AT_COLUMN]
 
         self.logger.log(f"Tracking data:\n", data)
-        client = SheetClient()
-        client.add_row(data)
-        client.format(order_by=order, col_order=col_order)
         
+        self.client.add_row(data)
+        self.client.format(order_by=order, col_order=col_order)
 
     def _get_all_dicts(self, *args):
         return [arg for arg in args if type(arg) == dict]

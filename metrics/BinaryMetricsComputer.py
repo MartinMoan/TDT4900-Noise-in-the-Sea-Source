@@ -19,7 +19,7 @@ class BinaryMetricComputer(IMetricComputer):
     def __init__(self, class_dict, threshold: float = 0.5, logger: ILogger = Logger()):
         self._threshold = threshold
         self._class_dict = class_dict
-        self.logger = logger
+        self._logger = logger
 
     def _apply_threshold(self, multiplabel_indicator: torch.Tensor) -> torch.Tensor:
         preds = multiplabel_indicator
@@ -48,7 +48,7 @@ class BinaryMetricComputer(IMetricComputer):
         Returns:
             Mapping[str, Union[list, float, str]]: Mapping of metric_name: metric_value(s)/error_message
         """
-        self.logger.log("Beginning metric computation...")
+        self._logger.log("Beginning metric computation...")
         self._check_is_2d("truth", truth)
         self._check_is_2d("preds", preds)
 
@@ -70,7 +70,6 @@ class BinaryMetricComputer(IMetricComputer):
 
             preds = torch.rand(truth.shape)
 
-        
         if not set(np.unique(truth)).issubset(set([0.0, 1.0])):
             raise ValueError(f"{self.__class__.__name__} received truth matrix with invalid values. Expected 2-dimensional label indicator with shape (batch_size, 2). truth matrix contains values not in the set {set([0.0, 0.1])}")
         
@@ -94,3 +93,6 @@ class BinaryMetricComputer(IMetricComputer):
 
     def recall(self, truth: torch.Tensor, preds: torch.Tensor) -> Iterable[float]:
         return self._iterable_scores_to_dict(recall_score(truth, self._apply_threshold(preds), average=None, zero_division=0))
+
+    def logger(self) -> ILogger:
+        return self._logger

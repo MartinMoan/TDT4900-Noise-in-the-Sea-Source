@@ -22,7 +22,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker
+from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker, IFolder
 from tracking.logger import Logger
 from glider.audiodata import LabeledAudioData
 from glider.clipping import CachedClippedDataset
@@ -170,9 +170,12 @@ class DatasetBalancer(IDatasetBalancer):
         np.random.shuffle(indeces)
         return indeces.astype(int)
 
-class BalancedKFolder(sklearn.model_selection.KFold):
+class BalancedKFolder(IFolder):
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None, balancer_ref: Type[IDatasetBalancer] = DatasetBalancer):
-        super().__init__(n_splits, shuffle=shuffle, random_state=random_state)
+        super().__init__()
+        self.n_splits = n_splits
+        self.shuffle = shuffle
+        self.random_state = random_state
         self._balancer_ref = balancer_ref
 
     def split(self, filelength_dataset: TensorAudioDataset):
@@ -197,9 +200,14 @@ class BalancedKFolder(sklearn.model_selection.KFold):
         if len(error_indeces) != 0:
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
         
+        folder = sklearn.model_selection.KFold(self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
         for (train, eval_indeces) in super().split(all_training_indeces):
             # eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
             yield (all_training_indeces[train], eval_indeces)
+
+    @property
+    def properties(self) -> Mapping[str, any]:
+        return {"k_folds": self.n_splits, "shuffle": self.shuffle, "random_state": self.random_state}
 
 class BalancedDatasetDecorator(ICustomDataset):
     def __init__(self, dataset: ICustomDataset, balancer: IDatasetBalancer, force_recarche=False, **kwargs) -> None:

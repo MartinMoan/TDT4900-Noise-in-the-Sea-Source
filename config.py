@@ -132,4 +132,4 @@ CHECKPOINTS_PATH = HOME_PROJECT_DIR.joinpath("models", "checkpoints").absolute()
 if not CHECKPOINTS_PATH.exists():
     CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
 
-PRINT_INTERVAL_SECONDS = 10
+PRINT_INTERVAL_SECONDS = 0.001
