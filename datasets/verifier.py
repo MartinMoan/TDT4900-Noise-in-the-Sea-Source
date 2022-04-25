@@ -14,7 +14,7 @@ from rich import print
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-from interfaces import ITensorAudioDataset, ICustomDataset, IDatasetVerifier, ILogger
+from interfaces import ITensorAudioDataset, ICustomDataset, IDatasetVerifier, ILogger, ILoggerFactory
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
 from datasets.glider.audiodata import LabeledAudioData
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
@@ -44,9 +44,9 @@ class ValueCount:
         return self.__str__()
 
 class BinaryTensorDatasetVerifier(IDatasetVerifier):
-    def __init__(self, verbose: bool = True, logger: ILogger = Logger()) -> None:
+    def __init__(self, logger_factory: ILoggerFactory, verbose: bool = True) -> None:
         self._verbose = verbose
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
 
     def _verify(self, dataset: ITensorAudioDataset, start: int, end: int) -> Tuple[set, Iterable[ValueCount]]:
         proc = multiprocessing.current_process()

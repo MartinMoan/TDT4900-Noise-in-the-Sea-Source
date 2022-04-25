@@ -35,7 +35,7 @@ def prettify(arg, indent=4):
     return nested(arg, indent)
 
 class LogFormatter(ILogFormatter):
-    def header(self, *args, **kwargs) -> str:
+    def header(self, *args, with_tagstyle: bool = True, **kwargs) -> str:
         tag = ""
         stack = inspect.stack()
         
@@ -57,8 +57,10 @@ class LogFormatter(ILogFormatter):
         caller_name_path = caller.frame.f_code.co_filename
         caller_name = pathlib.Path(caller_name_path).name
 
-        tagstyle_start = "[bold purple]"
-        tagstyle_end = "[/bold purple]"
+        tagstyle_start, tagstyle_end = "", ""
+        if with_tagstyle:
+            tagstyle_start = "[bold purple]"
+            tagstyle_end = "[/bold purple]"
 
         header = f"[ {tagstyle_start}{tag}{tagstyle_end} PID {proc.pid} {caller_name}:{lineno} ]"
         header_spacing = 60 - (len(header) - (len(tagstyle_start) + len(tagstyle_end)))
@@ -85,13 +87,14 @@ class Logger(ILogger):
         self.logfile = log_dir.joinpath(filename)
 
     def log(self, *args, **kwargs):
-        header = self.logformatter.header(*args, **kwargs)
+        header_with_style = self.logformatter.header(*args, **kwargs)
+        basic_header = self.logformatter.header(*args, with_tagstyle=False, **kwargs)
         lines = self.logformatter.format(*args, **kwargs)
         
         with open(self.logfile, "a") as logfile:
             for i, line in enumerate(lines):
-                print(header, line)
-                logfile.write(f"{header}{line}\n")
+                print(header_with_style, line)
+                logfile.write(f"{basic_header} {line}\n")
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"

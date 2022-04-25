@@ -1,54 +1,56 @@
 #!/usr/bin/env python3
-"""
-Audio Spectrogram Transformer finetuning script, using pretrained parameters trained on AudioSet for speech commands.
-Finetuning task is input (batch_size, T-second, M-mel-band spectrogram) tensor output (batch_size, 2) multi-label clip-level classsification to detect biophonic and/or anthropogenic sound event presence in the input clips. 
-"""
-
-import argparse
-import pathlib
+from curses.ascii import CR
+import multiprocessing
 import sys
+import pathlib
 from tabnanny import verbose
 
-import torch
 import git
+from sklearn import feature_extraction
+import torch
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
-from datasets.glider.audiodata import LabeledAudioData
-from models import trainer
-from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
-from IMetricComputer import BinaryMetricComputer
-from IDatasetBalancer import BalancedKFolder, DatasetBalancer
-from ASTWrapper import ASTWrapper
-from limiting import DatasetLimiter
-from verifier import BinaryTensorDatasetVerifier
-from logger import Logger
-from modelprovider import DefaultModelProvider
+from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 
-def init_args():
-    parser = argparse.ArgumentParser(description="AST pretrained AudioSet finetuning script")
-    parser.add_argument("-lr", "--learning-rate", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("-wd", "--weight-decay", type=float, default=1e-5, help="Weight decay")
-    parser.add_argument("-e", "--epochs", type=int, default=3, help="training epochs")
-    parser.add_argument("-bs", "--batch-size", type=int, default=16, help="batch size")
-    parser.add_argument("-nw", "--num-workers", type=int, default=8, help="num workers for dataloaders")
-    parser.add_argument("--prediction-threshold", type=float, default=0.5, help="Prediction confidence threshold. Any prediction with a confidence less than this is not considered a correct prediction (only relevant during evaluation, has no effect on training).")
-    parser.add_argument("--force-gpu", action="store_true", default=False, help="Force using CUDA cores. If no CUDA cores are available, will raise an exception and halt the program.")
-    parser.add_argument("-cd", "--clip-duration-seconds", type=float, default=10.0, help="The clip duration in seconds to use for the glider audio data.")
-    parser.add_argument("-co", "--clip-overlap-seconds", type=float, default=2.0, help="The clip overlap in seconds. Every clip will overlap the pervious clip with this number of seconds.")
-    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Dataloading verbosity. Will log the individual local files loaded if set.")
-    parser.add_argument("-cp", "--checkpoint", type=str, default=None, help="Path to the checkpoint directory to load model, optimizer and local variables from.")
-    parser.add_argument("--from-checkpoint", action="store_true", default=False, help="Wheter to load model, optimizer and local variables from checkpoint. If -cp (--checkpoint) argument is provided, will use that value as the path to load from")
-    return parser.parse_args()
-    
-def instantiate_model(n_model_outputs: int, nmels: int, n_time_frames: int, device: str):
+from tracking.logger import Logger, LogFormatter
+from tracking.tracker import Tracker
+from tracking.saver import Saver
+from tracking.loggerfactory import LoggerFactory
+from tracking.sheets import SheetClient
+
+from models.trainer import Trainer
+from models.evaluator import Evaluator
+from models.optimizer import AdamaxProvider, GeneralOptimizerProvider
+from models.modelprovider import DefaultModelProvider
+from models.AST.ASTWrapper import ASTWrapper
+
+from datasets.folder import BasicKFolder
+from datasets.balancing import BalancedKFolder, DatasetBalancer
+from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
+from datasets.balancing import BalancedKFolder
+from datasets.limiting import DatasetLimiter
+from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from datasets.provider import BasicDatasetProvider, VerificationDatasetProvider
+from datasets.verifier import BinaryTensorDatasetVerifier
+from datasets.binjob import Binworker
+from models.crossevaluator import CrossEvaluator
+
+from metrics import BinaryMetricComputer
+
+import config
+
+def instantiate_model(
+    n_model_outputs: int, 
+    n_mels: int, 
+    n_time_frames: int, 
+    device: str):
+
     model = ASTWrapper(
         activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
         label_dim=n_model_outputs,
         fstride=10, 
         tstride=10, 
-        input_fdim=nmels, 
+        input_fdim=n_mels, 
         input_tdim=n_time_frames, 
         imagenet_pretrain=True, 
         audioset_pretrain=True, 
@@ -65,109 +67,183 @@ def instantiate_model(n_model_outputs: int, nmels: int, n_time_frames: int, devi
     model.to(device)
     return model
 
-def train(args):
-    logger = Logger()
-    logger.log("Initializing arguments and hyperparameters...")
+def main():
+    batch_size = 16
+    epochs = 3
+    lossfunction = torch.nn.BCEWithLogitsLoss()
+    num_workers = multiprocessing.cpu_count()
+    lr = 0.001
+    weight_decay = 1e-5
+    kfolds = 5
+    n_model_outputs = 2
+    verbose = True
     device = "cuda" if torch.cuda.is_available() else "cpu"
-
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
-    nmels = 128
+    n_mels = 128
     hop_length = 512
+    n_fft = 2048,
+    scale_melbands=False
+    classification_threshold = 0.5
 
-    clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, nmels, n_time_frames)
+    clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
-    clip_dataset = CachedClippedDataset(
-        clip_nsamples = clip_length_samples, 
-        overlap_nsamples = clip_overlap_samples
+    # Only used for limited dataset during verification run
+    limit = 42
+
+    logger_factory = LoggerFactory(
+        logger_type=Logger, 
+        logger_args=(LogFormatter(),)
+    )
+    logger = logger_factory.create_logger()
+
+    worker = Binworker(
+        pool_ref=multiprocessing.Pool,
+        n_processes=num_workers,
+        timeout_seconds=None
     )
 
-    lr                  =   args.learning_rate
-    weight_decay        =   args.weight_decay
-    epochs              =   1 # args.epochs
-    batch_size          =   args.batch_size
-    num_workers         =   args.num_workers
-    n_model_outputs     =   2
-    # output_activation   =   torch.nn.Sigmoid() # Task is binary classification (audiofile contains biophonic event or not), therefore sigmoid [0, 1]
-    loss_ref            =   torch.nn.BCEWithLogitsLoss # BCEWithLogitsLoss combines Sigmoid and BCELoss in single layer/class for more numerical stability. No need for activation function for last layer
-    optimizer_ref       =   torch.optim.Adamax
-
-    kfolds              =   8
-
-    model_provider      =   DefaultModelProvider(instantiate_model, (n_model_outputs, nmels, n_time_frames, device), verbose=args.verbose)
-
-    metrics_computer    =   BinaryMetricComputer(clip_dataset.classes())
-
-    train_kwargs        =   {"lr": lr, "weight_decay": weight_decay, "epochs": epochs, "loss_ref": loss_ref, "optimizer_ref": optimizer_ref, "device": device}
-
-    from_checkpoint     =   args.checkpoint if args.checkpoint is not None else args.from_checkpoint
-
-    if args.force_gpu and not torch.cuda.is_available():
-        raise Exception(f"Force_gpu argument was set, but no CUDA device was found/available. Found device {device}")
-
-    sampling_rate = 128000
-    clip_dur_sec = clip_length_samples / sampling_rate
-    clip_overlap_sec = clip_overlap_samples / sampling_rate
-
-    logger.log(f"Using device: {device}")
-
-    limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=True, balanced=True)
-    limited_tensordatataset = TensorAudioDataset(
-        dataset = limited_dataset,
-        label_accessor=BinaryLabelAccessor(),
-        feature_accessor=MelSpectrogramFeatureAccessor()
+    model_provider = DefaultModelProvider(
+        model_ref=instantiate_model,
+        model_args=(n_model_outputs, n_mels, n_time_frames, device),
+        model_kwargs={},
+        logger_factory=logger_factory,
+        verbose=verbose
     )
 
-    dataset_verifier = BinaryTensorDatasetVerifier(verbose=verbose)
+    clipped_dataset = CachedClippedDataset(
+        logger_factory=logger_factory,
+        worker=worker,
+        clip_nsamples=clip_length_samples,
+        overlap_nsamples=clip_overlap_samples,
+    )
 
-    # Try to run using limited dataset, to verify everything works as expected.
-    # But don't log metrics to sheets during verification
-    SHEET_ID = config.SHEET_ID
-    config.SHEET_ID = config.VERIFICATION_SHEET_ID
-    logger.log(f"Performing pre-training verification run. Will log results to SHEET ID {config.SHEET_ID}")
+    label_accessor = BinaryLabelAccessor()
+    feature_accessor = MelSpectrogramFeatureAccessor(
+        logger_factory=logger_factory, 
+        n_mels=n_mels,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        scale_melbands=scale_melbands,
+        verbose=verbose
+    )
+
+    complete_tensordataset = TensorAudioDataset(
+        dataset=clipped_dataset,
+        label_accessor=label_accessor,
+        feature_accessor=feature_accessor
+    )
+
+    complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
+
+    verification_dataset_provider = VerificationDatasetProvider(
+        clipped_dataset=clipped_dataset,
+        limit=limit,
+        balancer=DatasetBalancer(
+            dataset=clipped_dataset,
+            logger_factory=logger_factory,
+            worker=worker,
+            verbose=verbose
+        ),
+        randomize=True,
+        balanced=True,
+        feature_accessor=feature_accessor,
+        label_accessor=label_accessor
+    )
+
+    dataset_verifier = BinaryTensorDatasetVerifier(
+        logger_factory=logger_factory,
+        verbose=verbose
+    )
+
+    verification_tracker = Tracker(
+        logger_factory=logger_factory,
+        client = SheetClient(
+            logger_factory=logger_factory, 
+            spreadsheet_key="1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw", 
+            sheet_id=1339590295
+        )
+    )
+
+    complete_tracker = Tracker(
+        logger_factory=logger_factory,
+        client = SheetClient(
+            logger_factory=logger_factory, 
+            spreadsheet_key=config.SPREADSHEET_ID, 
+            sheet_id=config.SHEET_ID
+        )
+    )
     
-    trainer.kfoldcv(
-        model_provider,
-        limited_tensordatataset,
-        metrics_computer,
-        dataset_verifier,
-        device,
-        from_checkpoint=from_checkpoint,
-        batch_size=2, 
+    folder = BalancedKFolder(
+        n_splits=kfolds,
+        shuffle=True, 
+        random_state=None,
+        balancer_ref=DatasetBalancer,
+        balancer_args=(),
+        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+    )
+
+    optimizer_provider = GeneralOptimizerProvider(
+        optimizer_type=torch.optim.Adamax,
+        optimizer_args=(),
+        optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
+    )
+
+    trainer = Trainer(
+        logger_factory=logger_factory,
+        optimizer_provider=optimizer_provider,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers
+    )
+
+    evaluator = Evaluator(
+        logger_factory=logger_factory, 
+        batch_size=batch_size,
         num_workers=num_workers,
-        train_kwargs=train_kwargs, 
-        tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"},
-        folder_ref=BalancedKFolder,
-        kfolds=2,
-    )
-    logger.log("Pre-training verification run completed without halting!")
-
-    dataset = TensorAudioDataset(
-        dataset=clip_dataset, 
-        label_accessor=BinaryLabelAccessor(), 
-        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)
+        device=device
     )
 
-    # Now start the training with full dataset
-    config.SHEET_ID = SHEET_ID
-    logger.log(f"Starting {kfolds}-fold cross evaluation (and finetuning) of AST pretrained model. Will log results to SHEET ID {config.SHEET_ID}")
-    trainer.kfoldcv(
-        model_provider,
-        dataset, # The primary change
-        metrics_computer,
-        dataset_verifier,
-        device,
-        from_checkpoint=from_checkpoint,
-        batch_size=batch_size, 
-        num_workers=num_workers,
-        train_kwargs=train_kwargs, 
-        tracker_kwargs={"description": f"AST pretrained ImageNet and AudioSet pretrained model finetuning. Using {clip_dur_sec:.4f} second clips with {clip_overlap_sec:.4f} second overlaps"},
-        folder_ref=BalancedKFolder
+    metric_computer = BinaryMetricComputer(
+        logger_factory=logger_factory,
+        class_dict=clipped_dataset.classes(),
+        threshold=classification_threshold
     )
 
-def main():
-    args = init_args()
-    train(args)
+    saver = Saver(logger_factory=logger_factory)
+
+    #### Perform "verificaiton" run to check that everything is working as expected.
+    cv = CrossEvaluator(
+        model_provider=model_provider,
+        logger_factory=logger_factory,
+        dataset_provider=verification_dataset_provider,
+        dataset_verifier=dataset_verifier,
+        tracker=verification_tracker,
+        folder=folder,
+        trainer=trainer,
+        evaluator=evaluator,
+        metric_computer=metric_computer,
+        saver=saver
+    )
+    cv.kfoldcv()
+
+    logger.log("Verification run complete!")
+    logger.log(f"Beginning {kfolds}-fold cross evaluation...")
+    #### Perform the proper training run
+    cv = CrossEvaluator(
+        model_provider=model_provider,
+        logger_factory=logger_factory,
+        dataset_provider=complete_dataset_provider,
+        dataset_verifier=dataset_verifier,
+        tracker=complete_tracker,
+        folder=folder,
+        trainer=trainer,
+        evaluator=evaluator,
+        metric_computer=metric_computer,
+        saver=saver
+    )
+    cv.kfoldcv()
 
 if __name__ == "__main__":
     main()

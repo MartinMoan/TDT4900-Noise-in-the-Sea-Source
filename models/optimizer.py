@@ -2,7 +2,7 @@
 import multiprocessing
 import sys
 import pathlib
-from typing import Mapping
+from typing import Mapping, Type, Tuple
 
 import torch
 import git
@@ -21,3 +21,20 @@ class AdamaxProvider(IOptimizerProvider):
     @property
     def properties(self) -> Mapping[str, any]:
         return {"optimizer": str(torch.optim.Adamax), "lr": self.lr, "weight_decay": self.weight_decay}
+
+class GeneralOptimizerProvider(IOptimizerProvider):
+    def __init__(
+        self, 
+        optimizer_type: Type[torch.optim.Optimizer], 
+        optimizer_args: Tuple[any, ...] = (), 
+        optimizer_kwargs: Mapping[str, any] = {}):
+        self.optimizer_type = optimizer_type
+        self.optimizer_args = optimizer_args
+        self.optimizer_kwargs = optimizer_kwargs
+
+    def provide(self, model: torch.nn.Module) -> torch.optim.Optimizer:
+        return self.optimizer_type(model.parameters(), *self.optimizer_args, **self.optimizer_kwargs)
+        
+    @property
+    def properties(self) -> Mapping[str, any]:
+        return {"optimizer": self.optimizer_type, "args": self.optimizer_args, "kwargs": self.optimizer_kwargs}

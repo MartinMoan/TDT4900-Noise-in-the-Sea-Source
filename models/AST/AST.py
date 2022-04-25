@@ -9,7 +9,7 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from logger import ILogger, Logger
+from interfaces import ILoggerFactory
 
 pretrained_models_path = pathlib.Path.home().joinpath("pretrained_models")
 if not pretrained_models_path.exists():
@@ -48,11 +48,11 @@ class ASTModel(nn.Module):
     :param audioset_pretrain: if use full AudioSet and ImageNet pretrained model
     :param model_size: the model size of AST, should be in [tiny224, small224, base224, base384], base224 and base 384 are same model, but are trained differently during ImageNet pretraining.
     """
-    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, logger: ILogger = Logger()):
+    def __init__(self, logger_factory: ILoggerFactory, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True):
 
         super(ASTModel, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
         # if verbose == True:
         #     self.logger.log('---------------AST Model Summary---------------')
         #     self.logger.log('ImageNet pretraining: {:s}, AudioSet pretraining: {:s}'.format(str(imagenet_pretrain),str(audioset_pretrain)))
