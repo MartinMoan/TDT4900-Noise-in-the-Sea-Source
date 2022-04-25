@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-from curses.ascii import CR
 import multiprocessing
 import sys
 import pathlib
-from tabnanny import verbose
 
 import git
-from sklearn import feature_extraction
 import torch
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 
 from tracking.logger import Logger, LogFormatter
 from tracking.tracker import Tracker
@@ -25,7 +21,7 @@ from models.modelprovider import DefaultModelProvider
 from models.AST.ASTWrapper import ASTWrapper
 
 from datasets.folder import BasicKFolder
-from datasets.balancing import BalancedKFolder, DatasetBalancer
+from datasets.balancing import BalancedKFolder, DatasetBalancer, CachedDatasetBalancer
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
 from datasets.balancing import BalancedKFolder
 from datasets.limiting import DatasetLimiter
@@ -36,6 +32,7 @@ from datasets.binjob import Binworker
 from models.crossevaluator import CrossEvaluator
 
 from metrics import BinaryMetricComputer
+from tools.typechecking import verify
 
 import config
 
@@ -139,7 +136,7 @@ def main():
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
         limit=limit,
-        balancer=DatasetBalancer(
+        balancer=CachedDatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
             worker=worker,
@@ -180,7 +177,7 @@ def main():
         random_state=None,
         balancer_ref=DatasetBalancer,
         balancer_args=(),
-        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+        balancer_kwargs={"dataset": clipped_dataset,"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
     )
 
     optimizer_provider = GeneralOptimizerProvider(

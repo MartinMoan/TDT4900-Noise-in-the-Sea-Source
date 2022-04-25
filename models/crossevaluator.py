@@ -8,7 +8,30 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 
-from tools.typechecking import verify
+# from tools.typechecking import verify
+import inspect
+from rich import print
+
+def verify(func):
+    print("func", func)
+    def nested(self, *args, **kwargs):
+        print(self, args, kwargs)
+        print(dir(args[0]))
+        spec = inspect.getfullargspec(func)
+        names = spec.args
+        named_args = {names[i]: args[i] for i in range(len(names))}
+        named_args = {key: value for key, value in named_args.items() if key != "self"}
+        named_args = {**named_args, **kwargs}
+        
+        for arg, input_value in named_args.items():
+            if arg in spec.annotations:
+                expected_type = spec.annotations[arg]
+                if not isinstance(input_value, expected_type):
+                    raise TypeError(f"Argument {arg} has incorrect type. Expected {expected_type} but received {type(input_value)}")
+
+        func(self, *args, **kwargs)
+    return nested
+
 
 class CrossEvaluator(ICrossEvaluator):
     @verify
@@ -36,7 +59,7 @@ class CrossEvaluator(ICrossEvaluator):
         self._evaluator = evaluator
         self._metric_computer = metric_computer
         self._saver = saver
-
+    
     def kfoldcv(self) -> None:
         self._logger.log(f"Requesting dataset from {self._dataset_provider.__class__.__name__}...")
         dataset = self._dataset_provider.provide()
