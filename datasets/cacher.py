@@ -11,12 +11,12 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ILogger
+from interfaces import ILoggerFactory
 from tracking.logger import Logger
 
 class Cacher:
-    def __init__(self, logger: ILogger = Logger()) -> None:
-        self.logger = logger
+    def __init__(self, logger_factory: ILoggerFactory) -> None:
+        self.logger = logger_factory.create_logger()
         
     def _args_by_inspection(obj_ref: Type, *args) -> Mapping[str, any]:
         sig = inspect.getfullargspec(obj_ref)

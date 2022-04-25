@@ -9,10 +9,12 @@ from .IEvaluator import IEvaluator
 from .IFeatureAccessor import IFeatureAccessor
 from .IFolder import IFolder
 from .ILabelAccessor import ILabelAccessor
+from .ILogFormatter import ILogFormatter
 from .ILogger import ILogger
 from .ILoggerFactory import ILoggerFactory
 from .IMetricComputer import IMetricComputer
 from .IModelProvider import IModelProvider
+from .IOptimizerProvider import IOptimizerProvider
 from .IPropProvider import IPropProvider
 from .ISaver import ISaver
 from .IScaler import IScaler

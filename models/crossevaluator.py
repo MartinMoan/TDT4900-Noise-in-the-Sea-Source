@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from asyncio.log import logger
 import multiprocessing
 import sys
 import pathlib
@@ -84,15 +85,19 @@ class CrossEvaluator(ICrossEvaluator):
 
 
 if __name__ == "__main__":
-    from tracking.logger import Logger
+    import torch
+
+    from tracking.logger import Logger, LogFormatter
     from tracking.tracker import Tracker
     from models.trainer import Trainer
     from tracking.saver import Saver
     from datasets.folder import BasicKFolder
     from models.evaluator import Evaluator
+    from models.optimizer import AdamaxProvider
     from metrics import BinaryMetricComputer
     from datasets.balancing import BalancedKFolder, DatasetBalancer
     from tracking.loggerfactory import LoggerFactory
+
     from mocks.mockmodelprovider import MockModelProvider
     from mocks.mockdatasetprovider import MockDatasetProvider
     from mocks.mocktensordataset import MockTensorDataset
@@ -100,30 +105,64 @@ if __name__ == "__main__":
     from tracking.sheets import SheetClient
     import config
 
-    logger_factory = LoggerFactory(logger_type=Logger)
+    batch_size = 16
+    epochs = 3
+    lossfunction = torch.nn.BCEWithLogitsLoss()
+    num_workers = multiprocessing.cpu_count()
+    lr = 0.001
+    weight_decay = 1e-5
+    kfolds = 5
+
+    logger_factory = LoggerFactory(
+        logger_type=Logger, 
+        logger_args=(LogFormatter(),)
+    )
     
     model_provider = MockModelProvider(output_shape=(2,))
     
-    dataset = MockTensorDataset(size=1000, label_shape=(2,), feature_shape=(1, 4, 8))
+    dataset = MockTensorDataset(
+        size=100, 
+        label_shape=(2,), 
+        feature_shape=(1, 4, 8),
+        classes={"Anthropogenic": 0, "Biophonic": 1},
+        logger_factory=logger_factory
+    )
+
     dataset_provider = MockDatasetProvider(dataset)
 
     dataset_verifier = MockDatasetVerifier()
 
     tracker = Tracker(
         logger_factory=logger_factory,
-        client = SheetClient(logger_factory=logger_factory, spreadsheet_key=config.SPREADSHEET_ID, sheet_id=config.VERIFICATION_SHEET_ID)
+        client = SheetClient(
+            logger_factory=logger_factory, 
+            spreadsheet_key="1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw", 
+            sheet_id=1339590295
+        )
     )
     
-    folder = BasicKFolder(n_splits=5, shuffle=True)
+    folder = BasicKFolder(n_splits=kfolds, shuffle=True)
 
-    trainer = Trainer()
+    optimizer_provider = AdamaxProvider(
+        lr=lr,
+        weight_decay=weight_decay
+    )
+
+    trainer = Trainer(
+        logger_factory=logger_factory,
+        optimizer_provider=optimizer_provider,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers
+    )
 
     evaluator = Evaluator(logger_factory=logger_factory, batch_size=16)
 
     metric_computer = BinaryMetricComputer(
+        logger_factory=logger_factory,
         class_dict=dataset.classes(),
-        threshold=0.5,
-        logger=logger_factory.create_logger()
+        threshold=0.5
     )
 
     saver = Saver(logger_factory=logger_factory)
