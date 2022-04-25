@@ -17,7 +17,7 @@ import config
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
 from datasets.glider.audiodata import LabeledAudioData
 from models import trainer
-from datasets.tensordataset import FileLengthTensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from IMetricComputer import BinaryMetricComputer
 from IDatasetBalancer import BalancedKFolder, DatasetBalancer
 from ASTWrapper import ASTWrapper
@@ -112,7 +112,7 @@ def train(args):
     logger.log(f"Using device: {device}")
 
     limited_dataset = DatasetLimiter(clip_dataset, limit=42, randomize=True, balanced=True)
-    limited_tensordatataset = FileLengthTensorAudioDataset(
+    limited_tensordatataset = TensorAudioDataset(
         dataset = limited_dataset,
         label_accessor=BinaryLabelAccessor(),
         feature_accessor=MelSpectrogramFeatureAccessor()
@@ -142,7 +142,7 @@ def train(args):
     )
     logger.log("Pre-training verification run completed without halting!")
 
-    dataset = FileLengthTensorAudioDataset(
+    dataset = TensorAudioDataset(
         dataset=clip_dataset, 
         label_accessor=BinaryLabelAccessor(), 
         feature_accessor=MelSpectrogramFeatureAccessor(n_mels=nmels)

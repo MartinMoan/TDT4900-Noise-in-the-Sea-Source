@@ -6,6 +6,7 @@ from .IDatasetVerifier import IDatasetVerifier
 from .IFeatureAccessor import IFeatureAccessor
 from .ILabelAccessor import ILabelAccessor
 from .ILogger import ILogger
+from .ILoggerFactory import ILoggerFactory
 from .IMetricComputer import IMetricComputer
 from .IScaler import IScaler
 from .ITensorAudioDataset import ITensorAudioDataset

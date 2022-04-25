@@ -40,6 +40,9 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         """Compute the Log-Mel Spectrogram of the input LabeledAudioData samples. Output will have shape (1, self._n_mels, 1 + int(len(samples) / self._hop_length))
         """
         samples, sr = audio_data.samples, audio_data.sampling_rate
+        return self._compute(samples, sr)
+
+    def _compute(self, samples, sr):
         if config.VIRTUAL_DATASET_LOADING:
             output_shape = (self._n_mels, 1 + int(len(samples) / self._hop_length))
             return torch.zeros((1, *output_shape), dtype=torch.float32, requires_grad=False)
@@ -57,6 +60,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
             S_db = np.divide(numerator, denominator, out=np.zeros_like(S_db), where=(denominator!=0))
 
         return self._to_single_channel_batch(_to_tensor(S_db))
+
 
 class TensorAudioDataset(ITensorAudioDataset):
     def __init__(self, dataset: ICustomDataset, label_accessor: ILabelAccessor, feature_accessor: IFeatureAccessor) -> None:

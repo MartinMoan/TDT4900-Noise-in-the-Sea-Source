@@ -152,10 +152,12 @@ class TransformedTensorDataset(ITensorAudioDataset):
         return self._decorated.audiodata(index)
 
 if __name__ == "__main__":
-    n_mels = 128
     from datasets.binjob import Binworker
     from tracking.logger import Logger
     from datasets.balancing import CachedDatasetBalancer, DatasetBalancer
+    import matplotlib.pyplot as plt
+
+    n_mels = 128
 
     worker = Binworker(timeout_seconds=120)
     logger = Logger()
@@ -184,13 +186,12 @@ if __name__ == "__main__":
 
     limited_tensordatataset = TensorAudioDataset(
         dataset = limited_dataset,
-        label_accessor=BinaryLabelAccessor(),
-        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=n_mels)
+        label_accessor=BinaryLabelAccessor(logger=logger),
+        feature_accessor=MelSpectrogramFeatureAccessor(n_mels=n_mels, logger=logger),
+        logger=logger
     )
     
-    scaled_dataset = TransformedTensorDataset(limited_tensordatataset, transforms=[CahcedStandardScalerTransformerDecorator(force_recache=False)], verbose=True)
-
-    import matplotlib.pyplot as plt
+    scaled_dataset = TransformedTensorDataset(limited_tensordatataset, transforms=[CahcedStandardScalerTransformerDecorator(force_recache=False, logger=logger)], verbose=True)
 
     EXAMPLES_DIR = config.HOME_PROJECT_DIR.joinpath("examples")
     if not EXAMPLES_DIR.exists():
@@ -198,6 +199,8 @@ if __name__ == "__main__":
 
     def hz_to_mel(hz):
         return 2595.0 * np.log10(1 + (hz / 700))
+
+    exit()
 
     for i in range(len(scaled_dataset)):
         index, X, Y = scaled_dataset[i]
