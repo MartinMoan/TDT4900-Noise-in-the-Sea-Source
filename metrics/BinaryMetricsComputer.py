@@ -13,13 +13,18 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 from tracking.logger import Logger
 from interfaces.IMetricComputer import IMetricComputer
-from interfaces.ILogger import ILogger
+from interfaces import ILogger, ILoggerFactory
 
 class BinaryMetricComputer(IMetricComputer):
-    def __init__(self, class_dict, threshold: float = 0.5, logger: ILogger = Logger()):
+    def __init__(
+        self, 
+        logger_factory: ILoggerFactory, 
+        class_dict, 
+        threshold: float = 0.5):
+
         self._threshold = threshold
         self._class_dict = class_dict
-        self._logger = logger
+        self._logger = logger_factory.create_logger()
 
     def _apply_threshold(self, multiplabel_indicator: torch.Tensor) -> torch.Tensor:
         preds = multiplabel_indicator

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 import gc
+from datetime import datetime
 import sys
 import inspect 
 import pathlib
 import multiprocessing
 import re
+from typing import Iterable, Tuple
 
 from rich import print
 
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-from interfaces import ILogger
+import config
+from interfaces import ILogger, ILogFormatter
 
 def prettify(arg, indent=4):
     def nested(a, i, recursion_counter=1):
@@ -31,24 +34,24 @@ def prettify(arg, indent=4):
 
     return nested(arg, indent)
 
-class Logger(ILogger):
-    def log(self, *args, **kwargs):
+class LogFormatter(ILogFormatter):
+    def header(self, *args, **kwargs) -> str:
         tag = ""
         stack = inspect.stack()
         
-        caller_locals = stack[1][0].f_locals
+        caller_locals = stack[2][0].f_locals
         if "self" in caller_locals:
             tag = caller_locals["self"].__class__.__name__
         else:
             if "__name__" in caller_locals:
                 caller_filepath = caller_locals["__name__"]
             else:
-                caller_filepath = stack[1].filename
+                caller_filepath = stack[2].filename
             tag = pathlib.Path(caller_filepath).name
         
         proc = multiprocessing.current_process()
 
-        caller = stack[1]
+        caller = stack[2]
         
         lineno = caller.frame.f_lineno # caller.frame.f_code.co_firstlineno
         caller_name_path = caller.frame.f_code.co_filename
@@ -61,16 +64,34 @@ class Logger(ILogger):
         header_spacing = 60 - (len(header) - (len(tagstyle_start) + len(tagstyle_end)))
         spacer = "".join([" " for i in range(header_spacing)])
         header = f"{header}{spacer}:"
+        return header
 
+    def format(self, *args, **kwargs) -> Iterable[str]:
         args_s = "\n".join([prettify(arg, indent=4) for arg in args])
-        
         kwargs_s = prettify(kwargs, indent=4)
         content = (args_s + "\n" + kwargs_s).strip()
-        
         lines = re.split(r"\n+", content)
+        return lines
 
-        for i, line in enumerate(lines):
-            print(header, line)
+class Logger(ILogger):
+    def __init__(self, logformatter: ILogFormatter):
+        self.logformatter = logformatter
+        
+        log_dir = config.HOME_PROJECT_DIR.joinpath("logs")
+        if not log_dir.exists():
+            log_dir.mkdir(parents=False, exist_ok=False)
+
+        filename = f"{datetime.now().strftime(config.DATETIME_FORMAT)}.log"
+        self.logfile = log_dir.joinpath(filename)
+
+    def log(self, *args, **kwargs):
+        header = self.logformatter.header(*args, **kwargs)
+        lines = self.logformatter.format(*args, **kwargs)
+        
+        with open(self.logfile, "a") as logfile:
+            for i, line in enumerate(lines):
+                print(header, line)
+                logfile.write(f"{header}{line}\n")
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"

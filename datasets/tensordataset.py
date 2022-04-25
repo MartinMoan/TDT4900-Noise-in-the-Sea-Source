@@ -10,9 +10,8 @@ import librosa
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, ITensorAudioDataset, IFeatureAccessor, ILabelAccessor, ILogger
+from interfaces import ICustomDataset, ITensorAudioDataset, IFeatureAccessor, ILabelAccessor, ILoggerFactory
 from glider.audiodata import LabeledAudioData 
-from logger import Logger
 from datasets.glider.audiodata import AudioData
 
 def _to_tensor(nparray: np.ndarray) -> torch.Tensor:
@@ -28,12 +27,19 @@ class BinaryLabelAccessor(ILabelAccessor):
         return _to_tensor(audio_data.binary())
 
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
-    def __init__(self, n_mels: int = 128, n_fft: int = 2048, hop_length: int = 512, scale_melbands=False, logger: ILogger = Logger(), verbose: bool = False) -> None:
+    def __init__(
+        self, 
+        logger_factory: ILoggerFactory,
+        n_mels: int = 128, 
+        n_fft: int = 2048, 
+        hop_length: int = 512, 
+        scale_melbands=False, 
+        verbose: bool = False) -> None:
         self._n_mels = n_mels
         self._n_fft = n_fft
         self._hop_length = hop_length
         self._scale_melbands = scale_melbands
-        self.logger = logger
+        self.logger = logger_factory.create_logger()
         self.verbose = verbose
 
     def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    

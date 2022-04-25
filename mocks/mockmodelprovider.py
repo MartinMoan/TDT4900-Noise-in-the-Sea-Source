@@ -3,6 +3,7 @@ import sys
 import pathlib
 from turtle import forward
 from typing import Iterable, Mapping
+import math
 
 import git
 import torch
@@ -14,10 +15,11 @@ class MockModel(torch.nn.Module):
     def __init__(self, output_shape: Iterable[int]) -> None:
         super().__init__()
         self.output_shape = output_shape
+        self.l1 = torch.nn.Linear(3, 2) # Such that MockModel.parameters() will return some parameters for optimizer
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         batch_size = X.shape[0]
-        return torch.rand((batch_size, *self.output_shape))
+        return torch.rand((batch_size, *self.output_shape), requires_grad=True) # requires grad so lossfuction/optimizer can work with the output
 
 class MockModelProvider(IModelProvider):
     def __init__(self, output_shape: Iterable[int]) -> None:
@@ -29,4 +31,4 @@ class MockModelProvider(IModelProvider):
 
     @property
     def properties(self) -> Mapping[str, any]:
-        return {f"{self.__class__.__name__}": "MOCK_MODEL_PROVIDER"}
+        return {f"provider": "{self.__class__.__name__}"}
