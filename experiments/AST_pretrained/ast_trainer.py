@@ -181,13 +181,7 @@ def main():
         verbose=verbose
     )
 
-    tablogger = TabularLogger(
-        client = SheetClient(
-            logger_factory=logger_factory, 
-            spreadsheet_key="1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw", 
-            sheet_id=1339590295
-        )
-    )
+    tablogger = TabularLogger()
 
     verification_tracker = Tracker(
         logger_factory=logger_factory,
@@ -258,13 +252,7 @@ def main():
 
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
 
-    tablogger = TabularLogger(
-        client = SheetClient(
-            logger_factory=logger_factory, 
-            spreadsheet_key=config.SPREADSHEET_ID, 
-            sheet_id=config.SHEET_ID
-        )
-    )
+    tablogger = TabularLogger()
 
     complete_tracker = Tracker(
         logger_factory=logger_factory,

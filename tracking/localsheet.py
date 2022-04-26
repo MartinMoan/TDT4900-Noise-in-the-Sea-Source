@@ -15,7 +15,7 @@ from interfaces import ITabularLogger
 from tracking.sheets import SheetClient
 
 class TabularLogger(ITabularLogger):
-    def __init__(self, client: SheetClient) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
         results_path = config.HOME_PROJECT_DIR.joinpath("results")
@@ -27,18 +27,12 @@ class TabularLogger(ITabularLogger):
             results_path.mkdir(parents=False, exist_ok=False)
 
         self.filepath = results_path.joinpath(self.filename)
-        self.client = client
 
     def add_row(self, row: Mapping[str, any]) -> None:
         flattened_row = pd.json_normalize(row).to_dict(orient="records")[0]
         with open(self.filepath, "a") as file:
             file.write(f"{str(flattened_row)}\n\n")
 
-        try:
-            self.client.add_row(row)
-        except:
-            pass
-
     def format(self, order_by: Iterable[Tuple[str, str]] = ..., col_order: Iterable[str] = ...) -> None:
-        return self.client.format(order_by, col_order)
+        return
         
