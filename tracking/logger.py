@@ -83,7 +83,8 @@ class Logger(ILogger):
         if not log_dir.exists():
             log_dir.mkdir(parents=False, exist_ok=False)
 
-        filename = f"{datetime.now().strftime(config.DATETIME_FORMAT)}.log"
+        datetime_format = "%Y-%m-%dT%H%M%S_%f"
+        filename = f"{datetime.now().strftime(datetime_format)}.log"
         self.logfile = log_dir.joinpath(filename)
 
     def log(self, *args, **kwargs):
@@ -98,5 +99,5 @@ class Logger(ILogger):
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"
-    logger = Logger()
+    logger = Logger(logformatter=LogFormatter)
     logger.log(text)

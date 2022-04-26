@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import multiprocessing
 import pathlib
 import sys
-from typing import Tuple, Mapping, Iterable, Union
+from typing import Tuple, Mapping, Iterable, Union, Set
 from multiprocessing import Pool
 import math
 
@@ -14,7 +14,7 @@ from rich import print
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-from interfaces import ITensorAudioDataset, ICustomDataset, IDatasetVerifier, ILogger, ILoggerFactory
+from interfaces import ITensorAudioDataset, ICustomDataset, IDatasetVerifier, ILogger, ILoggerFactory, IAsyncWorker
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
 from datasets.glider.audiodata import LabeledAudioData
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
@@ -44,9 +44,10 @@ class ValueCount:
         return self.__str__()
 
 class BinaryTensorDatasetVerifier(IDatasetVerifier):
-    def __init__(self, logger_factory: ILoggerFactory, verbose: bool = True) -> None:
+    def __init__(self, logger_factory: ILoggerFactory, worker: IAsyncWorker, verbose: bool = True) -> None:
         self._verbose = verbose
         self.logger = logger_factory.create_logger()
+        self.worker = worker
 
     def _verify(self, dataset: ITensorAudioDataset, start: int, end: int) -> Tuple[set, Iterable[ValueCount]]:
         proc = multiprocessing.current_process()
@@ -59,7 +60,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
                 self.logger.log(f"VerificationWorker PID {proc.pid} - {percentage:.2f}%")
                 last_logged_at = datetime.now()
 
-            index, X, Y = dataset[i]
+            X, Y = dataset[i]
             feature_values = set(np.unique(X.numpy()))
             unique_feature_values = unique_feature_values.union(feature_values)
 
@@ -79,18 +80,6 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             else:
                 output.append(valuecount)
         return output
-
-    def binjob_async(iterable: Iterable, function: callable, function_args: Tuple[any] = (), function_kwargs: Mapping[str, any] = {}) -> Iterable[any]:
-        with Pool(processes=multiprocessing.cpu_count()) as pool:
-            tasks = []
-            binsize = math.ceil(len(iterable) / multiprocessing.cpu_count())
-            for start in range(0, len(iterable), binsize):
-                end = start + binsize
-                task = pool.apply_async(function, args=(iterable, start, end, *function_args), kwds=function_kwargs)
-                tasks.append(task)
-            
-            results = [task.get() for task in tasks]
-            return results
 
     def _valid_label_stats(self, label_value_counts: Iterable[ValueCount]) -> Tuple[bool, str]:
         # total = np.sum([valuecount.count for valuecount in label_value_counts])
@@ -121,8 +110,10 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             message = f"Features are invalid! : The number of unique feature values is 0 ({len(unique_features)})"
         return valid, message
 
-    def _getstats(self, dataset: ITensorAudioDataset) -> Tuple[set, Iterable[ValueCount]]:
-        results = BinaryTensorDatasetVerifier.binjob_async(dataset, self._verify)
+    def _agg(
+        self, 
+        results: Iterable[Tuple[Iterable[int], Set[Union[float, int]]]]
+        ) -> Tuple[Iterable[int], Set[Union[float, int]]]:
         label_value_counts = []
         unique_feature_values = set([])
         for index, (feature_values, label_values) in enumerate(results):
@@ -132,6 +123,9 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
             unique_feature_values = unique_feature_values.union(feature_values)
         
         return unique_feature_values, label_value_counts
+
+    def _getstats(self, dataset: ITensorAudioDataset) -> Tuple[set, Iterable[ValueCount]]:
+        return self.worker.apply(dataset, self._verify, aggregation_method=self._agg)
             
     def verify(self, dataset: ITensorAudioDataset) -> bool:
         unique_features, label_value_counts = self._getstats(dataset)

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import sys
+import pathlib
 import multiprocessing
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
@@ -13,8 +15,10 @@ import inspect
 
 from rich import print
 
+import git
+
+sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import IAsyncWorker
-from tracking.logger import Logger
 
 def verify_args(decorated: FunctionType):
     def wrapper(
@@ -74,7 +78,6 @@ class Binworker(IAsyncWorker):
         self.n_processes = n_processes
         self.timeout_seconds = timeout_seconds
 
-    @verify_args
     def apply(
         self, 
         iterable: Iterable[any], 
@@ -104,22 +107,7 @@ class Binworker(IAsyncWorker):
                 task = pool.apply_async(function, args=(iterable, start, end, *function_args), kwds=function_kwargs)
                 tasks.append(task)
             
-            results = [task.get(timeout=self.timeout_seconds) for task in tasks]
+            # results = [task.get(timeout=self.timeout_seconds) for task in tasks]
+            results = [task.get() for task in tasks]
 
             return aggregation_method(results)
-
-def square(iterable: Iterable[Union[float, int]], start: int, end: int, *args, **kwargs) -> Iterable[Union[float, int]]:
-    logger = Logger()
-    logger.log(f"start {start} end {end}")
-    output = []
-    for i in range(start, end):
-        output.append(iterable[i]**2)
-    return output
-
-def noannotations(iterable, start, end):
-    return square(iterable, start, end)
-
-if __name__ == "__main__":
-    worker = Binworker(pool_ref=multiprocessing.Pool)
-    res = worker.apply(np.arange(100), square)
-    print(res)
