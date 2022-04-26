@@ -67,7 +67,7 @@ class Trainer(ITrainer):
                 # self.logger.log(f"Start batch {batch + 1} / {len(trainset)} in epoch {epoch + 1} / {self.epochs}...")
                 X, Y = X.type(torch.FloatTensor), Y.type(torch.FloatTensor)
                 X, Y = X.to(self.device), Y.to(self.device)
-                Yhat = model(X).type(torch.FloatTensor)
+                Yhat = model(X).type(torch.FloatTensor).to(self.device)
                 
                 optimizer.zero_grad()
 
