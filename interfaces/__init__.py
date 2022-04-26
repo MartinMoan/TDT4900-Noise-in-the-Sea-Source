@@ -18,6 +18,7 @@ from .IOptimizerProvider import IOptimizerProvider
 from .IPropProvider import IPropProvider
 from .ISaver import ISaver
 from .IScaler import IScaler
+from .ITabularLogger import ITabularLogger
 from .ITensorAudioDataset import ITensorAudioDataset
 from .ITracker import ITracker
 from .ITrainer import ITrainer
