@@ -28,6 +28,7 @@ class LabelErrorCorrector(ICustomDataset):
         super().__init__()
         self._decorated = decorated
         self.logger = logger_factory.create_logger()
+        self.factory = logger_factory
         self.worker = worker
         self._procs = []
         self.correct_label_mismatch()
@@ -48,7 +49,7 @@ class LabelErrorCorrector(ICustomDataset):
 
     def plot(self, labeled_audiodata: LabeledAudioData) -> None:
         plt.switch_backend('TkAGG')
-        spectcomputer = MelSpectrogramFeatureAccessor()
+        spectcomputer = MelSpectrogramFeatureAccessor(logger_factory=self.factory)
 
         samples, sr = labeled_audiodata.samples, labeled_audiodata.sampling_rate
         spect = spectcomputer(labeled_audiodata)
@@ -148,24 +149,30 @@ if __name__ == "__main__":
     from datasets.glider.clipping import CachedClippedDataset
     from datasets.limiting import DatasetLimiter
     from tracking.loggerfactory import LoggerFactory
+    from tracking.logger import LogFormatter
     import matplotlib.pyplot as plt
 
     n_mels = 128
 
-    factory = LoggerFactory(logger_type=Logger)
+    factory = LoggerFactory(
+        logger_type=Logger, 
+        logger_args=(LogFormatter(),), 
+        logger_kwargs={}
+    )
     worker = Binworker(timeout_seconds=120)
-    logger = Logger()
+    
+    logger = factory.create_logger()
 
     clip_dataset = CachedClippedDataset(
         worker=worker,
-        logger=logger,
+        logger_factory=factory,
         clip_duration_seconds = 10.0,
         clip_overlap_seconds = 3.0
     )
 
     balancer = CachedDatasetBalancer(
         clip_dataset,
-        logger=logger,
+        logger_factory=factory,
         worker=worker,
         force_recache=False
     )
