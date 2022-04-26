@@ -4,7 +4,7 @@ from typing import  Mapping
 
 import torch
 
-from datasets.glider.audiodata import AudioData
+from datasets.glider.audiodata import AudioData, LabeledAudioData
 
 class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
     @classmethod
@@ -45,5 +45,5 @@ class ITensorAudioDataset(torch.utils.data.Dataset, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def audiodata(self, index: int) -> AudioData:
+    def audiodata(self, index: int) -> LabeledAudioData:
         raise NotImplementedError

@@ -82,30 +82,71 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         return valid, message
             
     def verify(self, dataset: ITensorAudioDataset) -> bool:
-        unique_feature_values = set([])
-        unique_label_values = []
+        unique_labels = [('Anthropogenic', 'Biophonic'), ('Anthropogenic',), ('Biophonic',), ()]
+        found_labels = []
+        found_indeces = []
+        shuffled_indeces = np.random.choice(np.arange(len(dataset)), len(dataset), replace=False)
+        for i in shuffled_indeces:
+            audiodata = dataset.audiodata(i)
 
-        last_logged_at = None
-        for i in range(len(dataset)):
-            should_log, percentage = progress(i, 0, len(dataset))
-            if last_logged_at is None or should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
-                self.logger.log(f"{self.__class__.__name__} {percentage:.2f}")
-            X, Y = dataset[i]
-            feature_values = set(np.unique(X.numpy()))
-            unique_feature_values = unique_feature_values.union(feature_values)
+            labels = tuple(np.sort(audiodata.labels.source_class.unique(), axis=0))
+            
+            if labels not in found_labels:
+                found_labels.append(labels)
+                found_indeces.append(i)
+            
+            if set(found_labels) == set(unique_labels):
+                u = [[0, 0], [0, 1], [1, 0], [1, 1]]
+                f = []
+                uqx = set([])
+                for j in found_indeces:
+                    X, Y = dataset[j]
+                    lY = list(Y.numpy().astype(int))
+                    if lY in u:
+                        f.append(lY)
 
-            values = list(Y.numpy())
+                    uqx = uqx.union(set(list(np.unique(X.numpy()))))
+                    
+                    if len(u) == len(f):
+                        u = list(np.sort(u, axis=0))
+                        f = list(np.sort(f, axis=0))
+                        a = True
+                        for k in range(len(u)):
+                            for e in range(len(u[k])):
+                                if u[k][e] != f[k][e]:
+                                    a = False
+                                    break
+                        b = len(uqx) != 0
+                        return a and b
 
-            valuecount = ValueCount(values, count=1)
-            unique_label_values = self._flatten([valuecount], output=unique_label_values)
-
-            valid_labels, _ = self._valid_label_stats(unique_label_values)
-            valid_features = (len(unique_feature_values) != 0)
-            if valid_labels and valid_features:
                 return True
+            
+            
+        return False
+        # unique_feature_values = set([])
+        # unique_label_values = []
+
+        # last_logged_at = None
+        # for i in range(len(dataset)):
+        #     should_log, percentage = progress(i, 0, len(dataset))
+        #     if last_logged_at is None or should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+        #         self.logger.log(f"{self.__class__.__name__} - {percentage:.2f}%")
+        #     X, Y = dataset[i]
+        #     feature_values = set(np.unique(X.numpy()))
+        #     unique_feature_values = unique_feature_values.union(feature_values)
+
+        #     values = list(Y.numpy())
+
+        #     valuecount = ValueCount(values, count=1)
+        #     unique_label_values = self._flatten([valuecount], output=unique_label_values)
+
+        #     valid_labels, _ = self._valid_label_stats(unique_label_values)
+        #     valid_features = (len(unique_feature_values) != 0)
+        #     if valid_labels and valid_features:
+        #         return True
         
-        error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
-        raise Exception(error_msg)
+        # error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
+        # raise Exception(error_msg)
         
 if __name__ == "__main__":
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
