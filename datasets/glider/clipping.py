@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pathlib
 import sys
 import math
+import re
 import warnings
 import multiprocessing
 from multiprocessing.pool import ThreadPool, Pool
@@ -18,10 +19,13 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, IAsyncWorker, ILoggerFactory
+from interfaces import ICustomDataset, IAsyncWorker, ILoggerFactory, IAudioFileProvider
 from cacher import Cacher
 from audiodata import LabeledAudioData
 from datasets.binjob import progress
+from datasets.glider.wavfileinspector import WaveFileHeader, WaveFileInspector
+from tracking.loggerfactory import LoggerFactory
+from tracking.logger import Logger, LogFormatter
 
 class CachedClippedDataset(ICustomDataset):
     def __new__(
@@ -34,6 +38,57 @@ class CachedClippedDataset(ICustomDataset):
         cacher = Cacher(logger_factory=logger_factory)
         init_kwargs = {"logger_factory": logger_factory, "worker": worker, **kwargs}
         return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=kwargs, force_recache=force_recache)
+
+class AudioFileProvider(IAudioFileProvider):
+    def __init__(self, logger_factory: ILoggerFactory, worker: IAsyncWorker, filelist: Iterable[pathlib.Path]) -> None:
+        super().__init__()
+        self.logger = logger_factory.create_logger()
+        self.worker = worker
+        self.filelist = filelist
+
+    def info(self, files: Iterable, start: int, end: int) -> Iterable[pathlib.Path]:
+        proc = multiprocessing.current_process()
+        output = []
+        last_logged_at = datetime.now()
+        for i in range(start, min(end, len(files))):
+            should_log, percentage = progress(i, start, end)
+            if should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+                self.logger.log(f"{self.__class__.__name__}Worker PID {proc.pid} - {percentage:.2f}%")
+            
+            info = WaveFileInspector.info(files[i])
+            output.append(info)
+        return output
+
+    def files(self) -> pd.DataFrame:
+        files = self.filelist
+        results = self.worker.apply(files, self.info)
+        _audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
+        data = []
+        for file in results:
+            filename_information = re.search(r"([^_]+)_([0-9]{3})_([0-9]{6}_[0-9]{6})\.wav", file.filepath.name)
+    
+            # dive_number = filename_information.group(1)
+            # identification_number = filename_information.group(2)
+            timestring = filename_information.group(3)
+            start_time = None
+            try:
+                start_time = datetime.strptime(timestring, "%y%m%d_%H%M%S")
+            except Exception as ex:
+                print(ex)
+                start_time = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+            item = {
+                'filename': file.filepath,
+                'num_channels': file.n_channels,
+                'sampling_rate'  : file.sample_rate,
+                'num_samples': int(file.num_samples),
+                'duration_seconds': file.duration_seconds,
+                "start_time": start_time,
+                "end_time": start_time + timedelta(seconds=file.duration_seconds)                
+            }
+            data.append(item)
+        df = pd.DataFrame(columns=['filename', 'num_channels', 'sampling_rate', 'num_samples', 'duration_seconds', 'start_time', 'end_time'], data=data)
+        return df
 
 class ClippedDataset(ICustomDataset):
     def __init__(self, 
@@ -48,7 +103,11 @@ class ClippedDataset(ICustomDataset):
         self.worker = worker
         self.logger = logger_factory.create_logger()
 
-        self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
+        # self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
+        files = config.list_local_audiofiles()
+        audiofileprovider = AudioFileProvider(logger_factory=logger_factory, worker=worker, filelist=files)
+        self._audiofiles = audiofileprovider.files()
+
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
 
         self._preprocess_tabular_data()
@@ -207,5 +266,18 @@ class ClippedDataset(ICustomDataset):
 
 
 if __name__ == "__main__":
-    dataset = CachedClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
-    d2 = CachedClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.4)
+    from datasets.binjob import Binworker
+
+    logger_factory = LoggerFactory(
+        logger_type=Logger,
+        logger_args=(LogFormatter(),)
+    )
+
+    worker = Binworker()
+
+    dataset = ClippedDataset(
+        logger_factory=logger_factory,
+        worker=worker,
+        clip_duration_seconds=10.0, 
+        clip_overlap_seconds=4.0
+    )

@@ -1,4 +1,5 @@
 from .IAsyncWorker import IAsyncWorker
+from .IAudioFileProvider import IAudioFileProvider
 from .ICachable import ICachable
 from .ICrossEvaluator import ICrossEvaluator
 from .ICustomDataset import ICustomDataset
