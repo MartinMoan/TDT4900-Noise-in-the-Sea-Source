@@ -209,8 +209,8 @@ class BalancedKFolder(IFolder):
         
         folder = sklearn.model_selection.KFold(self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
         for (train, eval_indeces) in folder.split(all_training_indeces):
-            # eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
-            yield (all_training_indeces[train], eval_indeces)
+            all_eval_indeces = np.concatenate([all_training_indeces[eval_indeces], eval_only_indeces], axis=0, dtype=int)
+            yield (all_training_indeces[train], all_eval_indeces)
 
     @property
     def properties(self) -> Mapping[str, any]:
