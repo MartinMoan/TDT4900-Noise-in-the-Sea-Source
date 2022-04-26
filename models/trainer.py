@@ -44,6 +44,9 @@ class Trainer(ITrainer):
         dataset_indeces: Iterable[int], 
         dataset: ITensorAudioDataset) -> torch.nn.Module:
 
+        percentage = (len(dataset_indeces) / len(dataset)) * 100.0
+        self.logger.log(f"Beginning training iterations using {len(dataset_indeces)} / {len(dataset)} dataset instances ({percentage:.2f}%)")
+        
         sampler = SubsetRandomSampler(dataset_indeces)
 
         trainset = DataLoader(
@@ -55,17 +58,13 @@ class Trainer(ITrainer):
 
         optimizer = self.optimizer_provider.provide(model)
 
-        # if from_checkpoint is not None:
-        #     if type(from_checkpoint) == bool and from_checkpoint:
-        #         model, optimizer, _ = load(model, optimizer, locals())
-        #     elif type(from_checkpoint) == str or type(from_checkpoint) == pathlib.PosixPath:
-        #         model, optimizer, _ = load(model, optimizer, locals(), checkpoint_dir=from_checkpoint)
-
         last_print = None
         model.train()
         for epoch in range(self.epochs):
             epoch_loss = 0
+            # self.logger.log(f"Beginning epoch {epoch + 1} / {self.epochs}...")
             for batch, (X, Y) in enumerate(trainset):
+                # self.logger.log(f"Start batch {batch + 1} / {len(trainset)} in epoch {epoch + 1} / {self.epochs}...")
                 X, Y = X.type(torch.FloatTensor), Y.type(torch.FloatTensor)
                 X, Y = X.to(self.device), Y.to(self.device)
                 Yhat = model(X).type(torch.FloatTensor)
@@ -83,13 +82,12 @@ class Trainer(ITrainer):
                     raise Exception("Loss is nan...")
                 
                 epoch_loss += current_loss
+                
                 if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
                     self.logger.log(f"Training epoch {epoch + 1} / {self.epochs} batch {batch + 1} / {len(trainset)} loss {current_loss:.5f}")
                     last_print = datetime.now()
-
-            average_epoch_loss = epoch_loss / len(trainset)
-            # checkpoint(_started_at, checkpoint_td, model, optimizer, locals())
-            # saver.save(model, mode="training", avg_epoch_loss=average_epoch_loss)
+            
+            # self.logger.log("Epoch complete!")
         self.logger.log("Train iterations complete!")
         return model
 

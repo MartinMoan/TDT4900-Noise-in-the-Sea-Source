@@ -208,7 +208,7 @@ class BalancedKFolder(IFolder):
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
         
         folder = sklearn.model_selection.KFold(self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
-        for (train, eval_indeces) in super().split(all_training_indeces):
+        for (train, eval_indeces) in folder.split(all_training_indeces):
             # eval_indeces = np.concatenate([all_training_indeces[eval], eval_only_indeces], axis=0, dtype=int)
             yield (all_training_indeces[train], eval_indeces)
 

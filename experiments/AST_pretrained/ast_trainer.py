@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import multiprocessing
+import multiprocessing.pool
 import sys
 import pathlib
+from typing import Mapping
 
 import git
 import torch
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+from interfaces import ILoggerFactory, IModelProvider
 
 from tracking.logger import Logger, LogFormatter
 from tracking.tracker import Tracker
@@ -36,33 +39,59 @@ from tools.typechecking import verify
 
 import config
 
-def instantiate_model(
-    n_model_outputs: int, 
-    n_mels: int, 
-    n_time_frames: int, 
-    device: str):
-
-    model = ASTWrapper(
-        activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
-        label_dim=n_model_outputs,
-        fstride=10, 
-        tstride=10, 
-        input_fdim=n_mels, 
-        input_tdim=n_time_frames, 
-        imagenet_pretrain=True, 
-        audioset_pretrain=True, 
-        model_size='base384',
-        verbose=True
-    )
-
-    model.freeze_pretrained_parameters()
-
-    if torch.cuda.device_count() > 1:
-        # Use all the available GPUs with DataParallel
-        model = torch.nn.DataParallel(model)
+class AstModelProvider(IModelProvider):
+    def __init__(
+        self,
+        logger_factory: ILoggerFactory,
+        n_model_outputs: int, 
+        n_mels: int, 
+        n_time_frames: int, 
+        device: str) -> None:
+        
+        super().__init__()
+        self.logger_factory = logger_factory
+        self.logger = logger_factory.create_logger()
+        self.n_model_outputs = n_model_outputs
+        self.n_mels = n_mels
+        self.n_time_frames = n_time_frames
+        self.device = device
     
-    model.to(device)
-    return model
+    def instantiate(self) -> torch.nn.Module:
+        self.logger.log("Instantiating model...")
+        model = ASTWrapper(
+            logger_factory=self.logger_factory,
+            activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
+            label_dim=self.n_model_outputs,
+            fstride=10, 
+            tstride=10, 
+            input_fdim=self.n_mels, 
+            input_tdim=self.n_time_frames, 
+            imagenet_pretrain=True, 
+            audioset_pretrain=True, 
+            model_size='base384',
+            verbose=True
+        )
+        self.logger.log("Freezing pre-trained model parameters...")
+        model.freeze_pretrained_parameters()
+        self.logger.log("Parameter freeze complete!")
+
+        if torch.cuda.device_count() > 1:
+            # Use all the available GPUs with DataParallel
+            model = torch.nn.DataParallel(model)
+        
+        model.to(self.device)
+        self.logger.log("Model instantiated!")
+        return model
+
+    @property
+    def properties(self) -> Mapping[str, any]:
+        props = {
+            "n_model_outputs": self.n_model_outputs,
+            "n_mels": self.n_mels,
+            "n_time_frames": self.n_time_frames,
+            "device": self.device,
+        }
+        return props
 
 def main():
     batch_size = 16
@@ -78,7 +107,7 @@ def main():
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
     n_mels = 128
     hop_length = 512
-    n_fft = 2048,
+    n_fft = 2048
     scale_melbands=False
     classification_threshold = 0.5
 
@@ -95,17 +124,17 @@ def main():
     logger = logger_factory.create_logger()
 
     worker = Binworker(
-        pool_ref=multiprocessing.Pool,
+        pool_ref=multiprocessing.pool.Pool,
         n_processes=num_workers,
         timeout_seconds=None
     )
 
-    model_provider = DefaultModelProvider(
-        model_ref=instantiate_model,
-        model_args=(n_model_outputs, n_mels, n_time_frames, device),
-        model_kwargs={},
+    model_provider = AstModelProvider(
         logger_factory=logger_factory,
-        verbose=verbose
+        n_model_outputs=n_model_outputs,
+        n_mels=n_mels,
+        n_time_frames=n_time_frames,
+        device=device
     )
 
     clipped_dataset = CachedClippedDataset(
@@ -125,14 +154,6 @@ def main():
         verbose=verbose
     )
 
-    complete_tensordataset = TensorAudioDataset(
-        dataset=clipped_dataset,
-        label_accessor=label_accessor,
-        feature_accessor=feature_accessor
-    )
-
-    complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
-
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
         limit=limit,
@@ -150,6 +171,7 @@ def main():
 
     dataset_verifier = BinaryTensorDatasetVerifier(
         logger_factory=logger_factory,
+        worker=worker,
         verbose=verbose
     )
 
@@ -161,15 +183,6 @@ def main():
             sheet_id=1339590295
         )
     )
-
-    complete_tracker = Tracker(
-        logger_factory=logger_factory,
-        client = SheetClient(
-            logger_factory=logger_factory, 
-            spreadsheet_key=config.SPREADSHEET_ID, 
-            sheet_id=config.SHEET_ID
-        )
-    )
     
     folder = BalancedKFolder(
         n_splits=kfolds,
@@ -177,7 +190,7 @@ def main():
         random_state=None,
         balancer_ref=DatasetBalancer,
         balancer_args=(),
-        balancer_kwargs={"dataset": clipped_dataset,"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
     )
 
     optimizer_provider = GeneralOptimizerProvider(
@@ -226,6 +239,24 @@ def main():
     cv.kfoldcv()
 
     logger.log("Verification run complete!")
+
+    complete_tensordataset = TensorAudioDataset(
+        dataset=clipped_dataset,
+        label_accessor=label_accessor,
+        feature_accessor=feature_accessor
+    )
+
+    complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
+
+    complete_tracker = Tracker(
+        logger_factory=logger_factory,
+        client = SheetClient(
+            logger_factory=logger_factory, 
+            spreadsheet_key=config.SPREADSHEET_ID, 
+            sheet_id=config.SHEET_ID
+        )
+    )
+
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
     #### Perform the proper training run
     cv = CrossEvaluator(

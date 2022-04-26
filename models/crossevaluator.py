@@ -13,13 +13,10 @@ import inspect
 from rich import print
 
 def verify(func):
-    print("func", func)
     def nested(self, *args, **kwargs):
-        print(self, args, kwargs)
-        print(dir(args[0]))
         spec = inspect.getfullargspec(func)
         names = spec.args
-        named_args = {names[i]: args[i] for i in range(len(names))}
+        named_args = {names[i]: args[i] for i in range(min(len(names), len(args)))}
         named_args = {key: value for key, value in named_args.items() if key != "self"}
         named_args = {**named_args, **kwargs}
         

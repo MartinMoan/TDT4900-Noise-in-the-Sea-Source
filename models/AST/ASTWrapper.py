@@ -9,15 +9,30 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
+from interfaces import ILoggerFactory
 from AST import ASTModel
 
 class ASTWrapper(torch.nn.Module):
     """
     AST (Audio Spectrogram Transformer) pretraining wrapper. Enables custom activation
     """
-    def __init__(self, activation_func: torch.nn.Module = None, label_dim=2, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True) -> None:
+    def __init__(
+        self, 
+        logger_factory: ILoggerFactory,
+        activation_func: torch.nn.Module = None, 
+        label_dim=2, 
+        fstride=10, 
+        tstride=10, 
+        input_fdim=128, 
+        input_tdim=1024, 
+        imagenet_pretrain=True, 
+        audioset_pretrain=False, 
+        model_size='base384', 
+        verbose=True) -> None:
+
         super().__init__()
         self._ast = ASTModel(
+            logger_factory=logger_factory,
             label_dim=label_dim, 
             fstride=fstride, 
             tstride=tstride, 

@@ -37,7 +37,7 @@ class VerificationDatasetProvider(IDatasetProvider):
         self.feature_accessor = feature_accessor
         self.label_accessor = label_accessor
         self.balanced = balanced
-        self.randomize = randomize,
+        self.randomize = randomize
         self.balancer = balancer
         self.dataset = clipped_dataset
 
@@ -66,7 +66,6 @@ class VerificationDatasetProvider(IDatasetProvider):
             "label_accessor": self.label_accessor,
             "balanced": self.balanced,
             "randomize": self.randomize,
-            "balancer": self.balancer,
-            "dataset": self.dataset,
+            "balancer": self.balancer
         }
         return out

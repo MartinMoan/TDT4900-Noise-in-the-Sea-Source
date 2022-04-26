@@ -136,7 +136,7 @@ class ASTModel(nn.Module):
                     file.write(res.content)
 
             sd = torch.load(audioset_path, map_location=device)
-            audio_model = ASTModel(label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=False, audioset_pretrain=False, model_size='base384', verbose=False)
+            audio_model = ASTModel(logger_factory=logger_factory, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=False, audioset_pretrain=False, model_size='base384', verbose=False)
             audio_model = torch.nn.DataParallel(audio_model)
             audio_model.load_state_dict(sd, strict=False)
             

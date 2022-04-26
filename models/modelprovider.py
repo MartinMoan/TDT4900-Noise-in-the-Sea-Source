@@ -37,24 +37,11 @@ class DefaultModelProvider(IModelProvider):
 
     @property
     def properties(self) -> Mapping[str, any]:
-        sig = inspect.signature(self.model_ref)
-        parameters = {}
-        for index, (key, value) in enumerate(sig.parameters.items()):
-            if value.default is inspect.Parameter.empty:
-                # The key, value is an arg, not kwarg to the self.model_ref method
-                if index >= len(self.model_args):
-                    args = [key for key, v in sig.parameters.items() if v.default is inspect.Parameter.empty]
-                    raise ValueError(f"The provided model args are not valid for the model class reference. Inspection of the model reference call method found {len(args)} non-keyword arguments, but only {len(self.model_args)} non-keyword arguments was provided to the {self.__class__.__name__}")
-                else:
-                    parameters[key] = self.model_args[index]
-            else:
-                # The key, value is a kwarg, not arg to the self.model_ref method
-                if key in self.model_kwargs.keys():
-                    parameters[key] = self.model_kwargs[key]
-                else:
-                    parameters[key] = value.default
-        print(parameters)
-        exit()
+        parameters = {
+            "model_ref": self.model_ref,
+            "model_args": self.model_args,
+            "model_kwargs": self.model_kwargs,
+        }
         return parameters
 
 class SomeModel(torch.nn.Module):
