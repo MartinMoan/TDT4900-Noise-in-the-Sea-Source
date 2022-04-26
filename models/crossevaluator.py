@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 import multiprocessing
+from datetime import datetime
 import sys
 import pathlib
 
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
 from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 
-# from tools.typechecking import verify
 import inspect
 from rich import print
 
@@ -28,7 +29,6 @@ def verify(func):
 
         func(self, *args, **kwargs)
     return nested
-
 
 class CrossEvaluator(ICrossEvaluator):
     @verify
@@ -58,6 +58,7 @@ class CrossEvaluator(ICrossEvaluator):
         self._saver = saver
     
     def kfoldcv(self) -> None:
+        started_at = datetime.now()
         self._logger.log(f"Requesting dataset from {self._dataset_provider.__class__.__name__}...")
         dataset = self._dataset_provider.provide()
         self._logger.log(f"Done!")
@@ -83,13 +84,15 @@ class CrossEvaluator(ICrossEvaluator):
             metrics = self._metric_computer(truth, predictions)
             
             properties = {
+                "fold": fold,
+                "started_at": started_at.strftime(config.DATETIME_FORMAT),
                 **self._trainer.properties,
                 **self._folder.properties,
                 **self._evaluator.properties,
                 **self._model_provider.properties, 
                 **self._dataset_provider.properties
             }
-            
+
             model_parameters_path = self._saver.save(model, mode="fold_eval")
 
             self._tracker.track(
@@ -101,7 +104,6 @@ class CrossEvaluator(ICrossEvaluator):
         
             self._logger.log(f"End fold {fold}")
             self._logger.log("----------------------------------------")
-
 
 if __name__ == "__main__":
     import torch
