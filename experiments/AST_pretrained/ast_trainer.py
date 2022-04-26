@@ -17,6 +17,7 @@ from tracking.tracker import Tracker
 from tracking.saver import Saver
 from tracking.loggerfactory import LoggerFactory
 from tracking.sheets import SheetClient
+from tracking.localsheet import TabularLogger
 
 from models.trainer import Trainer
 from models.evaluator import Evaluator
@@ -180,13 +181,17 @@ def main():
         verbose=verbose
     )
 
-    verification_tracker = Tracker(
-        logger_factory=logger_factory,
+    tablogger = TabularLogger(
         client = SheetClient(
             logger_factory=logger_factory, 
             spreadsheet_key="1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw", 
             sheet_id=1339590295
         )
+    )
+
+    verification_tracker = Tracker(
+        logger_factory=logger_factory,
+        client = tablogger
     )
     
     folder = BalancedKFolder(
@@ -253,13 +258,17 @@ def main():
 
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
 
-    complete_tracker = Tracker(
-        logger_factory=logger_factory,
+    tablogger = TabularLogger(
         client = SheetClient(
             logger_factory=logger_factory, 
             spreadsheet_key=config.SPREADSHEET_ID, 
             sheet_id=config.SHEET_ID
         )
+    )
+
+    complete_tracker = Tracker(
+        logger_factory=logger_factory,
+        client=tablogger
     )
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")

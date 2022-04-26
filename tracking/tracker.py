@@ -8,17 +8,14 @@ from typing import Mapping, Union, Iterable
 
 import pandas as pd
 from rich import print
-import numpy as np
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from sheets import SheetClient
-from logger import Logger
-from interfaces import ITracker, ILoggerFactory
+from interfaces import ITracker, ILoggerFactory, ITabularLogger
 
 class Tracker(ITracker):
-    def __init__(self, logger_factory: ILoggerFactory, client: SheetClient) -> None:
+    def __init__(self, logger_factory: ILoggerFactory, client: ITabularLogger) -> None:
         super().__init__()
         self.logger = logger_factory.create_logger()
         self.client = client
