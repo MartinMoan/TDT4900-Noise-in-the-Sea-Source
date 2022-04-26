@@ -48,35 +48,7 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         self._verbose = verbose
         self.logger = logger_factory.create_logger()
         self.worker = worker
-
-    def _verify(self, dataset: ITensorAudioDataset, start: int, end: int) -> Tuple[set, Iterable[ValueCount]]:
-        proc = multiprocessing.current_process()
-        unique_label_values = []
-        unique_feature_values = set([])
-        last_logged_at = None
-        for i in range(start, end):
-            should_log, percentage = progress(i, start, end)
-            if should_log or (datetime.now() - last_logged_at >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS)):
-                self.logger.log(f"VerificationWorker PID {proc.pid} - {percentage:.2f}%")
-                last_logged_at = datetime.now()
-
-            X, Y = dataset[i]
-            feature_values = set(np.unique(X.numpy()))
-            unique_feature_values = unique_feature_values.union(feature_values)
-
-            values = list(Y.numpy())
-
-            valuecount = ValueCount(values, count=1)
-            unique_label_values = self._flatten([valuecount], output=unique_label_values)
-
-            valid_labels, _ = self._valid_label_stats(unique_label_values)
-            valid_features, _ = self._valid_feature_values(unique_feature_values)
-            if valid_labels and valid_features:
-                return unique_feature_values, unique_label_values
-
-                
-        return unique_feature_values, unique_label_values
-
+        
     def _flatten(self, existing: Iterable[ValueCount], output: Iterable[ValueCount] = []) -> Iterable[ValueCount]:
         for valuecount in existing:
             if valuecount in output:
@@ -108,42 +80,32 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         if not valid:
             message = "The label values are invalid!" + message
         return valid, message
-
-    def _valid_feature_values(self, unique_features: set) -> Tuple[bool, str]:
-        valid = (len(unique_features) != 0)
-        message = "Features are valid: The number of unique feature values is not 0"
-        if valid:
-            message = f"Features are invalid! : The number of unique feature values is 0 ({len(unique_features)})"
-        return valid, message
-
-    def _agg(
-        self, 
-        results: Iterable[Tuple[Iterable[int], Set[Union[float, int]]]]
-        ) -> Tuple[Iterable[int], Set[Union[float, int]]]:
-        label_value_counts = []
-        unique_feature_values = set([])
-        for index, (feature_values, label_values) in enumerate(results):
-            if self._verbose:
-                self.logger.log(f"Verification aggregation - {((index + 1) / len(results) * 100.0):.1f}%")
-            label_value_counts = self._flatten(label_values, label_value_counts)
-            unique_feature_values = unique_feature_values.union(feature_values)
-        
-        return unique_feature_values, label_value_counts
-
-    def _getstats(self, dataset: ITensorAudioDataset) -> Tuple[set, Iterable[ValueCount]]:
-        return self.worker.apply(dataset, self._verify, aggregation_method=self._agg)
             
     def verify(self, dataset: ITensorAudioDataset) -> bool:
-        unique_features, label_value_counts = self._getstats(dataset)
-        valid_labels, labels_status_message = self._valid_label_stats(label_value_counts=label_value_counts)
-        valid_features, features_status_message = self._valid_feature_values(unique_features)
-        valid = (valid_labels and valid_features)
-        if not valid: 
-            error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
-            error_msg += f"Features values status:\n{features_status_message}"
-            error_msg += f"Label values status:\n{labels_status_message}"
-            raise Exception(error_msg)
-        return valid
+        unique_feature_values = set([])
+        unique_label_values = []
+
+        last_logged_at = None
+        for i in range(len(dataset)):
+            should_log, percentage = progress(i, 0, len(dataset))
+            if last_logged_at is None or should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+                self.logger.log(f"{self.__class__.__name__} {percentage:.2f}")
+            X, Y = dataset[i]
+            feature_values = set(np.unique(X.numpy()))
+            unique_feature_values = unique_feature_values.union(feature_values)
+
+            values = list(Y.numpy())
+
+            valuecount = ValueCount(values, count=1)
+            unique_label_values = self._flatten([valuecount], output=unique_label_values)
+
+            valid_labels, _ = self._valid_label_stats(unique_label_values)
+            valid_features = (len(unique_feature_values) != 0)
+            if valid_labels and valid_features:
+                return True
+        
+        error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
+        raise Exception(error_msg)
         
 if __name__ == "__main__":
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
