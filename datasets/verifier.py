@@ -48,40 +48,9 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
         self._verbose = verbose
         self.logger = logger_factory.create_logger()
         self.worker = worker
-        
-    def _flatten(self, existing: Iterable[ValueCount], output: Iterable[ValueCount] = []) -> Iterable[ValueCount]:
-        for valuecount in existing:
-            if valuecount in output:
-                index = output.index(valuecount)
-                element = output[index]
-                element.count += valuecount.count
-            else:
-                output.append(valuecount)
-        return output
-
-    def _valid_label_stats(self, label_value_counts: Iterable[ValueCount]) -> Tuple[bool, str]:
-        # total = np.sum([valuecount.count for valuecount in label_value_counts])
-        message = "Label values are valid!"
-        valid = True
-        if len(label_value_counts) != 4:
-            valid = False
-            message = f"\n\tThere are not 4 unique types of label/class pairs ([0, 0], [0, 1], [1, 0] and [1, 1]). Found {len(label_value_counts)}"
-        
-        count = None
-        for valuecount in label_value_counts:
-            if valuecount.count == 0:
-                valid = False
-                message += f"\n\tThere are no instances of the label/class pair {valuecount.values} - {valuecount}"
-            if count is None:
-                count = valuecount.count
-            elif valuecount.count != count:
-                valid = False
-                message += f"\n\tThe number of label/class pairs is not equal for all label/class pairs. Expected {count} instances for all label/class pairs but found {valuecount.count} instances of {valuecount.values}"
-        if not valid:
-            message = "The label values are invalid!" + message
-        return valid, message
             
     def verify(self, dataset: ITensorAudioDataset) -> bool:
+        self.logger.log("Verifying dataset...")
         unique_labels = [('Anthropogenic', 'Biophonic'), ('Anthropogenic',), ('Biophonic',), ()]
         found_labels = []
         found_indeces = []
@@ -118,35 +87,8 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
                                     break
                         b = len(uqx) != 0
                         return a and b
-
-                return True
-            
-            
+                return False
         return False
-        # unique_feature_values = set([])
-        # unique_label_values = []
-
-        # last_logged_at = None
-        # for i in range(len(dataset)):
-        #     should_log, percentage = progress(i, 0, len(dataset))
-        #     if last_logged_at is None or should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
-        #         self.logger.log(f"{self.__class__.__name__} - {percentage:.2f}%")
-        #     X, Y = dataset[i]
-        #     feature_values = set(np.unique(X.numpy()))
-        #     unique_feature_values = unique_feature_values.union(feature_values)
-
-        #     values = list(Y.numpy())
-
-        #     valuecount = ValueCount(values, count=1)
-        #     unique_label_values = self._flatten([valuecount], output=unique_label_values)
-
-        #     valid_labels, _ = self._valid_label_stats(unique_label_values)
-        #     valid_features = (len(unique_feature_values) != 0)
-        #     if valid_labels and valid_features:
-        #         return True
-        
-        # error_msg = f"The dataset verifier {self.__class__.__name__} could not verify the dataset {dataset.__class__.__name__}."
-        # raise Exception(error_msg)
         
 if __name__ == "__main__":
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
