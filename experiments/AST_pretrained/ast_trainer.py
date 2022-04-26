@@ -4,6 +4,7 @@ import multiprocessing.pool
 import sys
 import pathlib
 from typing import Mapping
+import socket
 
 import git
 import torch
@@ -114,7 +115,7 @@ def main():
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
-    # Only used for limited dataset during verification run
+    ### Only used for limited dataset during verification run ###
     limit = 42
 
     logger_factory = LoggerFactory(
@@ -122,6 +123,10 @@ def main():
         logger_args=(LogFormatter(),)
     )
     logger = logger_factory.create_logger()
+
+    if not torch.cuda.is_available() and "idun" in socket.gethostname():
+        logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
+        exit(1)
 
     worker = Binworker(
         pool_ref=multiprocessing.pool.Pool,
