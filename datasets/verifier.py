@@ -68,6 +68,12 @@ class BinaryTensorDatasetVerifier(IDatasetVerifier):
 
             valuecount = ValueCount(values, count=1)
             unique_label_values = self._flatten([valuecount], output=unique_label_values)
+
+            valid_labels, _ = self._valid_label_stats(unique_label_values)
+            valid_features, _ = self._valid_feature_values(unique_feature_values)
+            if valid_labels and valid_features:
+                return unique_feature_values, unique_label_values
+
                 
         return unique_feature_values, unique_label_values
 
