@@ -8,9 +8,12 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from datasets.glider.audiodata import LabeledAudioData
-from datasets.glider.clipping import ClippedDataset
-from interfaces import ICustomDataset, IDatasetBalancer
-from datasets.balancing import CachedDatasetBalancer
+from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
+from interfaces import ICustomDataset, IDatasetBalancer, ILoggerFactory
+from tracking.loggerfactory import LoggerFactory
+from tracking.logger import Logger, LogFormatter
+from datasets.balancing import CachedDatasetBalancer, DatasetBalancer
+from datasets.binjob import Binworker
 
 class DatasetLimiter(ICustomDataset):
     def __init__(self, dataset: ICustomDataset, limit: Union[float, int], balancer: IDatasetBalancer, randomize: bool = False, balanced=True) -> None:
@@ -96,5 +99,107 @@ class DatasetLimiter(ICustomDataset):
     def __repr__(self):
         return f"{self.__class__.__name__}(_dataset={repr(self._dataset)}, _dataset_indeces={repr(self._dataset_indeces)})"
 
+class ProportionalDatasetLimiter(ICustomDataset):
+    def __init__(
+        self, 
+        dataset: ICustomDataset, 
+        balancer: IDatasetBalancer,
+        logger_factory: ILoggerFactory,
+        size: Union[float, int]) -> None:
+        super().__init__()
+
+        self.dataset = dataset
+        self.balancer = balancer
+        self.logger = logger_factory.create_logger()
+
+        if isinstance(size, float):
+            if size < 0.0 or size > 1.0:
+                raise ValueError
+            self.scale = size # the percentage of each group/all label groups to draw
+        elif isinstance(size, int):
+            if size < 0:
+                raise ValueError
+            elif size > len(self.dataset):
+                raise ValueError
+            self.scale = size / len(self.dataset)
+        else:
+            raise TypeError
+        
+        distributions = balancer.label_distributions()
+        """
+            Example:
+            distributions = {
+                "anthropogenic": [0, 1, 2...], 
+                "neither": [3, 5, ...],
+                "both": [6, 9, 543, 66, ...],
+                "biophonic": [...]
+            }
+        """
+        self.scaled_distributions = {key: np.random.choice(distributions[key], size=round(len(distributions[key]) * self.scale)) for key in distributions.keys()}
+        self.total_length = np.sum([len(idxs) for idxs in self.scaled_distributions.values()])
+        for key, idxs in self.scaled_distributions.items():
+            part_before = len(distributions[key]) / len(dataset)
+            part_after = len(idxs) / self.total_length
+            self.logger.log(f"Label distribution: '{key}' before scaling {len(distributions[key])} / {len(dataset)} ({part_before*100:.2f}%), after scaling {len(idxs)} / {self.total_length} ({part_after*100:.2f}%)")
+        self.indeces = np.concatenate([indeces for indeces in self.scaled_distributions.values()], axis=0)
+
+    def __getitem__(self, index: int) -> LabeledAudioData:
+        return self.dataset[self.indeces[index]]
+
+    def __len__(self) -> int:
+        return len(self.indeces)
+
+    def classes(self) -> Mapping[str, int]:
+        return self.dataset.classes()
+    
+    def example_shapes(self) -> Iterable[tuple[int, ...]]:
+        return self.dataset.example_shapes()
+
+    def as_dict(self):
+        relevant_values = {
+            "scaled_distributions": self.scaled_distributions,
+            "total_length": self.total_length,
+            "indeces": self.indeces,
+            "dataset": self.dataset,
+            "distributions": self.distributions
+        }
+        return relevant_values
+
+    def __repr__(self):
+        relevant_values = self.as_dict()
+        out = f"{self.__class__.__name__}( {repr(relevant_values)} )"
+        return repr(out)
+
+    def __str__(self):
+        relevant_values = self.as_dict()
+        out = f"{self.__class__.__name__}( {str(relevant_values)} )"
+        return str(out)
+
 if __name__ == "__main__":
-    clipped = ClippedDataset()
+    logger_factory = LoggerFactory(
+        logger_type=Logger,
+        logger_args=(LogFormatter(),)
+    )
+    worker = Binworker()
+
+    clipped = CachedClippedDataset(
+        logger_factory=logger_factory,
+        worker=worker,
+        clip_duration_seconds=10.0,
+        clip_overlap_seconds=4.0
+    )
+    balancer = CachedDatasetBalancer(
+        dataset=clipped,
+        logger_factory=logger_factory,
+        worker=worker,
+        force_recache=False
+    )
+
+    limited = ProportionalDatasetLimiter(
+        dataset=clipped,
+        balancer=balancer,
+        logger_factory=logger_factory,
+        size=20
+    )
+
+    print(len(limited), len(clipped), len(limited) / len(clipped))

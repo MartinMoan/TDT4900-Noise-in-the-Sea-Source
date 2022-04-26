@@ -48,7 +48,7 @@ class LabelErrorCorrector(ICustomDataset):
             del self._procs[i]
 
     def plot(self, labeled_audiodata: LabeledAudioData) -> None:
-        plt.switch_backend('TkAGG')
+        # plt.switch_backend('TkAGG')
         spectcomputer = MelSpectrogramFeatureAccessor(logger_factory=self.factory)
 
         samples, sr = labeled_audiodata.samples, labeled_audiodata.sampling_rate
@@ -58,6 +58,8 @@ class LabelErrorCorrector(ICustomDataset):
         start, end = labeled_audiodata.start_time, labeled_audiodata.end_time
         reduced = nr.reduce_noise(y=samples, sr=sr, prop_decrease=1.0)
 
+        fig = plt.figure(figsize=(16, 9))
+        
         axes = plt.axes([0.01, 1.0-(1.0/rows), 0.1, 0.05])
         playbutton = Button(axes, "Play")
         playbutton.on_clicked(self._play(samples, sr))
@@ -68,6 +70,7 @@ class LabelErrorCorrector(ICustomDataset):
 
         classes = labeled_audiodata.labels.source_class_specific.unique()
         c = ", ".join(classes)
+        
         plt.suptitle(f"{labeled_audiodata.filepath}\n{start} {end}\n{c}")
         plt.subplot(rows, 1, 1)
         plt.imshow(spect.squeeze(), aspect="auto")
@@ -104,10 +107,10 @@ class LabelErrorCorrector(ICustomDataset):
 
         S = spectcomputer._compute(reduced, sr)
         plt.imshow(S.squeeze(), aspect="auto")
-        # plt.tight_layout()
+        plt.tight_layout()
 
-        figM = plt.get_current_fig_manager()
-        figM.full_screen_toggle()
+        # figM = plt.get_current_fig_manager()
+        # figM.full_screen_toggle()
         
         plt.show()
         self._stop()

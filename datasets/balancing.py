@@ -44,39 +44,39 @@ class DatasetBalancer(IDatasetBalancer):
         self.worker = worker
 
         self._dataset = dataset
-        self._split_labels: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
+        self._label_distributions: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
     
         if self._min_size == 0:
-            raise Exception(f"Unable to balance dataset, because there is a label presence pair that has no values: {str({key: len(self._split_labels[key]) for key in self._split_labels.keys()})}")
+            raise Exception(f"Unable to balance dataset, because there is a label presence pair that has no values: {str({key: len(self._label_distributions[key]) for key in self._label_distributions.keys()})}")
 
         if verbose:
             self.log_balanced_stats()
 
     @property
     def _min_size(self):
-        return np.min([len(self._split_labels[key]) for key in self._split_labels.keys()], axis=0)
+        return np.min([len(self._label_distributions[key]) for key in self._label_distributions.keys()], axis=0)
 
     @property
     def _both_labels_indeces(self) -> Iterable[int]:
-        return self._split_labels["both"]
+        return self._label_distributions["both"]
 
     @property
     def _neither_labels_indeces(self) -> Iterable[int]:
-        return self._split_labels["neither"]
+        return self._label_distributions["neither"]
 
     @property
     def _anthropogenic_indeces(self) -> Iterable[int]:
-        return self._split_labels["anthropogenic"]
+        return self._label_distributions["anthropogenic"]
 
     @property
     def _biophonic_indeces(self) -> Iterable[int]:
-        return self._split_labels["biophonic"]
+        return self._label_distributions["biophonic"]
 
     @property
     def _indeces_for_training(self) -> Mapping[str, Iterable[int]]:
         out = {}
-        for key in self._split_labels.keys():
-            indeces: Iterable[int] = np.array(self._split_labels[key])
+        for key in self._label_distributions.keys():
+            indeces: Iterable[int] = np.array(self._label_distributions[key])
             # train_part = np.random.choice(indeces, size=min_size, replace=False)
             # eval_part = indeces[~np.isin(indeces, train_part)]
             train_part = indeces[:self._min_size]
@@ -87,8 +87,8 @@ class DatasetBalancer(IDatasetBalancer):
     @property
     def _indeces_for_eval(self) -> Mapping[str, Iterable[int]]:
         out = {}
-        for key in self._split_labels.keys():
-            indeces = np.array(self._split_labels[key])
+        for key in self._label_distributions.keys():
+            indeces = np.array(self._label_distributions[key])
             eval_part = indeces[self._min_size:]
             out[key] = eval_part
         return out
@@ -105,8 +105,8 @@ class DatasetBalancer(IDatasetBalancer):
         for key in self._indeces_for_eval.keys():
             self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
         self.logger.log("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
-        for key in self._split_labels.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._split_labels[key])}")
+        for key in self._label_distributions.keys():
+            self.logger.log(f"Number of instances with label '{key}': {len(self._label_distributions[key])}")
 
         num_for_training = np.sum([len(self._indeces_for_training[key]) for key in self._indeces_for_training.keys()])
         num_for_eval = np.sum([len(self._indeces_for_eval[key]) for key in self._indeces_for_eval.keys()])
@@ -165,6 +165,9 @@ class DatasetBalancer(IDatasetBalancer):
         indeces = np.concatenate([self._indeces_for_training[key] for key in self._indeces_for_training], axis=0)
         np.random.shuffle(indeces)
         return indeces.astype(int)
+
+    def label_distributions(self) -> Mapping[str, Iterable[int]]:
+        return self._label_distributions
 
 class BalancedKFolder(IFolder):
     def __init__(
