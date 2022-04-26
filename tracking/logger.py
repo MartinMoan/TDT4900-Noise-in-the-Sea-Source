@@ -36,6 +36,8 @@ def prettify(arg, indent=4):
 
 class LogFormatter(ILogFormatter):
     def header(self, *args, with_tagstyle: bool = True, **kwargs) -> str:
+        dt = datetime.now().strftime("%Y.%m.%d %H:%M:%S.%f")
+        dts = f"[ {dt} ]"
         tag = ""
         stack = inspect.stack()
         
@@ -65,7 +67,7 @@ class LogFormatter(ILogFormatter):
         header = f"[ {tagstyle_start}{tag}{tagstyle_end} PID {proc.pid} {caller_name}:{lineno} ]"
         header_spacing = 60 - (len(header) - (len(tagstyle_start) + len(tagstyle_end)))
         spacer = "".join([" " for i in range(header_spacing)])
-        header = f"{header}{spacer}:"
+        header = f"{dts}{header}{spacer}:"
         return header
 
     def format(self, *args, **kwargs) -> Iterable[str]:
