@@ -72,7 +72,7 @@ class CrossEvaluator(ICrossEvaluator):
         
         self._logger.log(f"Starting to perform K-fold cross evaluation with folder properties: {self._folder.properties}")
         
-        all_metrics = {}
+        all_metrics = []
         
         for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
             self._logger.log("----------------------------------------")
