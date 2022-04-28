@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ITrainer, ITensorAudioDataset, ILoggerFactory, IOptimizerProvider
+from interfaces import ITrainer, ITensorAudioDataset, ILoggerFactory, IOptimizerProvider, ITracker, IMetricComputer
 from tools.typechecking import verify
 
 class Trainer(ITrainer):
@@ -22,15 +22,18 @@ class Trainer(ITrainer):
         self, 
         logger_factory: ILoggerFactory, 
         optimizer_provider: IOptimizerProvider,
+        tracker: ITracker,
+        metric_computer: IMetricComputer,
         batch_size: int,
         epochs: int,
         lossfunction: torch.nn.modules.loss._Loss,
         num_workers: int = multiprocessing.cpu_count(),
-        device: str = None
-        ) -> None:
+        device: str = None) -> None:
         super().__init__()
-
+        
+        self.tracker = tracker
         self.logger = logger_factory.create_logger()
+        self.metric_computer = metric_computer
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.epochs = epochs
@@ -61,7 +64,7 @@ class Trainer(ITrainer):
         last_print = None
         model.train()
         for epoch in range(self.epochs):
-            epoch_loss = 0
+            cumulative_epoch_loss = 0
             # self.logger.log(f"Beginning epoch {epoch + 1} / {self.epochs}...")
             for batch, (X, Y) in enumerate(trainset):
                 # self.logger.log(f"Start batch {batch + 1} / {len(trainset)} in epoch {epoch + 1} / {self.epochs}...")
@@ -71,22 +74,38 @@ class Trainer(ITrainer):
                 
                 optimizer.zero_grad()
 
+                # metrics = self.metric_computer(Y, Yhat)
+
                 loss = self.lossfunction(Yhat, Y)
                 
                 loss.backward()
                 optimizer.step()
 
-                current_loss = loss.item()
+                batch_loss = loss.item()
 
-                if np.isnan(current_loss):
+                self.tracker.track(
+                    {
+                        "epoch": epoch, 
+                        "batch_loss": batch_loss
+                    }
+                )
+
+                if np.isnan(batch_loss):
                     raise Exception("Loss is nan...")
                 
-                epoch_loss += current_loss
+                cumulative_epoch_loss += batch_loss
                 
                 if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
-                    self.logger.log(f"Training epoch {epoch + 1} / {self.epochs} batch {batch + 1} / {len(trainset)} loss {current_loss:.5f}")
+                    self.logger.log(f"Training epoch {epoch + 1} / {self.epochs} batch {batch + 1} / {len(trainset)} loss {batch_loss:.5f}")
                     last_print = datetime.now()
             
+            avg_epoch_loss = cumulative_epoch_loss / len(trainset)
+            self.tracker.track(
+                {
+                    "loss": avg_epoch_loss, 
+                    "epoch": epoch
+                }
+            )
             # self.logger.log("Epoch complete!")
         self.logger.log("Train iterations complete!")
         return model

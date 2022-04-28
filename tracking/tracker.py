@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import abc
 import pathlib
 import sys
 import os

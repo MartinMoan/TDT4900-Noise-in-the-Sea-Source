@@ -18,6 +18,7 @@ from tracking.saver import Saver
 from tracking.loggerfactory import LoggerFactory
 from tracking.sheets import SheetClient
 from tracking.localsheet import TabularLogger
+from tracking.wandb_tracker import WandbTracker
 
 from models.trainer import Trainer
 from models.evaluator import Evaluator
@@ -38,6 +39,10 @@ from models.crossevaluator import CrossEvaluator
 
 from metrics import BinaryMetricComputer
 from tools.typechecking import verify
+
+from mocks.mockmodelprovider import MockModelProvider
+from mocks.mockdatasetprovider import MockDatasetProvider
+from mocks.mocktensordataset import MockTensorDataset
 
 import config
 
@@ -135,13 +140,14 @@ def main():
         timeout_seconds=None
     )
 
-    model_provider = AstModelProvider(
-        logger_factory=logger_factory,
-        n_model_outputs=n_model_outputs,
-        n_mels=n_mels,
-        n_time_frames=n_time_frames,
-        device=device
-    )
+    # model_provider = AstModelProvider(
+    #     logger_factory=logger_factory,
+    #     n_model_outputs=n_model_outputs,
+    #     n_mels=n_mels,
+    #     n_time_frames=n_time_frames,
+    #     device=device
+    # )
+    model_provider = MockModelProvider((2,))
 
     clipped_dataset = CachedClippedDataset(
         logger_factory=logger_factory,
@@ -181,11 +187,8 @@ def main():
         verbose=verbose
     )
 
-    tablogger = TabularLogger()
-
-    verification_tracker = Tracker(
-        logger_factory=logger_factory,
-        client = tablogger
+    verification_tracker = WandbTracker(
+        name=f"VERIFICATION RUN: AST Pretrained Frozen"
     )
     
     folder = BalancedKFolder(
@@ -203,9 +206,17 @@ def main():
         optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
     )
 
-    trainer = Trainer(
+    metric_computer = BinaryMetricComputer(
+        logger_factory=logger_factory,
+        class_dict=clipped_dataset.classes(),
+        threshold=classification_threshold
+    )
+
+    verification_trainer = Trainer(
         logger_factory=logger_factory,
         optimizer_provider=optimizer_provider,
+        metric_computer=metric_computer,
+        tracker=verification_tracker,
         batch_size=batch_size,
         epochs=epochs,
         lossfunction=lossfunction,
@@ -219,12 +230,6 @@ def main():
         device=device
     )
 
-    metric_computer = BinaryMetricComputer(
-        logger_factory=logger_factory,
-        class_dict=clipped_dataset.classes(),
-        threshold=classification_threshold
-    )
-
     saver = Saver(logger_factory=logger_factory)
 
     #### Perform "verificaiton" run to check that everything is working as expected.
@@ -235,7 +240,7 @@ def main():
         dataset_verifier=dataset_verifier,
         tracker=verification_tracker,
         folder=folder,
-        trainer=trainer,
+        trainer=verification_trainer,
         evaluator=evaluator,
         metric_computer=metric_computer,
         saver=saver
@@ -251,12 +256,21 @@ def main():
     )
 
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
+    
+    complete_tracker = WandbTracker(
+        name=f"AST Pretrained Frozen"
+    )
 
-    tablogger = TabularLogger()
-
-    complete_tracker = Tracker(
+    trainer = Trainer(
         logger_factory=logger_factory,
-        client=tablogger
+        optimizer_provider=optimizer_provider,
+        tracker=complete_tracker,
+        metric_computer=metric_computer,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers,
+        device=device
     )
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
@@ -268,7 +282,7 @@ def main():
         dataset_verifier=dataset_verifier,
         tracker=complete_tracker,
         folder=folder,
-        trainer=trainer,
+        trainer=verification_trainer,
         evaluator=evaluator,
         metric_computer=metric_computer,
         saver=saver

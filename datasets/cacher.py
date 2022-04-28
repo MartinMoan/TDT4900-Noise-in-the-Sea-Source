@@ -35,7 +35,7 @@ class Cacher:
         }
         return hashable_arguments
 
-    def hash(self, obj_ref: Type, cache_dir: pathlib.PosixPath, to_hash: Mapping[str, any]):
+    def hash(self, cache_dir: pathlib.PosixPath, to_hash: Mapping[str, any]):
         hasher = hashlib.sha256()
         with_defaults = Cacher._append_defaults(to_hash)
         hasher.update(repr(with_defaults).encode())
@@ -70,7 +70,7 @@ class Cacher:
         else:
             to_hash = hashable_arguments
         
-        pickle_path = self.hash(obj_ref, cache_dir, to_hash)
+        pickle_path = self.hash(cache_dir, to_hash)
         cache_list = [path for path in cache_dir.glob("**/*.pickle")]
         
         if not config.CACHING_ENABLED:

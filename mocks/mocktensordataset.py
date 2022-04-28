@@ -8,7 +8,7 @@ import torch
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import ITensorAudioDataset, ILoggerFactory
-from datasets.glider.audiodata import AudioData
+from datasets.glider.audiodata import AudioData, LabeledAudioData
 
 class MockTensorDataset(ITensorAudioDataset):
     def __init__(
@@ -29,7 +29,7 @@ class MockTensorDataset(ITensorAudioDataset):
         return self.size
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
-        # self.logger.log(f"{self.__class__.__name__} {index} / {len(self)}")
+        self.logger.log(f"{self.__class__.__name__} {index} / {len(self)}")
         features = torch.rand(*self._feature_shape)
         labels = torch.randint(0, 2, self._label_shape)
         return features, labels
@@ -48,3 +48,6 @@ class MockTensorDataset(ITensorAudioDataset):
 
     def classes(self) -> Mapping[str, int]:
         return self._classes
+
+    def audiodata(self, index: int) -> LabeledAudioData:
+        return super().audiodata(index)

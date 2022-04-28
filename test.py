@@ -1,24 +1,49 @@
 #!/usr/bin/env python3
-import sys
-import pathlib
-from typing import Tuple, Iterable, Mapping
+import os
+import random
+from datetime import datetime
+from rich import print
+import time
+import sklearn
+from sklearn import svm
+import wandb
 
-import git
-import torch
+# X, Y = sklearn.datasets.load_iris(return_X_y=True)
+# model = svm.SVC()
 
-sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from models import saver
-from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, ITensorAudioDataset
+wandb.init(
+    project="testproject", 
+    entity="martinmoan",
+    notes="This is a note",
+    tags=["testrun"]
+)
 
-class Test(IEvaluator):
-    def evaluate(self, model: torch.nn.Module, dataset_indeces: Iterable[int], dataset: ITensorAudioDataset) -> Tuple[torch.Tensor, torch.Tensor]:
-        return super().evaluate(model, dataset_indeces, dataset)
+uname = os.uname()
+infrastructure = {
+    "nodename": uname.nodename,
+    "release": uname.release,
+    "sysname": uname.sysname,
+    "version": uname.version,
+    "machine": uname.machine
+}
 
-    @property
-    def properties(self) -> Mapping[str, any]:
-        return super().properties
+now = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+wandb.run.name = f"TestModel {now}"
+wandb.config = {
+    "learning_rate": 0.001,
+    "something": "with a value",
+    "architecture": "No model...",
+    "infrastructure": infrastructure
+}
 
-if __name__ == "__main__":
-    t = Test()
-    
+for i in range(100):
+    print(i)
+    to_log = {
+        "loss": 1/(i+1),
+        "accuracy": random.random(),
+        "f1": {
+            "Biophonic": random.random(),
+            "Anthropogenic": random.random()
+        }
+    }
+    wandb.log(to_log)
