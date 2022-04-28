@@ -35,7 +35,10 @@ class CachedDatasetBalancer(IDatasetBalancer):
         cacher = Cacher(logger_factory=logger_factory)
         init_args = (dataset, logger_factory, worker)
         hashable_arguments = {"dataset": dataset}
-        return cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
+        balancer = cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
+        balancer._logger = logger_factory.create_logger()
+        balancer.worker = worker
+        return balancer
 
 class DatasetBalancer(IDatasetBalancer):
     def __init__(self, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, verbose=True) -> None:
