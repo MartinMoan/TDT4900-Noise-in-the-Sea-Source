@@ -140,16 +140,15 @@ def main():
         timeout_seconds=None
     )
 
-    # model_provider = AstModelProvider(
-    #     logger_factory=logger_factory,
-    #     n_model_outputs=n_model_outputs,
-    #     n_mels=n_mels,
-    #     n_time_frames=n_time_frames,
-    #     device=device
-    # )
-    model_provider = MockModelProvider((2,))
+    model_provider = AstModelProvider(
+        logger_factory=logger_factory,
+        n_model_outputs=n_model_outputs,
+        n_mels=n_mels,
+        n_time_frames=n_time_frames,
+        device=device
+    )
 
-    clipped_dataset = CachedClippedDataset(
+    clipped_dataset = ClippedDataset(
         logger_factory=logger_factory,
         worker=worker,
         clip_nsamples=clip_length_samples,
@@ -169,7 +168,7 @@ def main():
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
         limit=limit,
-        balancer=CachedDatasetBalancer(
+        balancer=DatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
             worker=worker,
@@ -233,6 +232,10 @@ def main():
     saver = Saver(logger_factory=logger_factory)
 
     #### Perform "verificaiton" run to check that everything is working as expected.
+    logger.log("\n\n\n")
+    logger.log("Performing verification run...")
+    logger.log("\n\n\n")
+
     cv = CrossEvaluator(
         model_provider=model_provider,
         logger_factory=logger_factory,
@@ -246,8 +249,11 @@ def main():
         saver=saver
     )
     cv.kfoldcv()
-
+    
+    logger.log("\n\n\n")
     logger.log("Verification run complete!")
+    logger.log("\n\n\n")
+    exit()
 
     complete_tensordataset = TensorAudioDataset(
         dataset=clipped_dataset,

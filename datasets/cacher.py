@@ -103,7 +103,13 @@ class Cacher:
         return obj
 
     def _load(self, obj_ref: Type, pickle_path: pathlib.PosixPath, **kwargs) -> any:
-        self.logger.log(f"Pickling {obj_ref.__name__} object from {pickle_path}")        
+        print(self)
+        print(self.logger)
+        print(dir(self.logger))
+        print(type(self.logger))
+        from interfaces import ILogger
+        print(isinstance(self.logger, ILogger))
+        self.logger.log(f"Pickling {obj_ref.__name__} object from {pickle_path}")
         with open(pickle_path, "rb") as binary_file:
             obj = pickle.load(binary_file)
             self.logger.log(f"Pickled object {obj.__class__.__name__}")

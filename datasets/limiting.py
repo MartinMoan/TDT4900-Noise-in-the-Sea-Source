@@ -45,7 +45,7 @@ class DatasetLimiter(ICustomDataset):
         num_in_subset = self._parse_subset_size(limit)
         raw_indeces = np.arange(0, len(dataset))
         if balance:
-            splits = self.balancer._split_labels
+            splits = self.balancer.label_distributions()
             num_classes = len(splits.keys()) # both, neither, anthropogenic, biophonic
             n_per_class = int(num_in_subset / num_classes)
             class_numbers = {key: n_per_class for key in splits.keys()}
