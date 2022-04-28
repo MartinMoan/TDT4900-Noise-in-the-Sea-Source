@@ -36,3 +36,4 @@ dependencies:
   - wget
   - zipp
   - pydrive
+  - wandb

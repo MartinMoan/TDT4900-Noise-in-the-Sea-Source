@@ -6,11 +6,5 @@ from typing import Mapping, Union
 
 class ITracker(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def track(
-        metrics: Mapping[str, float], 
-        model: str, 
-        model_parameters_path: Union[str, pathlib.PosixPath], 
-        *args,
-        **kwargs) -> None:
-
+    def track(trackables: Mapping[str, any]) -> None:
         raise NotImplementedError

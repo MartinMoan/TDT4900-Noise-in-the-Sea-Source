@@ -79,6 +79,8 @@ class LogFormatter(ILogFormatter):
 
 class Logger(ILogger):
     def __init__(self, logformatter: ILogFormatter):
+        if not isinstance(logformatter, ILogFormatter):
+            raise TypeError(f"Arugment logformatter has incorrect type. Expected {ILogFormatter} but received {type(logformatter)}")
         self.logformatter = logformatter
         
         log_dir = config.HOME_PROJECT_DIR.joinpath("logs")

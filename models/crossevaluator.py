@@ -9,7 +9,7 @@ import git
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
-
+from tools.mapagg import MappingAggregator
 import inspect
 from rich import print
 
@@ -71,6 +71,9 @@ class CrossEvaluator(ICrossEvaluator):
         self._logger.log("Dataset was verified!")
         
         self._logger.log(f"Starting to perform K-fold cross evaluation with folder properties: {self._folder.properties}")
+        
+        all_metrics = {}
+        
         for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
             self._logger.log("----------------------------------------")
             self._logger.log(f"Start fold {fold}")
@@ -82,28 +85,28 @@ class CrossEvaluator(ICrossEvaluator):
             truth, predictions = self._evaluator.evaluate(model, test_samples, dataset)
 
             metrics = self._metric_computer(truth, predictions)
+            self._logger.log(f"Fold {fold} metrics: ", metrics)
             
-            properties = {
-                "fold": fold,
-                "started_at": started_at.strftime(config.DATETIME_FORMAT),
-                **self._trainer.properties,
-                **self._folder.properties,
-                **self._evaluator.properties,
-                **self._model_provider.properties, 
-                **self._dataset_provider.properties
-            }
+            self._tracker.track(
+                {
+                    "fold": fold,
+                    **metrics
+                }
+            )
+
+            all_metrics.append(metrics)
 
             model_parameters_path = self._saver.save(model, mode="fold_eval")
-
-            self._tracker.track(
-                metrics,
-                model.__class__.__name__, 
-                model_parameters_path,
-                properties,
-                fold=fold)
         
             self._logger.log(f"End fold {fold}")
             self._logger.log("----------------------------------------")
+        
+        cumulative_metrics = {}
+        for metrics in all_metrics:
+            cumulative_metrics = MappingAggregator.add(cumulative_metrics, metrics)
+        cumulative_metrics = MappingAggregator.div(cumulative_metrics, len(all_metrics))
+        self._logger.log("Mean metrics:", cumulative_metrics)
+        self._tracker.track({"eval": cumulative_metrics})
 
 if __name__ == "__main__":
     import torch

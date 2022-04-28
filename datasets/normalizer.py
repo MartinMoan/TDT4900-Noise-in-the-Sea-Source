@@ -98,7 +98,7 @@ class CahcedStandardScalerTransformerDecorator(ITransformer):
             return self._decorated
         
         self._decorated = self._decorated.fit(dataset)
-        pickle_path = cacher.hash(StandardScalerTransformer, cache_dir, Cacher._append_defaults(hashable_arguments))
+        pickle_path = cacher.hash(cache_dir, Cacher._append_defaults(hashable_arguments))
         
         cacher.dump(self._decorated, pickle_path)
         return self._decorated

@@ -45,7 +45,7 @@ class IMetricComputer(metaclass=abc.ABCMeta):
         for func in self.metrics:
             result = f"{func.__name__} did not compute"
             try:
-                result = func(truth, preds)
+                result = func(truth.detach().numpy(), preds.detach().numpy())
             except Exception as ex: 
                 result = f"{func.__name__} failed to compute with the following exception: {str(ex)}"
                 exceptions.append(ex)

@@ -1,0 +1,1 @@
+{"val": {"loss": 0.1517359841552942, "accuracy": 0.48850903478133745, "f1": {"Biophonic": 0.479758456184206, "Anthropogenic": 0.31000213103373764}, "roc_auc": {"Biophonic": 0.9426972295879881, "Anthropogenic": 0.23241399100895388}}, "_timestamp": 1651067007, "_runtime": 4, "_step": 0, "_wandb": {"runtime": 5}}
