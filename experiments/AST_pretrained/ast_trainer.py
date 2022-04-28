@@ -30,7 +30,7 @@ from datasets.folder import BasicKFolder
 from datasets.balancing import BalancedKFolder, DatasetBalancer, CachedDatasetBalancer
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
 from datasets.balancing import BalancedKFolder
-from datasets.limiting import DatasetLimiter
+from datasets.limiting import DatasetLimiter, ProportionalDatasetLimiter
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
 from datasets.provider import BasicDatasetProvider, VerificationDatasetProvider
 from datasets.verifier import BinaryTensorDatasetVerifier
@@ -122,7 +122,8 @@ def main():
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
     ### Only used for limited dataset during verification run ###
-    limit = 42
+    verification = 42
+    proper_dataset_limit = 10000 # number of clips in proper dataset
 
     logger_factory = LoggerFactory(
         logger_type=Logger, 
@@ -167,7 +168,7 @@ def main():
 
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
-        limit=limit,
+        limit=verification,
         balancer=CachedDatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
@@ -233,7 +234,11 @@ def main():
 
     #### Perform "verificaiton" run to check that everything is working as expected.
     logger.log("\n\n\n")
+    logger.log("-------------------------------------------------------")
+    logger.log("\n\n\n")
     logger.log("Performing verification run...")
+    logger.log("\n\n\n")
+    logger.log("-------------------------------------------------------")
     logger.log("\n\n\n")
 
     cv = CrossEvaluator(
@@ -249,14 +254,30 @@ def main():
         saver=saver
     )
     cv.kfoldcv()
-    
-    logger.log("\n\n\n")
     logger.log("Verification run complete!")
+
     logger.log("\n\n\n")
-    exit()
+    logger.log("-------------------------------------------------------")
+    logger.log("\n\n\n")
+    logger.log("Beginning proper cross evaluation!")
+    logger.log("\n\n\n")
+    logger.log("-------------------------------------------------------")
+    logger.log("\n\n\n")
+
+    limited_dataset = ProportionalDatasetLimiter(
+        clipped_dataset,
+        balancer=DatasetBalancer(
+            dataset=clipped_dataset,
+            logger_factory=logger_factory,
+            worker=worker, 
+            verbose=verbose
+        ),
+        logger_factory=logger_factory,
+        size=proper_dataset_limit
+    )
 
     complete_tensordataset = TensorAudioDataset(
-        dataset=clipped_dataset,
+        dataset=limited_dataset,
         label_accessor=label_accessor,
         feature_accessor=feature_accessor
     )
@@ -288,7 +309,7 @@ def main():
         dataset_verifier=dataset_verifier,
         tracker=complete_tracker,
         folder=folder,
-        trainer=verification_trainer,
+        trainer=trainer,
         evaluator=evaluator,
         metric_computer=metric_computer,
         saver=saver

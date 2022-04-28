@@ -97,7 +97,7 @@ class CrossEvaluator(ICrossEvaluator):
             all_metrics.append(metrics)
 
             model_parameters_path = self._saver.save(model, mode="fold_eval")
-        
+            self._logger.log(f"Saved model parameters for fold {fold} to:", model_parameters_path)
             self._logger.log(f"End fold {fold}")
             self._logger.log("----------------------------------------")
         
