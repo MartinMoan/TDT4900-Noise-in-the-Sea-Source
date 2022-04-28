@@ -85,14 +85,6 @@ class Cacher:
             return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
 
         obj = self._load(obj_ref, pickle_path)
-        # # defaults = {**Cacher._args_by_inspection(obj_ref, *init_args), **init_kwargs}
-        # defaults = init_kwargs
-        # for key, value in defaults.items():
-        #     sval = str(value)
-        #     if len(sval) > 40:
-        #         sval = f"{sval[:20]}...{sval[-20:]}"
-        #     self.logger.log(f"Setting {obj.__class__.__name__}.{key} to {sval}")
-        #     setattr(obj, key, value)
         return obj
 
     def _instantiate(self, obj_ref: Type, pickle_path: pathlib.PosixPath, *args: tuple[any], **kwargs: Mapping[str, any]) -> any:
@@ -103,12 +95,6 @@ class Cacher:
         return obj
 
     def _load(self, obj_ref: Type, pickle_path: pathlib.PosixPath, **kwargs) -> any:
-        print(self)
-        print(self.logger)
-        print(dir(self.logger))
-        print(type(self.logger))
-        from interfaces import ILogger
-        print(isinstance(self.logger, ILogger))
         self.logger.log(f"Pickling {obj_ref.__name__} object from {pickle_path}")
         with open(pickle_path, "rb") as binary_file:
             obj = pickle.load(binary_file)

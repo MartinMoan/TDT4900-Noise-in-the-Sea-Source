@@ -33,7 +33,7 @@ class AudioFileInfoProvider(IAudioFileInfoProvider):
         last_logged_at = datetime.now()
         for i in range(start, min(end, len(files))):
             should_log, percentage = progress(i, start, end)
-            if should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+            if should_log or (datetime.now() - last_logged_at) >= timedelta(seconds=config.LOG_INTERVAL_SECONDS):
                 self.logger.log(f"{self.__class__.__name__}Worker PID {proc.pid} - {percentage:.2f}%")
             
             info = WaveFileInspector.info(files[i])

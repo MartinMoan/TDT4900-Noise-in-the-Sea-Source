@@ -54,7 +54,7 @@ class Evaluator(IEvaluator):
                 truth = cat(truth, Y)
                 predictions = cat(predictions, Yhat)
                 
-                if last_print is None or (datetime.now() - last_print) >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+                if last_print is None or (datetime.now() - last_print) >= timedelta(seconds=config.LOG_INTERVAL_SECONDS):
                     self.logger.log(f"Eval index {index} / {len(testset)}")
                     last_print = datetime.now()
             self.logger.log("Eval iterations complete!")

@@ -95,7 +95,7 @@ class Trainer(ITrainer):
                 
                 cumulative_epoch_loss += batch_loss
                 
-                if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.PRINT_INTERVAL_SECONDS):
+                if last_print is None or datetime.now() - last_print >= timedelta(seconds=config.LOG_INTERVAL_SECONDS):
                     self.logger.log(f"Training epoch {epoch + 1} / {self.epochs} batch {batch + 1} / {len(trainset)} loss {batch_loss:.5f}")
                     last_print = datetime.now()
             
