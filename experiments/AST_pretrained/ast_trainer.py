@@ -148,7 +148,7 @@ def main():
         device=device
     )
 
-    clipped_dataset = ClippedDataset(
+    clipped_dataset = CachedClippedDataset(
         logger_factory=logger_factory,
         worker=worker,
         clip_nsamples=clip_length_samples,
@@ -168,7 +168,7 @@ def main():
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
         limit=limit,
-        balancer=DatasetBalancer(
+        balancer=CachedDatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
             worker=worker,
