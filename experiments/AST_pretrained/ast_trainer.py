@@ -13,11 +13,8 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 from interfaces import ILoggerFactory, IModelProvider
 
 from tracking.logger import Logger, LogFormatter
-from tracking.tracker import Tracker
 from tracking.saver import Saver
 from tracking.loggerfactory import LoggerFactory
-from tracking.sheets import SheetClient
-from tracking.localsheet import TabularLogger
 from tracking.wandb_tracker import WandbTracker
 
 from models.trainer import Trainer
