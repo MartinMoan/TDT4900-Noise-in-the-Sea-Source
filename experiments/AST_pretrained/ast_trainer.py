@@ -399,7 +399,7 @@ def main():
     epochs = 3
     lossfunction = torch.nn.BCEWithLogitsLoss()
     num_workers = min(multiprocessing.cpu_count(), 32) # DataLoader has max workers of 32
-    lr = 0.001
+    lr = 0.00001
     weight_decay = 1e-5
     kfolds = 5
     n_model_outputs = 2
