@@ -54,7 +54,7 @@ class ClippedDataset(ICustomDataset):
         
         # fileinfoprovider = AudioFileInfoProvider(filelist=files, logger_factory=logger_factory, worker=worker)
         # self._audiofiles = fileinfoprovider.files()
-        self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH, index=False)
+        self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
 
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
 
