@@ -175,7 +175,8 @@ def main():
         randomize=True,
         balanced=True,
         feature_accessor=feature_accessor,
-        label_accessor=label_accessor
+        label_accessor=label_accessor,
+        logger_factory=logger_factory
     )
 
     dataset_verifier = BinaryTensorDatasetVerifier(
@@ -276,7 +277,8 @@ def main():
     complete_tensordataset = TensorAudioDataset(
         dataset=limited_dataset,
         label_accessor=label_accessor,
-        feature_accessor=feature_accessor
+        feature_accessor=feature_accessor,
+        logger_factory=logger_factory
     )
 
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
