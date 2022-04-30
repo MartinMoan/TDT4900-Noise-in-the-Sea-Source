@@ -238,6 +238,7 @@ def verify(
     )
     cv.kfoldcv()
     logger.log("Verification run complete!")
+    verification_tracker.run.finish()
     wandb.finish()
 
 def proper(
