@@ -82,8 +82,19 @@ class CrossEvaluator(ICrossEvaluator):
         all_metrics = []
         
         for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
-            self._logger.log("----------------------------------------")
-            self._logger.log(f"Start fold {fold}")
+            bar = "----------------------------------------"
+            msg = f"START FOLD {fold}"
+            space = int( (len(bar) - len(msg)) / 2)
+            halfbar = bar[:space]
+            
+            self._logger.log(bar)
+            self._logger.log(f"{halfbar}{msg}{halfbar}")
+            self._logger.log(bar)
+            self._logger.log(f"Fold {fold} stats:")
+            self._logger.log(f"Total dataset size: {test_samples}")
+            self._logger.log(f"N training samples: {len(training_samples)} ({(len(training_samples) / len(dataset)):.02f}%)")
+            self._logger.log(f"N test samples: {len(test_samples)} ({(len(test_samples) / len(dataset)):.02f}%)")
+            self._logger.log(bar)
             
             model = self._model_provider.instantiate()
 
