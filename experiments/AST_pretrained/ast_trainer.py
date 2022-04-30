@@ -36,11 +36,6 @@ from datasets.binjob import Binworker
 from models.crossevaluator import CrossEvaluator
 
 from metrics import BinaryMetricComputer
-from tools.typechecking import verify
-
-from mocks.mockmodelprovider import MockModelProvider
-from mocks.mockdatasetprovider import MockDatasetProvider
-from mocks.mocktensordataset import MockTensorDataset
 
 import config
 
@@ -98,40 +93,29 @@ class AstModelProvider(IModelProvider):
         }
         return props
 
-def main():
-    batch_size = 16
-    epochs = 3
-    lossfunction = torch.nn.BCEWithLogitsLoss()
-    num_workers = min(multiprocessing.cpu_count(), 32) # DataLoader has max workers of 32
-    lr = 0.001
-    weight_decay = 1e-5
-    kfolds = 5
-    n_model_outputs = 2
-    verbose = True
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    n_time_frames = 1024 # Required by/due to the ASTModel pretraining
-    n_mels = 128
-    hop_length = 512
-    n_fft = 2048
-    scale_melbands=False
-    classification_threshold = 0.5
-
-    clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
-    clip_overlap_samples = int(clip_length_samples * 0.25)
-
-    ### Only used for limited dataset during verification run ###
-    verification = 42
-    proper_dataset_limit = 10000 # number of clips in proper dataset
-
-    logger_factory = LoggerFactory(
-        logger_type=Logger, 
-        logger_args=(LogFormatter(),)
-    )
+def verify(
+    logger_factory,
+    batch_size,
+    epochs,
+    lossfunction,
+    num_workers,
+    lr,
+    weight_decay,
+    kfolds,
+    n_model_outputs,
+    verbose,
+    device,
+    n_time_frames,
+    n_mels,
+    hop_length,
+    n_fft,
+    scale_melbands,
+    classification_threshold,
+    clip_length_samples,
+    clip_overlap_samples,
+    verification
+):
     logger = logger_factory.create_logger()
-
-    if not torch.cuda.is_available() and "idun" in socket.gethostname():
-        logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
-        exit(1)
 
     worker = Binworker(
         pool_ref=multiprocessing.pool.Pool,
@@ -256,6 +240,31 @@ def main():
     logger.log("Verification run complete!")
     wandb.finish()
 
+def proper(
+    logger_factory,
+    batch_size,
+    epochs,
+    lossfunction,
+    num_workers,
+    lr,
+    weight_decay,
+    kfolds,
+    n_model_outputs,
+    verbose,
+    device,
+    n_time_frames,
+    n_mels,
+    hop_length,
+    n_fft,
+    scale_melbands,
+    classification_threshold,
+    clip_length_samples,
+    clip_overlap_samples,
+    proper_dataset_limit
+    ):
+
+    logger = logger_factory.create_logger()
+    
     logger.log("\n\n\n")
     logger.log("-------------------------------------------------------")
     logger.log("\n\n\n")
@@ -263,6 +272,37 @@ def main():
     logger.log("\n\n\n")
     logger.log("-------------------------------------------------------")
     logger.log("\n\n\n")
+
+    worker = Binworker(
+        pool_ref=multiprocessing.pool.Pool,
+        n_processes=num_workers,
+        timeout_seconds=None
+    )
+
+    model_provider = AstModelProvider(
+        logger_factory=logger_factory,
+        n_model_outputs=n_model_outputs,
+        n_mels=n_mels,
+        n_time_frames=n_time_frames,
+        device=device
+    )
+
+    clipped_dataset = ClippedDataset(
+        logger_factory=logger_factory,
+        worker=worker,
+        clip_nsamples=clip_length_samples,
+        overlap_nsamples=clip_overlap_samples,
+    )
+
+    label_accessor = BinaryLabelAccessor()
+    feature_accessor = MelSpectrogramFeatureAccessor(
+        logger_factory=logger_factory, 
+        n_mels=n_mels,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        scale_melbands=scale_melbands,
+        verbose=verbose
+    )
 
     limited_dataset = ProportionalDatasetLimiter(
         clipped_dataset,
@@ -289,6 +329,27 @@ def main():
         name=f"AST Pretrained Frozen"
     )
 
+    folder = BalancedKFolder(
+        n_splits=kfolds,
+        shuffle=True, 
+        random_state=None,
+        balancer_ref=DatasetBalancer,
+        balancer_args=(),
+        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+    )
+
+    optimizer_provider = GeneralOptimizerProvider(
+        optimizer_type=torch.optim.Adamax,
+        optimizer_args=(),
+        optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
+    )
+
+    metric_computer = BinaryMetricComputer(
+        logger_factory=logger_factory,
+        class_dict=clipped_dataset.classes(),
+        threshold=classification_threshold
+    )
+
     trainer = Trainer(
         logger_factory=logger_factory,
         optimizer_provider=optimizer_provider,
@@ -300,6 +361,21 @@ def main():
         num_workers=num_workers,
         device=device
     )
+
+    dataset_verifier = BinaryTensorDatasetVerifier(
+        logger_factory=logger_factory,
+        worker=worker,
+        verbose=verbose
+    )
+
+    evaluator = Evaluator(
+        logger_factory=logger_factory, 
+        batch_size=batch_size,
+        num_workers=num_workers,
+        device=device
+    )
+
+    saver = Saver(logger_factory=logger_factory)
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
     #### Perform the proper training run
@@ -316,6 +392,86 @@ def main():
         saver=saver
     )
     cv.kfoldcv()
+
+def main():
+    batch_size = 16
+    epochs = 3
+    lossfunction = torch.nn.BCEWithLogitsLoss()
+    num_workers = min(multiprocessing.cpu_count(), 32) # DataLoader has max workers of 32
+    lr = 0.001
+    weight_decay = 1e-5
+    kfolds = 5
+    n_model_outputs = 2
+    verbose = True
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    n_time_frames = 1024 # Required by/due to the ASTModel pretraining
+    n_mels = 128
+    hop_length = 512
+    n_fft = 2048
+    scale_melbands=False
+    classification_threshold = 0.5
+
+    clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
+    clip_overlap_samples = int(clip_length_samples * 0.25)
+
+    ### Only used for limited dataset during verification run ###
+    verification_limit = 42
+    proper_dataset_limit = 10000 # number of clips in proper dataset
+
+    logger_factory = LoggerFactory(
+        logger_type=Logger, 
+        logger_args=(LogFormatter(),)
+    )
+    logger = logger_factory.create_logger()
+    if not torch.cuda.is_available() and "idun" in socket.gethostname():
+        logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
+        exit(1)
+
+    verify(
+        logger_factory,
+        batch_size,
+        epochs,
+        lossfunction,
+        num_workers,
+        lr,
+        weight_decay,
+        kfolds,
+        n_model_outputs,
+        verbose,
+        device,
+        n_time_frames,
+        n_mels,
+        hop_length,
+        n_fft,
+        scale_melbands,
+        classification_threshold,
+        clip_length_samples,
+        clip_overlap_samples,
+        verification_limit
+    )
+
+    proper(
+        logger_factory,
+        batch_size,
+        epochs,
+        lossfunction,
+        num_workers,
+        lr,
+        weight_decay,
+        kfolds,
+        n_model_outputs,
+        verbose,
+        device,
+        n_time_frames,
+        n_mels,
+        hop_length,
+        n_fft,
+        scale_melbands,
+        classification_threshold,
+        clip_length_samples,
+        clip_overlap_samples,
+        proper_dataset_limit
+    )
 
 if __name__ == "__main__":
     main()
