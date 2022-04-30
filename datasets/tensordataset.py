@@ -99,6 +99,7 @@ class TensorAudioDataset(ITensorAudioDataset):
             else:
                 nextclip = index - 1
             self.logger.log(f"An exception occurred when computing the features for clip {index}:", audio_data, ex, f"Returning clip {nextclip} instead")
+            return self.__getitem__(nextclip)
         labels = self._label_accessor(audio_data, features)
         return features, labels
 
