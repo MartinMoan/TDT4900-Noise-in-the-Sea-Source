@@ -211,6 +211,8 @@ class ClippedDataset(ICustomDataset):
         out = f"{self.__class__.__name__}( {str(relevant_values)} )"
         return str(out)
 
+def t(data):
+    print(data._index, data.filepath, data.samples)
 
 if __name__ == "__main__":
     from datasets.binjob import Binworker
@@ -228,3 +230,11 @@ if __name__ == "__main__":
         clip_duration_seconds=10.0, 
         clip_overlap_seconds=4.0
     )
+
+    import multiprocessing
+    from multiprocessing.pool import Pool
+    print(len(dataset))
+    with Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.map(t, dataset)
+        
+        
