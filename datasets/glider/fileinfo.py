@@ -11,6 +11,7 @@ from rich import print
 import pandas as pd
 import numpy as np
 import git
+import librosa
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -63,6 +64,11 @@ class AudioFileInfoProvider(IAudioFileInfoProvider):
                 except Exception as ex:
                     print(ex)
                     start_time = datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                
+                try:
+                    samples, sr = librosa.load(file.filepath, sr=None)
+                except:
+                    continue
 
                 item = {
                     'filename': file.filepath,

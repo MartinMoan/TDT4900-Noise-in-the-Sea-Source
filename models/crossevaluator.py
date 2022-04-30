@@ -63,12 +63,12 @@ class CrossEvaluator(ICrossEvaluator):
         dataset = self._dataset_provider.provide()
         self._logger.log(f"Done!")
 
-        for i in range(len(dataset)):
-            self._logger.log(f"{i} / {len(dataset)}")
-            try:
-                X, Y = dataset[i]
-            except Exception as ex:
-                self._logger.log("An exception ocurred: ", ex)
+        # for i in range(len(dataset)):
+        #     self._logger.log(f"{i} / {len(dataset)}")
+        #     try:
+        #         X, Y = dataset[i]
+        #     except Exception as ex:
+        #         self._logger.log("An exception ocurred: ", ex)
 
         self._logger.log(f"Verifying dataset before training, using verifier: {self._dataset_verifier.__class__.__name__}...")
         
