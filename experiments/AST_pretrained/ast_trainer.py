@@ -8,6 +8,7 @@ import socket
 
 import git
 import torch
+import wandb
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import ILoggerFactory, IModelProvider
@@ -253,6 +254,7 @@ def main():
     )
     cv.kfoldcv()
     logger.log("Verification run complete!")
+    wandb.finish()
 
     logger.log("\n\n\n")
     logger.log("-------------------------------------------------------")
