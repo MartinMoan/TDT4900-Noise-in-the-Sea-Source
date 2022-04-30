@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-import gc
+import os
 from datetime import datetime
 import sys
 import inspect 
 import pathlib
 import multiprocessing
 import re
-from typing import Iterable, Tuple
+from typing import Iterable
 
 from rich import print
 
@@ -87,9 +87,14 @@ class Logger(ILogger):
         if not log_dir.exists():
             log_dir.mkdir(parents=False, exist_ok=False)
 
-        datetime_format = "%Y-%m-%dT%H%M%S_%f"
-        filename = f"{datetime.now().strftime(datetime_format)}.log"
-        self.logfile = log_dir.joinpath(filename)
+        if os.environ.get("LOGFILE") is None:
+            datetime_format = "%Y-%m-%dT%H%M%S_%f"
+            filename = f"{datetime.now().strftime(datetime_format)}.log"
+            self.logfile = log_dir.joinpath(filename)
+            os.environ["LOGFILE"] = str(self.logfile.absolute())
+        else:
+            self.logfile = pathlib.Path(os.environ.get["LOGFILE"])
+        self.log("Duplicating python printed logs to logfile:", self.logfile)
 
     def log(self, *args, **kwargs):
         header_with_style = self.logformatter.header(*args, **kwargs)
@@ -103,5 +108,5 @@ class Logger(ILogger):
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"
-    logger = Logger(logformatter=LogFormatter)
+    logger = Logger(logformatter=LogFormatter())
     logger.log(text)
