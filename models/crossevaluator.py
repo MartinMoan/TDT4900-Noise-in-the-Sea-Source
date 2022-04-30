@@ -56,12 +56,18 @@ class CrossEvaluator(ICrossEvaluator):
         self._evaluator = evaluator
         self._metric_computer = metric_computer
         self._saver = saver
-    
+
     def kfoldcv(self) -> None:
         started_at = datetime.now()
         self._logger.log(f"Requesting dataset from {self._dataset_provider.__class__.__name__}...")
         dataset = self._dataset_provider.provide()
         self._logger.log(f"Done!")
+
+        for i in range(len(dataset)):
+            try:
+                X, Y = dataset[i]
+            except Exception as ex:
+                self._logger.log("An exception ocurred: ", ex)
 
         self._logger.log(f"Verifying dataset before training, using verifier: {self._dataset_verifier.__class__.__name__}...")
         
