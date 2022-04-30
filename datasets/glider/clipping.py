@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     import multiprocessing
     from multiprocessing.pool import Pool
-    print(len(dataset))
+    
     with Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.map(t, dataset)
         

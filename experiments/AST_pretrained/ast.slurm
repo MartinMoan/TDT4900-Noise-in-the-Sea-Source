@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
-#SBATCH --output="/cluster/home/martimoa/.nits/logs/ast.slurm.out"
+#SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
