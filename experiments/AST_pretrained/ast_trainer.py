@@ -262,7 +262,7 @@ def proper(
     clip_length_samples,
     clip_overlap_samples,
     proper_dataset_limit,
-    tracking_name
+    tracker
     ):
 
     logger = logger_factory.create_logger()
@@ -326,10 +326,6 @@ def proper(
     )
 
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
-    
-    complete_tracker = WandbTracker(
-        name=tracking_name
-    )
 
     folder = BalancedKFolder(
         n_splits=kfolds,
@@ -386,7 +382,7 @@ def proper(
         logger_factory=logger_factory,
         dataset_provider=complete_dataset_provider,
         dataset_verifier=dataset_verifier,
-        tracker=complete_tracker,
+        tracker=tracker,
         folder=folder,
         trainer=trainer,
         evaluator=evaluator,
@@ -417,6 +413,8 @@ def main():
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
     tracking_name=f"AST Pretrained Unfrozen"
+    note="AST Pretrained Unfrozen"
+    tags=["AST"]
 
     ### Only used for limited dataset during verification run ###
     verification_limit = 42
@@ -430,6 +428,30 @@ def main():
     if not torch.cuda.is_available() and "idun" in socket.gethostname():
         logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
         exit(1)
+    
+    tracker = WandbTracker(
+        name=tracking_name,
+        note=note,
+        tags=tags,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers,
+        lr=lr,
+        weight_decay=weight_decay,
+        kfolds=kfolds,
+        n_model_outputs=n_model_outputs,
+        verbose=verbose,
+        device=device,
+        n_time_frames=n_time_frames,
+        n_mels=n_mels,
+        hop_length=hop_length,
+        n_fft=n_fft,
+        scale_melbands=scale_melbands,
+        clip_length_samples=clip_length_samples,
+        clip_overlap_samples=clip_overlap_samples,
+        dataset_limit=proper_dataset_limit,
+    )
 
     # verify(
     #     logger_factory,
@@ -453,6 +475,7 @@ def main():
     #     clip_overlap_samples,
     #     verification_limit
     # )
+    
 
     proper(
         logger_factory,
@@ -475,7 +498,7 @@ def main():
         clip_length_samples,
         clip_overlap_samples,
         proper_dataset_limit,
-        tracking_name
+        tracker
     )
 
 if __name__ == "__main__":

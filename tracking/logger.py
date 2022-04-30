@@ -93,7 +93,7 @@ class Logger(ILogger):
             self.logfile = log_dir.joinpath(filename)
             os.environ["LOGFILE"] = str(self.logfile.absolute())
         else:
-            self.logfile = pathlib.Path(os.environ.get["LOGFILE"])
+            self.logfile = pathlib.Path(os.environ.get("LOGFILE"))
         self.log("Duplicating python printed logs to logfile:", self.logfile)
 
     def log(self, *args, **kwargs):
