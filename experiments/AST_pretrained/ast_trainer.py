@@ -428,28 +428,28 @@ def main():
         logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
         exit(1)
 
-    verify(
-        logger_factory,
-        batch_size,
-        epochs,
-        lossfunction,
-        num_workers,
-        lr,
-        weight_decay,
-        kfolds,
-        n_model_outputs,
-        verbose,
-        device,
-        n_time_frames,
-        n_mels,
-        hop_length,
-        n_fft,
-        scale_melbands,
-        classification_threshold,
-        clip_length_samples,
-        clip_overlap_samples,
-        verification_limit
-    )
+    # verify(
+    #     logger_factory,
+    #     batch_size,
+    #     epochs,
+    #     lossfunction,
+    #     num_workers,
+    #     lr,
+    #     weight_decay,
+    #     kfolds,
+    #     n_model_outputs,
+    #     verbose,
+    #     device,
+    #     n_time_frames,
+    #     n_mels,
+    #     hop_length,
+    #     n_fft,
+    #     scale_melbands,
+    #     classification_threshold,
+    #     clip_length_samples,
+    #     clip_overlap_samples,
+    #     verification_limit
+    # )
 
     proper(
         logger_factory,
