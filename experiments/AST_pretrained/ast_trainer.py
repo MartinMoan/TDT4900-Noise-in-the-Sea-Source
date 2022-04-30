@@ -417,7 +417,7 @@ def main():
 
     ### Only used for limited dataset during verification run ###
     verification_limit = 42
-    proper_dataset_limit = 10000 # number of clips in proper dataset
+    proper_dataset_limit = 0.7 # percentage of clips in proper dataset
 
     logger_factory = LoggerFactory(
         logger_type=Logger, 

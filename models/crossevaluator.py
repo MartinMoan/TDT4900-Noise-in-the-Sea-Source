@@ -91,7 +91,7 @@ class CrossEvaluator(ICrossEvaluator):
             self._logger.log(f"{halfbar}{msg}{halfbar}")
             self._logger.log(bar)
             self._logger.log(f"Fold {fold} stats:")
-            self._logger.log(f"Total dataset size: {test_samples}")
+            self._logger.log(f"Total dataset size: {len(dataset)}")
             self._logger.log(f"N training samples: {len(training_samples)} ({(len(training_samples) / len(dataset)):.02f}%)")
             self._logger.log(f"N test samples: {len(test_samples)} ({(len(test_samples) / len(dataset)):.02f}%)")
             self._logger.log(bar)
