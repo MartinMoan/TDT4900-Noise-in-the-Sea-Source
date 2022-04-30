@@ -49,11 +49,12 @@ class ClippedDataset(ICustomDataset):
         self.worker = worker
         self.logger = logger_factory.create_logger()
 
-        self.filelistprovider = AudioFileListProvider()
-        files = self.filelistprovider.list()
+        # self.filelistprovider = AudioFileListProvider()
+        # files = self.filelistprovider.list()
         
-        fileinfoprovider = AudioFileInfoProvider(filelist=files, logger_factory=logger_factory, worker=worker)
-        self._audiofiles = fileinfoprovider.files()
+        # fileinfoprovider = AudioFileInfoProvider(filelist=files, logger_factory=logger_factory, worker=worker)
+        # self._audiofiles = fileinfoprovider.files()
+        self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH, index=False)
 
         self._labels = pd.read_csv(config.PARSED_LABELS_PATH)
 
@@ -140,7 +141,8 @@ class ClippedDataset(ICustomDataset):
         
         # Remove any files from self._audilfiles that cannot be found in local dataset directory
         # and ensure that all filename values in the self._audiofiles dataframe are PosixPath objects. 
-        local_audiofiles = self.filelistprovider.list()
+        # local_audiofiles = self.filelistprovider.list()
+        local_audiofiles = config.list_local_audiofiles()
         if len(local_audiofiles) != len(self._audiofiles):
             if len(local_audiofiles) > len(self._audiofiles):
                 warnings.warn(f"There are local files that do not exist among the described in the csv at {config.PARSED_LABELS_PATH}")
