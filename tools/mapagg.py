@@ -4,6 +4,8 @@ Mapping aggregation of (possibly) nested dictionaries
 """
 from typing import Mapping, Union
 
+from numpy import isin
+
 class MappingAggregator:
     def _isnumber(value: any) -> bool:
         return isinstance(value, (int, float))
@@ -12,20 +14,25 @@ class MappingAggregator:
         if MappingAggregator._isnumber(d1) and MappingAggregator._isnumber(d2):
             return d1 + d2
         
-        output = {}
-        for key in d1.keys():
-            if key in d2.keys():
-                output[key] = MappingAggregator._add(d1[key], d2[key])
-            else:
-                output[key] = d1[key]
+        if type(d1) != type(d2):
+            return [d1, d2]
         
-        for key in d2.keys():
-            if key not in output.keys():
-                if key in d1.keys():
+        if isinstance(d1, dict):
+            output = {}
+            for key in d1.keys():
+                if key in d2.keys():
                     output[key] = MappingAggregator._add(d1[key], d2[key])
                 else:
-                    output[key] = d2[key]
-        return output
+                    output[key] = d1[key]
+            
+            for key in d2.keys():
+                if key not in output.keys():
+                    if key in d1.keys():
+                        output[key] = MappingAggregator._add(d1[key], d2[key])
+                    else:
+                        output[key] = d2[key]
+            return output
+        return [d1, d2]
 
     def add(d1: Mapping[str, any], d2: Mapping[str, any]):
         output = MappingAggregator._add(d1, d2)
