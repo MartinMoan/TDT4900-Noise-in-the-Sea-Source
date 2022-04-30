@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import multiprocessing
+from multiprocessing.pool import Pool
 from datetime import datetime
 import sys
 import pathlib
@@ -11,7 +12,6 @@ import config
 from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 from tools.mapagg import MappingAggregator
 import inspect
-from rich import print
 
 def verify(func):
     def nested(self, *args, **kwargs):
@@ -57,67 +57,67 @@ class CrossEvaluator(ICrossEvaluator):
         self._metric_computer = metric_computer
         self._saver = saver
 
+    def afold(self, fold, dataset, training_samples, test_samples):
+        bar = "----------------------------------------"
+        msg = f"START FOLD {fold}"
+        space = int( (len(bar) - len(msg)) / 2)
+        halfbar = bar[:space]
+        
+        self._logger.log(bar)
+        self._logger.log(f"{halfbar}{msg}{halfbar}")
+        self._logger.log(bar)
+        self._logger.log(f"Fold {fold} stats:")
+        self._logger.log(f"Total dataset size: {len(dataset)}")
+        self._logger.log(f"N training samples: {len(training_samples)} ({(len(training_samples) / len(dataset)):.02f}%)")
+        self._logger.log(f"N test samples: {len(test_samples)} ({(len(test_samples) / len(dataset)):.02f}%)")
+        self._logger.log(bar)
+        
+        model = self._model_provider.instantiate()
+
+        model = self._trainer.train(model, training_samples, dataset)
+
+        truth, predictions = self._evaluator.evaluate(model, test_samples, dataset)
+
+        metrics = self._metric_computer(truth, predictions)
+        self._logger.log(f"Fold {fold} metrics: ", metrics)
+        
+        self._tracker.track(
+            {
+                "fold": fold,
+                **metrics
+            }
+        )
+        model_parameters_path = self._saver.save(model, mode="fold_eval")
+        self._logger.log(f"Saved model parameters for fold {fold} to:", model_parameters_path)
+        self._logger.log(f"End fold {fold}")
+        self._logger.log("----------------------------------------")
+        return metrics
+
     def kfoldcv(self) -> None:
-        started_at = datetime.now()
         self._logger.log(f"Requesting dataset from {self._dataset_provider.__class__.__name__}...")
+        
         dataset = self._dataset_provider.provide()
+        
         self._logger.log(f"Done!")
-
-        # for i in range(len(dataset)):
-        #     self._logger.log(f"{i} / {len(dataset)}")
-        #     try:
-        #         X, Y = dataset[i]
-        #     except Exception as ex:
-        #         self._logger.log("An exception ocurred: ", ex)
-
         self._logger.log(f"Verifying dataset before training, using verifier: {self._dataset_verifier.__class__.__name__}...")
         
         if not self._dataset_verifier.verify(dataset):
             raise Exception("Dataset could not be validated.")
 
         self._logger.log("Dataset was verified!")
-        
         self._logger.log(f"Starting to perform K-fold cross evaluation with folder properties: {self._folder.properties}")
         
         all_metrics = []
-        
-        for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
-            bar = "----------------------------------------"
-            msg = f"START FOLD {fold}"
-            space = int( (len(bar) - len(msg)) / 2)
-            halfbar = bar[:space]
+
+        with Pool(processes=min(self._folder.n_splits, multiprocessing.cpu_count())) as pool:
+            tasks = []
             
-            self._logger.log(bar)
-            self._logger.log(f"{halfbar}{msg}{halfbar}")
-            self._logger.log(bar)
-            self._logger.log(f"Fold {fold} stats:")
-            self._logger.log(f"Total dataset size: {len(dataset)}")
-            self._logger.log(f"N training samples: {len(training_samples)} ({(len(training_samples) / len(dataset)):.02f}%)")
-            self._logger.log(f"N test samples: {len(test_samples)} ({(len(test_samples) / len(dataset)):.02f}%)")
-            self._logger.log(bar)
+            for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
+                task = pool.apply_async(self.afold, (fold, dataset, training_samples, test_samples,))    
+                tasks.append(task)
             
-            model = self._model_provider.instantiate()
-
-            model = self._trainer.train(model, training_samples, dataset)
-
-            truth, predictions = self._evaluator.evaluate(model, test_samples, dataset)
-
-            metrics = self._metric_computer(truth, predictions)
-            self._logger.log(f"Fold {fold} metrics: ", metrics)
-            
-            self._tracker.track(
-                {
-                    "fold": fold,
-                    **metrics
-                }
-            )
-
-            all_metrics.append(metrics)
-
-            model_parameters_path = self._saver.save(model, mode="fold_eval")
-            self._logger.log(f"Saved model parameters for fold {fold} to:", model_parameters_path)
-            self._logger.log(f"End fold {fold}")
-            self._logger.log("----------------------------------------")
+            for task in tasks:
+                all_metrics.append(task.get())
         
         cumulative_metrics = {}
         for metrics in all_metrics:

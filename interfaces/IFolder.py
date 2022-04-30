@@ -8,3 +8,8 @@ class IFolder(IPropProvider, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def split(self, iterable: Iterable[any]) -> Generator[Tuple[Iterable[int], Iterable[int]], None, None]:
         raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def n_splits(self) -> int:
+        raise NotImplementedError
