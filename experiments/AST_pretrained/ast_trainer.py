@@ -296,14 +296,16 @@ def proper(
         overlap_nsamples=clip_overlap_samples,
     )
 
+    balancer=DatasetBalancer(
+        dataset=clipped_dataset,
+        logger_factory=logger_factory,
+        worker=worker, 
+        verbose=verbose
+    )
+
     limited_dataset = ProportionalDatasetLimiter(
         clipped_dataset,
-        balancer=DatasetBalancer(
-            dataset=clipped_dataset,
-            logger_factory=logger_factory,
-            worker=worker, 
-            verbose=verbose
-        ),
+        balancer=balancer,
         logger_factory=logger_factory,
         size=proper_dataset_limit
     )
@@ -351,7 +353,7 @@ def proper(
     trainer = Trainer(
         logger_factory=logger_factory,
         optimizer_provider=optimizer_provider,
-        tracker=complete_tracker,
+        tracker=tracker,
         metric_computer=metric_computer,
         batch_size=batch_size,
         epochs=epochs,
@@ -376,6 +378,8 @@ def proper(
     saver = Saver(logger_factory=logger_factory)
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
+    tracker.run.config.update({"optimizer": "adamax", **balancer.label_distributions()})
+    
     #### Perform the proper training run
     cv = CrossEvaluator(
         model_provider=model_provider,
