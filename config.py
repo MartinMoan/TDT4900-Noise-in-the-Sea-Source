@@ -118,6 +118,10 @@ LOCAL_RESULTS_PATH = EXPERIMENTS_TRACKING_DIRECTORY.joinpath(LOCAL_RESULTS_FILEN
 HOME_PROJECT_DIR = pathlib.Path.home().joinpath(".nits")
 if not HOME_PROJECT_DIR.exists():
     HOME_PROJECT_DIR.mkdir(parents=False, exist_ok=False)
+
+SLURM_LOGS_DIR = HOME_PROJECT_DIR.joinpath("slurm")
+if not SLURM_LOGS_DIR.exists():
+    SLURM_LOGS_DIR.mkdir(parents=False, exist_ok=False)
     
 CACHE_DIR = HOME_PROJECT_DIR.joinpath("cache")
 if not CACHE_DIR.exists():

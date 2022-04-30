@@ -69,7 +69,13 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
 
 
 class TensorAudioDataset(ITensorAudioDataset):
-    def __init__(self, dataset: ICustomDataset, label_accessor: ILabelAccessor, feature_accessor: IFeatureAccessor) -> None:
+    def __init__(
+        self, 
+        dataset: ICustomDataset, 
+        label_accessor: ILabelAccessor, 
+        feature_accessor: IFeatureAccessor,
+        logger_factory: ILoggerFactory) -> None:
+
         if not isinstance(dataset, ICustomDataset):
             raise TypeError(f"Argument dataset has invalid type. Expected {ICustomDataset} but received {type(dataset)}")
         if not isinstance(label_accessor, ILabelAccessor):
@@ -80,10 +86,19 @@ class TensorAudioDataset(ITensorAudioDataset):
         self._dataset = dataset
         self._label_accessor = label_accessor
         self._feature_accessor = feature_accessor
+        self.logger = logger_factory.create_logger()
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         audio_data = self._dataset[index]
-        features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
+        try:
+            features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
+        except Exception as ex:
+            nextclip = -1
+            if index < len(self) - 1:
+                nextclip = index + 1
+            else:
+                nextclip = index - 1
+            self.logger.log(f"An exception occurred when computing the features for clip {index}:", audio_data, ex, f"Returning clip {nextclip} instead")
         labels = self._label_accessor(audio_data, features)
         return features, labels
 
