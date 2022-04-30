@@ -39,6 +39,7 @@ class WaveFileInspector:
             size_bytes = int.from_bytes(header[4:8], "little", signed=False)
             data_chunk_size_bytes = int.from_bytes(header[40:44], "little", signed=False)
             num_samples = data_chunk_size_bytes / (bits_per_sample / 8)
+            print(num_samples, data_chunk_size_bytes)
             duration = (num_samples / sample_rate)
             n_channels = int.from_bytes(header[22:24], "little", signed=False)
             
