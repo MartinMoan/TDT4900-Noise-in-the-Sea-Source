@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
 #SBATCH --job-name="Clipping Test"
-#SBATCH --output="/cluster/home/martimoa/.nits/logs/clipping.slurm.out"
+#SBATCH --output="/cluster/home/martimoa/.nits/slurm/clipping.slurm.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
