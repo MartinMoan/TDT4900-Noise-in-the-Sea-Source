@@ -12,7 +12,7 @@ from interfaces import IFolder
 class BasicKFolder(IFolder):
     def __init__(self, n_splits: int, shuffle: bool = False, random_state: int = None) -> None:
         super().__init__()
-        self.n_splits = n_splits
+        self._n_splits = n_splits
         self.shuffle = shuffle
         self.random_state = random_state
         self._folder = KFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
@@ -21,6 +21,9 @@ class BasicKFolder(IFolder):
         for index, (train, test) in enumerate(self._folder.split(iterable)):
             yield (train, test)
 
+    def n_splits(self) -> int:
+        return self._n_splits
+
     @property
     def properties(self) -> Mapping[str, any]:
-        return {"n_splits": self.n_splits, "shuffle": self.shuffle, "random_state": self.random_state}
+        return {"n_splits": self._n_splits, "shuffle": self.shuffle, "random_state": self.random_state}

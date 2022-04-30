@@ -184,7 +184,7 @@ class BalancedKFolder(IFolder):
         balancer_kwargs: Mapping[str, any] = {}):
 
         super().__init__()
-        self.n_splits = n_splits
+        self._n_splits = n_splits
         self.shuffle = shuffle
         self.random_state = random_state
         self._balancer_ref = balancer_ref
@@ -213,14 +213,14 @@ class BalancedKFolder(IFolder):
         if len(error_indeces) != 0:
             raise Exception(f"There are indeces that should only be used for eval that are also present in the training indeces.")
         
-        folder = sklearn.model_selection.KFold(self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+        folder = sklearn.model_selection.KFold(self._n_splits, shuffle=self.shuffle, random_state=self.random_state)
         for (train, eval_indeces) in folder.split(all_training_indeces):
             all_eval_indeces = np.concatenate([all_training_indeces[eval_indeces], eval_only_indeces], axis=0, dtype=int)
             yield (all_training_indeces[train], all_eval_indeces)
 
     @property
     def properties(self) -> Mapping[str, any]:
-        return {"k_folds": self.n_splits, "shuffle": self.shuffle, "random_state": self.random_state}
+        return {"k_folds": self._n_splits, "shuffle": self.shuffle, "random_state": self.random_state}
 
 class BalancedDatasetDecorator(ICustomDataset):
     def __init__(self, dataset: ICustomDataset, balancer: IDatasetBalancer, force_recarche=False, **kwargs) -> None:

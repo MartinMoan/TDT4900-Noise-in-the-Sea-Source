@@ -71,9 +71,9 @@ class AstModelProvider(IModelProvider):
             model_size='base384',
             verbose=True
         )
-        self.logger.log("Freezing pre-trained model parameters...")
-        model.freeze_pretrained_parameters()
-        self.logger.log("Parameter freeze complete!")
+        # self.logger.log("Freezing pre-trained model parameters...")
+        # model.freeze_pretrained_parameters()
+        # self.logger.log("Parameter freeze complete!")
 
         if torch.cuda.device_count() > 1:
             # Use all the available GPUs with DataParallel
@@ -261,7 +261,8 @@ def proper(
     classification_threshold,
     clip_length_samples,
     clip_overlap_samples,
-    proper_dataset_limit
+    proper_dataset_limit,
+    tracking_name
     ):
 
     logger = logger_factory.create_logger()
@@ -327,7 +328,7 @@ def proper(
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
     
     complete_tracker = WandbTracker(
-        name=f"AST Pretrained Frozen"
+        name=tracking_name
     )
 
     folder = BalancedKFolder(
@@ -415,6 +416,8 @@ def main():
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
 
+    tracking_name=f"AST Pretrained Unfrozen"
+
     ### Only used for limited dataset during verification run ###
     verification_limit = 42
     proper_dataset_limit = 0.7 # percentage of clips in proper dataset
@@ -471,7 +474,8 @@ def main():
         classification_threshold,
         clip_length_samples,
         clip_overlap_samples,
-        proper_dataset_limit
+        proper_dataset_limit,
+        tracking_name
     )
 
 if __name__ == "__main__":
