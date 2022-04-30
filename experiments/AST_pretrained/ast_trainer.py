@@ -9,6 +9,7 @@ import socket
 import git
 import torch
 import wandb
+from code.datasets import tensordataset
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import ILoggerFactory, IModelProvider
@@ -378,7 +379,7 @@ def proper(
     saver = Saver(logger_factory=logger_factory)
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
-    tracker.run.config.update({"optimizer": "adamax", **balancer.label_distributions()})
+    tracker.run.config.update({"optimizer": "adamax", "tensor_dataset_size": len(tensordataset), **balancer.label_distributions()})
     
     #### Perform the proper training run
     cv = CrossEvaluator(
