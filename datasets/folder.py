@@ -16,7 +16,6 @@ class BasicKFolder(IFolder):
         self.shuffle = shuffle
         self.random_state = random_state
         self._folder = KFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
-
     
     def split(self, iterable: Iterable[any]) -> Generator[Tuple[Iterable[int], Iterable[int]], None, None]:
         for index, (train, test) in enumerate(self._folder.split(iterable)):
