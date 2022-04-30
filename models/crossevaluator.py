@@ -64,6 +64,7 @@ class CrossEvaluator(ICrossEvaluator):
         self._logger.log(f"Done!")
 
         for i in range(len(dataset)):
+            self.logger.log(f"{i} / {len(dataset)}")
             try:
                 X, Y = dataset[i]
             except Exception as ex:
