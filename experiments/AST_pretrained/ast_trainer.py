@@ -9,7 +9,6 @@ import socket
 import git
 import torch
 import wandb
-from code.datasets import tensordataset
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import ILoggerFactory, IModelProvider
@@ -416,7 +415,7 @@ def main():
 
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
-
+    
     tracking_name=f"AST Pretrained Unfrozen"
     note="AST Pretrained Unfrozen"
     tags=["AST"]
@@ -483,27 +482,27 @@ def main():
     
 
     proper(
-        logger_factory,
-        batch_size,
-        epochs,
-        lossfunction,
-        num_workers,
-        lr,
-        weight_decay,
-        kfolds,
-        n_model_outputs,
-        verbose,
-        device,
-        n_time_frames,
-        n_mels,
-        hop_length,
-        n_fft,
-        scale_melbands,
-        classification_threshold,
-        clip_length_samples,
-        clip_overlap_samples,
-        proper_dataset_limit,
-        tracker
+        logger_factory=logger_factory,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers,
+        lr=lr,
+        weight_decay=weight_decay,
+        kfolds=kfolds,
+        n_model_outputs=n_model_outputs,
+        verbose=verbose,
+        device=device,
+        n_time_frames=n_time_frames,
+        n_mels=n_mels,
+        hop_length=hop_length,
+        n_fft=n_fft,
+        scale_melbands=scale_melbands,
+        classification_threshold=classification_threshold,
+        clip_length_samples=clip_length_samples,
+        clip_overlap_samples=clip_overlap_samples,
+        proper_dataset_limit=proper_dataset_limit,
+        tracker=tracker
     )
 
 if __name__ == "__main__":
