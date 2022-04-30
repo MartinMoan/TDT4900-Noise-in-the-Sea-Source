@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --account=ie-idi
 #SBATCH --partition=CPUQ
-#SBATCH --time=00-24:00:00
+#SBATCH --time=00-4:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
