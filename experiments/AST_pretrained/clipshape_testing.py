@@ -66,7 +66,7 @@ def createspect(logger_factory, clip, n_mels, n_fft, hop_length, storepath):
     plt.title(", ".join(clip.labels.source_class_specific.unique()))
     filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
     fig = plt.gcf()
-    fig.set_size_inches((8.5, 11), forward=False)
+    fig.set_size_inches((11, 6.1), forward=False)
     fig.savefig(storepath.joinpath(filename), dpi=500)
 
 def main():
@@ -76,9 +76,9 @@ def main():
         logger_kwargs=dict(logformatter=LogFormatter(),)
     )
 
-    n_mels = 1024 # number of mel frequency bands
-    n_fft = 8184*2 # length of window to compute Fourier Transform over. Higher - create frequency resolution, lower - greater time resolution
-    hop_length = 512 # length between successive Fourier Transform windows
+    # n_mels = 1024 # number of mel frequency bands
+    # n_fft = 8184*2 # length of window to compute Fourier Transform over. Higher - create frequency resolution, lower - greater time resolution
+    # hop_length = 512 # length between successive Fourier Transform windows
 
     mels = [2**i for i in range(6, 14)]
     ffts = [2**i for i in range(6, 16)]
