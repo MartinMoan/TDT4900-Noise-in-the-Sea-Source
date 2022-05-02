@@ -124,7 +124,7 @@ def main():
                 filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
                 fig = plt.gcf()
                 fig.set_size_inches((8.5, 11), forward=False)
-                fig.savefig(path.join(filename), dpi=500)
+                fig.savefig(path.joinpath(filename), dpi=500)
 
 if __name__ == "__main__":
     main()
