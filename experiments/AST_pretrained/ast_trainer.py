@@ -195,7 +195,8 @@ def verify(
         logger_factory=logger_factory,
         name=f"AST verification",
         tags=["verification", "ast"],
-        note="verification run for AST model, disregard any results from this run."
+        note="verification run for AST model, disregard any results from this run.",
+        n_examples=3
     )
     
     folder = BalancedKFolder(
@@ -363,8 +364,6 @@ def proper(
         logger_factory=logger_factory
     )
 
-    complete_tensordataset.example_shape()
-
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
 
     folder = BalancedKFolder(
@@ -499,6 +498,7 @@ def main():
         name=tracking_name,
         note=note,
         tags=tags,
+        n_examples=50,
         batch_size=batch_size,
         epochs=epochs,
         lossfunction=lossfunction,

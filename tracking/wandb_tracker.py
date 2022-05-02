@@ -27,9 +27,11 @@ class WandbTracker(ITracker):
         name: str = None, 
         note: Optional[str] = None, 
         tags: Optional[Iterable[str]] = None, 
+        n_examples: int = 0,
         **kwargs) -> None:
 
         self.logger = logger_factory.create_logger()
+        self.n_examples = n_examples
         uname = os.uname()
         self.infrastructure = {
             "nodename": uname.nodename,
@@ -57,8 +59,10 @@ class WandbTracker(ITracker):
         self.run.log({**trackables, **kwargs})
 
     def track_dataset(self, dataset: TensorAudioDataset):
-        n_images = 50
-        indeces = np.random.random_integers(0, len(dataset), n_images)
+        if self.n_examples <= 0:
+            return
+        
+        indeces = np.random.random_integers(0, len(dataset), self.n_examples)
 
         table = wandb.Table(columns=[
             "audio", 
@@ -109,8 +113,6 @@ class WandbTracker(ITracker):
             self.logger.log(f"{index} / {len(indeces)}")
 
         self.run.log({"exampes": table})
-
-
 
 class SummableDict:
     def _isnumber(value: any) -> bool:
