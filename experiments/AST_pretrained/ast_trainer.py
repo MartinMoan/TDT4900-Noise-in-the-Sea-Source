@@ -498,7 +498,6 @@ def main():
             betas=str(betas)
         ),
         dataset_info=dict(
-            n_time_frames=n_time_frames,
             n_mels=n_mels,
             hop_length=hop_length,
             n_fft=n_fft,
