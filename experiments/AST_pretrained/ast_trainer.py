@@ -108,9 +108,10 @@ def verify(
     batch_size,
     epochs,
     lossfunction,
+    optimizer_type,
+    optimizer_args,
+    optimizer_kwargs,
     num_workers,
-    lr,
-    weight_decay,
     kfolds,
     n_model_outputs,
     verbose,
@@ -123,7 +124,13 @@ def verify(
     classification_threshold,
     clip_length_samples,
     clip_overlap_samples,
-    verification
+    verification_dataset_limit,
+    fstride,
+    tstride,
+    imagenet_pretrain,
+    audioset_pretrain,
+    model_size,
+    tracker
 ):
     logger = logger_factory.create_logger()
 
@@ -133,12 +140,16 @@ def verify(
         timeout_seconds=None
     )
 
-    model_provider = AstModelProvider(
-        logger_factory=logger_factory,
+    model_provider = AstModelProvider(logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
         n_mels=n_mels,
         n_time_frames=n_time_frames,
-        device=device
+        device=device,
+        fstride=fstride,
+        tstride=tstride,
+        imagenet_pretrain=imagenet_pretrain,
+        audioset_pretrain=audioset_pretrain,
+        model_size=model_size
     )
 
     clipped_dataset = CachedClippedDataset(
@@ -160,7 +171,7 @@ def verify(
 
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
-        limit=verification,
+        limit=verification_dataset_limit,
         balancer=CachedDatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
@@ -194,9 +205,9 @@ def verify(
     )
 
     optimizer_provider = GeneralOptimizerProvider(
-        optimizer_type=torch.optim.Adamax,
-        optimizer_args=(),
-        optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
+        optimizer_type=optimizer_type,
+        optimizer_args=optimizer_args,
+        optimizer_kwargs=optimizer_kwargs
     )
 
     metric_computer = BinaryMetricComputer(
@@ -244,7 +255,8 @@ def verify(
         trainer=verification_trainer,
         evaluator=evaluator,
         metric_computer=metric_computer,
-        saver=saver
+        saver=saver,
+        n_fold_workers=min(kfolds, multiprocessing.cpu_count())
     )
     cv.kfoldcv()
     logger.log("Verification run complete!")
@@ -466,7 +478,7 @@ def main():
     tags=["AST"]
 
     ### Only used for limited dataset during verification run ###
-    verification_limit = 42
+    verification_dataset_limit = 42
     proper_dataset_limit = 0.7 # percentage of clips in proper dataset
 
     logger_factory = LoggerFactory(
@@ -516,28 +528,35 @@ def main():
         )
     )
 
-    # verify(
-    #     logger_factory,
-    #     batch_size,
-    #     epochs,
-    #     lossfunction,
-    #     num_workers,
-    #     lr,
-    #     weight_decay,
-    #     kfolds,
-    #     n_model_outputs,
-    #     verbose,
-    #     device,
-    #     n_time_frames,
-    #     n_mels,
-    #     hop_length,
-    #     n_fft,
-    #     scale_melbands,
-    #     classification_threshold,
-    #     clip_length_samples,
-    #     clip_overlap_samples,
-    #     verification_limit
-    # )
+    verify(
+        logger_factory=logger_factory,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        optimizer_type=optimizer_type,
+        optimizer_args=optimizer_args,
+        optimizer_kwargs=optimizer_kwargs,
+        num_workers=num_workers,
+        kfolds=kfolds,
+        n_model_outputs=n_model_outputs,
+        verbose=verbose,
+        device=device,
+        n_time_frames=n_time_frames,
+        n_mels=n_mels,
+        hop_length=hop_length,
+        n_fft=n_fft,
+        scale_melbands=scale_melbands,
+        classification_threshold=classification_threshold,
+        clip_length_samples=clip_length_samples,
+        clip_overlap_samples=clip_overlap_samples,
+        verification_dataset_limit=verification_dataset_limit,
+        fstride=fstride,
+        tstride=tstride,
+        imagenet_pretrain=imagenet_pretrain,
+        audioset_pretrain=audioset_pretrain,
+        model_size=model_size,
+        tracker=tracker
+    )
     
 
     proper(
