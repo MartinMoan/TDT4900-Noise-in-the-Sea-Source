@@ -57,7 +57,7 @@ class WandbTracker(ITracker):
         self.run.log({**trackables, **kwargs})
 
     def track_dataset(self, dataset: TensorAudioDataset):
-        n_images = 20
+        n_images = 50
         indeces = np.random.random_integers(0, len(dataset), n_images)
 
         table = wandb.Table(columns=[
