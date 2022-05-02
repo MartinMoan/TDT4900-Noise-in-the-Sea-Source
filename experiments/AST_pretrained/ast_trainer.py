@@ -404,12 +404,10 @@ def proper(
     label_distributions = {label: len(values) for label, values in balancer.label_distributions().items()}
     tracker.run.config.update(
         {
-            "optimizer": str(optimizer_type), 
-            **optimizer_kwargs,
             "tensor_dataset_size": len(complete_tensordataset), 
-            "input_shape": complete_tensordataset.example_shape(), 
-            "output_shape": complete_tensordataset.label_shape(), 
-            **label_distributions
+            "input_shape": str(complete_tensordataset.example_shape()), 
+            "output_shape": str(complete_tensordataset.label_shape()), 
+            "label_distributions": label_distributions
         }
     )
     
@@ -461,7 +459,7 @@ def main():
 
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
-    
+
     tracking_name=f"AST Pretrained Unfrozen"
     note="AST Pretrained Unfrozen"
     tags=["AST"]
@@ -489,21 +487,33 @@ def main():
         epochs=epochs,
         lossfunction=lossfunction,
         num_workers=num_workers,
-        lr=lr,
-        weight_decay=weight_decay,
-        betas=str(betas),
         kfolds=kfolds,
-        n_model_outputs=n_model_outputs,
         verbose=verbose,
         device=device,
-        n_time_frames=n_time_frames,
-        n_mels=n_mels,
-        hop_length=hop_length,
-        n_fft=n_fft,
-        scale_melbands=scale_melbands,
-        clip_length_samples=clip_length_samples,
-        clip_overlap_samples=clip_overlap_samples,
-        dataset_limit=proper_dataset_limit
+        optimizer_info=dict(
+            type=str(optimizer_type.__name__),
+            lr=lr,
+            weight_decay=weight_decay,
+            betas=str(betas)
+        ),
+        dataset_info=dict(
+            n_time_frames=n_time_frames,
+            n_mels=n_mels,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            scale_melbands=scale_melbands,
+            clip_length_samples=clip_length_samples,
+            clip_overlap_samples=clip_overlap_samples,
+            dataset_limit=proper_dataset_limit,
+        ),
+        model_info=dict(
+            fstride=fstride,
+            tstride=tstride,
+            imagenet_pretrain=imagenet_pretrain,
+            audioset_pretrain=audioset_pretrain,
+            model_size=model_size,
+            n_model_outputs=n_model_outputs,
+        )
     )
 
     # verify(
@@ -539,8 +549,6 @@ def main():
         optimizer_args=optimizer_args,
         optimizer_kwargs=optimizer_kwargs,
         num_workers=num_workers,
-        lr=lr,
-        weight_decay=weight_decay,
         kfolds=kfolds,
         n_model_outputs=n_model_outputs,
         verbose=verbose,
