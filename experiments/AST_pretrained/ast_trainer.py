@@ -445,9 +445,9 @@ def main():
     verbose = True
     device = "cuda" if torch.cuda.is_available() else "cpu"
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
-    n_mels = 512
-    hop_length = 512
-    n_fft = 2046
+    n_mels = 1024
+    hop_length = 256
+    n_fft = 16384
     scale_melbands=False
     classification_threshold = 0.5
 
@@ -457,8 +457,9 @@ def main():
     audioset_pretrain=False # by setting this to false, we can choose the input dimensions as we like
     model_size="base384" # [tiny224, small224, base224, base384]
 
-    clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
-    clip_overlap_samples = int(clip_length_samples * 0.25)
+    sr = 128000
+    clip_length_samples = int(sr * 30.0) # ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
+    clip_overlap_samples = int(sr * 10.0) #int(clip_length_samples * 0.25)
 
     tracking_name=f"AST Pretrained Unfrozen"
     note="AST Pretrained Unfrozen"
