@@ -192,7 +192,10 @@ def verify(
     )
 
     verification_tracker = WandbTracker(
-        name=f"VERIFICATION RUN: AST Pretrained Frozen"
+        logger_factory=logger_factory,
+        name=f"AST verification",
+        tags=["verification", "ast"],
+        note="verification run for AST model, disregard any results from this run."
     )
     
     folder = BalancedKFolder(
