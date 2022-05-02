@@ -109,8 +109,6 @@ class WandbTracker(ITracker):
             self.logger.log(f"{index} / {len(indeces)}")
 
         self.run.log({"exampes": table})
-        exit()
-        # self.run.log({"examples": [wandb.Image(image) for image in images]})
 
 
 
