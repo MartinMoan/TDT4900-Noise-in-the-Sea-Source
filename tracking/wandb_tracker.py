@@ -7,6 +7,8 @@ import random
 from typing import Mapping, Optional, Union, Iterable
 
 import pandas as pd
+import numpy as np
+import torch
 from rich import print
 import git
 import wandb
@@ -14,6 +16,7 @@ import wandb
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 from interfaces import ITracker, ILoggerFactory, ITabularLogger
+from datasets.tensordataset import TensorAudioDataset
 
 class WandbTracker(ITracker):
     def __init__(
@@ -50,6 +53,12 @@ class WandbTracker(ITracker):
     
     def track(self, trackables: Mapping[str, any], **kwargs) -> None:
         self.run.log({**trackables, **kwargs})
+
+    def track_dataset(self, dataset: TensorAudioDataset):
+        n_images = 10
+        indeces = np.random.random_integers(0, len(dataset), n_images)
+        images = [dataset[i] for i in indeces]
+        self.run.log({"examples": [wandb.Image(image) for image in images]})
 
 class SummableDict:
     def _isnumber(value: any) -> bool:
