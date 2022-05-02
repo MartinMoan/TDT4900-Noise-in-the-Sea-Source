@@ -21,6 +21,7 @@ from datasets.tensordataset import TensorAudioDataset
 class WandbTracker(ITracker):
     def __init__(
         self, 
+        logger_factory: ILoggerFactory,
         group: str = None,
         job_type: str = None,
         name: str = None, 
@@ -28,6 +29,7 @@ class WandbTracker(ITracker):
         tags: Optional[Iterable[str]] = None, 
         **kwargs) -> None:
 
+        self.logger = logger_factory.create_logger()
         uname = os.uname()
         self.infrastructure = {
             "nodename": uname.nodename,
@@ -55,10 +57,62 @@ class WandbTracker(ITracker):
         self.run.log({**trackables, **kwargs})
 
     def track_dataset(self, dataset: TensorAudioDataset):
-        n_images = 10
+        n_images = 50
         indeces = np.random.random_integers(0, len(dataset), n_images)
-        images = [dataset[i] for i in indeces]
-        self.run.log({"examples": [wandb.Image(image) for image in images]})
+
+        table = wandb.Table(columns=[
+            "audio", 
+            "spectrogram", 
+            "source_class_specific", 
+            "clip_classes", 
+            "dataset_classes", 
+            "tensor_label", 
+            "filename", 
+            "file_start_time", 
+            "file_end_time", 
+            "clip_offset_seconds", 
+            "clip_duration_seconds",
+            "clip_index"
+        ])
+
+        for index in range(len(indeces)):
+            i = indeces[index]
+            clip = dataset.audiodata(i)
+            X, Y = dataset[i]
+            audio = wandb.Audio(clip.samples, sample_rate=clip.sampling_rate)
+            spectrogram = wandb.Image(X, caption=f"{clip.filepath.name}")
+            source_class_specific = ", ".join(np.sort(clip.labels.source_class_specific.unique(), axis=0))
+            clip_classes = ", ".join(np.sort(clip.labels.source_class.unique(), axis=0))
+            dataset_classes = str(dataset.classes())
+            tensor_label = str(Y.detach().numpy())
+            filename = clip.filepath.name
+            datetimeformat = "%c"
+            file_start_time = clip.file_start_time.strftime(datetimeformat)
+            file_end_time = clip.file_end_time.strftime(datetimeformat)
+            clip_offset = clip.clip_offset
+            clip_duration = clip.clip_duration
+
+            table.add_data(
+                audio, 
+                spectrogram, 
+                source_class_specific, 
+                clip_classes, 
+                dataset_classes, 
+                tensor_label,
+                filename,
+                file_start_time,
+                file_end_time,
+                clip_offset,
+                clip_duration,
+                i
+            )
+            self.logger.log(f"{index} / {len(indeces)}")
+
+        self.run.log({"exampes": table})
+        exit()
+        # self.run.log({"examples": [wandb.Image(image) for image in images]})
+
+
 
 class SummableDict:
     def _isnumber(value: any) -> bool:

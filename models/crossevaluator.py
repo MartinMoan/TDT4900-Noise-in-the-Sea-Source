@@ -22,7 +22,6 @@ def verify(func):
         for arg, input_value in named_args.items():
             if arg in spec.annotations:
                 expected_type = spec.annotations[arg]
-                print(input_value, expected_type)
                 if not isinstance(input_value, expected_type):
                     raise TypeError(f"Argument {arg} has incorrect type. Expected {expected_type} but received {type(input_value)}")
 
@@ -106,6 +105,9 @@ class CrossEvaluator(ICrossEvaluator):
             raise Exception("Dataset could not be validated.")
 
         self._logger.log("Dataset was verified!")
+        self._logger.log("Tracking dataset...")
+        self._tracker.track_dataset(dataset)
+        self._logger.log("Dataset tracking done!")
         self._logger.log(f"Starting to perform K-fold cross evaluation with folder properties: {self._folder.properties}")
         
         all_metrics = []
