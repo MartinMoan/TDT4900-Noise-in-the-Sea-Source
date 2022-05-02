@@ -296,19 +296,19 @@ def proper(
         overlap_nsamples=clip_overlap_samples,
     )
 
-    balancer=DatasetBalancer(
-        dataset=clipped_dataset,
-        logger_factory=logger_factory,
-        worker=worker, 
-        verbose=verbose
-    )
+    # balancer=DatasetBalancer(
+    #     dataset=clipped_dataset,
+    #     logger_factory=logger_factory,
+    #     worker=worker, 
+    #     verbose=verbose
+    # )
 
-    limited_dataset = ProportionalDatasetLimiter(
-        clipped_dataset,
-        balancer=balancer,
-        logger_factory=logger_factory,
-        size=proper_dataset_limit
-    )
+    # limited_dataset = ProportionalDatasetLimiter(
+    #     clipped_dataset,
+    #     balancer=balancer,
+    #     logger_factory=logger_factory,
+    #     size=proper_dataset_limit
+    # )
 
     label_accessor = BinaryLabelAccessor()
     feature_accessor = MelSpectrogramFeatureAccessor(
@@ -321,7 +321,7 @@ def proper(
     )
 
     complete_tensordataset = TensorAudioDataset(
-        dataset=limited_dataset,
+        dataset=clipped_dataset,
         label_accessor=label_accessor,
         feature_accessor=feature_accessor,
         logger_factory=logger_factory
