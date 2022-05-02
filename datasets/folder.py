@@ -21,6 +21,7 @@ class BasicKFolder(IFolder):
         for index, (train, test) in enumerate(self._folder.split(iterable)):
             yield (train, test)
 
+    @property
     def n_splits(self) -> int:
         return self._n_splits
 
