@@ -46,7 +46,12 @@ class AstModelProvider(IModelProvider):
         n_model_outputs: int, 
         n_mels: int, 
         n_time_frames: int, 
-        device: str) -> None:
+        device: str,
+        fstride: int,
+        tstride: int,
+        imagenet_pretrain: bool,
+        audioset_pretrain: bool,
+        model_size: str) -> None:
         
         super().__init__()
         self.logger_factory = logger_factory
@@ -55,6 +60,11 @@ class AstModelProvider(IModelProvider):
         self.n_mels = n_mels
         self.n_time_frames = n_time_frames
         self.device = device
+        self.fstride = fstride
+        self.tstride = tstride
+        self.imagenet_pretrain = imagenet_pretrain
+        self.audioset_pretrain = audioset_pretrain
+        self.model_size = model_size
     
     def instantiate(self) -> torch.nn.Module:
         self.logger.log("Instantiating model...")
@@ -62,13 +72,13 @@ class AstModelProvider(IModelProvider):
             logger_factory=self.logger_factory,
             activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
             label_dim=self.n_model_outputs,
-            fstride=10, 
-            tstride=10, 
+            fstride=self.fstride, 
+            tstride=self.tstride, 
             input_fdim=self.n_mels, 
             input_tdim=self.n_time_frames, 
-            imagenet_pretrain=True, 
-            audioset_pretrain=True, 
-            model_size='base384',
+            imagenet_pretrain=self.imagenet_pretrain, 
+            audioset_pretrain=self.audioset_pretrain, 
+            model_size=self.model_size,
             verbose=True
         )
         # self.logger.log("Freezing pre-trained model parameters...")
@@ -246,9 +256,10 @@ def proper(
     batch_size,
     epochs,
     lossfunction,
+    optimizer_type,
+    optimizer_args,
+    optimizer_kwargs,
     num_workers,
-    lr,
-    weight_decay,
     kfolds,
     n_model_outputs,
     verbose,
@@ -262,6 +273,11 @@ def proper(
     clip_length_samples,
     clip_overlap_samples,
     proper_dataset_limit,
+    fstride,
+    tstride,
+    imagenet_pretrain,
+    audioset_pretrain,
+    model_size,
     tracker
     ):
 
@@ -286,22 +302,27 @@ def proper(
         n_model_outputs=n_model_outputs,
         n_mels=n_mels,
         n_time_frames=n_time_frames,
-        device=device
+        device=device,
+        fstride=fstride,
+        tstride=tstride,
+        imagenet_pretrain=imagenet_pretrain,
+        audioset_pretrain=audioset_pretrain,
+        model_size=model_size,
     )
 
-    clipped_dataset = ClippedDataset(
+    clipped_dataset = CachedClippedDataset(
         logger_factory=logger_factory,
         worker=worker,
         clip_nsamples=clip_length_samples,
         overlap_nsamples=clip_overlap_samples,
     )
 
-    # balancer=DatasetBalancer(
-    #     dataset=clipped_dataset,
-    #     logger_factory=logger_factory,
-    #     worker=worker, 
-    #     verbose=verbose
-    # )
+    balancer=CachedDatasetBalancer(
+        dataset=clipped_dataset,
+        logger_factory=logger_factory,
+        worker=worker, 
+        verbose=verbose
+    )
 
     # limited_dataset = ProportionalDatasetLimiter(
     #     clipped_dataset,
@@ -327,6 +348,8 @@ def proper(
         logger_factory=logger_factory
     )
 
+    complete_tensordataset.example_shape()
+
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
 
     folder = BalancedKFolder(
@@ -339,9 +362,9 @@ def proper(
     )
 
     optimizer_provider = GeneralOptimizerProvider(
-        optimizer_type=torch.optim.Adamax,
-        optimizer_args=(),
-        optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
+        optimizer_type=optimizer_type,
+        optimizer_args=optimizer_args,
+        optimizer_kwargs=optimizer_kwargs,
     )
 
     metric_computer = BinaryMetricComputer(
@@ -378,7 +401,17 @@ def proper(
     saver = Saver(logger_factory=logger_factory)
 
     logger.log(f"Beginning {kfolds}-fold cross evaluation...")
-    tracker.run.config.update({"optimizer": "adamax", "tensor_dataset_size": len(tensordataset), **balancer.label_distributions()})
+    label_distributions = {label: len(values) for label, values in balancer.label_distributions().items()}
+    tracker.run.config.update(
+        {
+            "optimizer": str(optimizer_type), 
+            **optimizer_kwargs,
+            "tensor_dataset_size": len(complete_tensordataset), 
+            "input_shape": complete_tensordataset.example_shape(), 
+            "output_shape": complete_tensordataset.label_shape(), 
+            **label_distributions
+        }
+    )
     
     #### Perform the proper training run
     cv = CrossEvaluator(
@@ -391,7 +424,8 @@ def proper(
         trainer=trainer,
         evaluator=evaluator,
         metric_computer=metric_computer,
-        saver=saver
+        saver=saver,
+        n_fold_workers=min(kfolds, multiprocessing.cpu_count())
     )
     cv.kfoldcv()
 
@@ -401,17 +435,29 @@ def main():
     lossfunction = torch.nn.BCEWithLogitsLoss()
     num_workers = min(multiprocessing.cpu_count(), 32) # DataLoader has max workers of 32
     lr = 0.00001
-    weight_decay = 1e-5
+    weight_decay=5e-7 # Same as for AST paper code: https://github.com/YuanGongND/ast/blob/master/src/traintest
+    betas=(0.95, 0.999) # Same as for AST paper code: https://github.com/YuanGongND/ast/blob/master/src/traintest
+
+    optimizer_type=torch.optim.Adam
+    optimizer_args=()
+    optimizer_kwargs=dict(lr=lr, weight_decay=weight_decay, betas=betas)
+
     kfolds = 5
     n_model_outputs = 2
     verbose = True
     device = "cuda" if torch.cuda.is_available() else "cpu"
     n_time_frames = 1024 # Required by/due to the ASTModel pretraining
-    n_mels = 128
+    n_mels = 512
     hop_length = 512
-    n_fft = 2048
+    n_fft = 2046
     scale_melbands=False
     classification_threshold = 0.5
+
+    fstride=10
+    tstride=10
+    imagenet_pretrain=True
+    audioset_pretrain=False # by setting this to false, we can choose the input dimensions as we like
+    model_size="base384" # [tiny224, small224, base224, base384]
 
     clip_length_samples = ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(clip_length_samples * 0.25)
@@ -428,12 +474,14 @@ def main():
         logger_type=Logger, 
         logger_args=(LogFormatter(),)
     )
+
     logger = logger_factory.create_logger()
     if not torch.cuda.is_available() and "idun" in socket.gethostname():
         logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
         exit(1)
     
     tracker = WandbTracker(
+        logger_factory=logger_factory,
         name=tracking_name,
         note=note,
         tags=tags,
@@ -443,6 +491,7 @@ def main():
         num_workers=num_workers,
         lr=lr,
         weight_decay=weight_decay,
+        betas=str(betas),
         kfolds=kfolds,
         n_model_outputs=n_model_outputs,
         verbose=verbose,
@@ -454,7 +503,7 @@ def main():
         scale_melbands=scale_melbands,
         clip_length_samples=clip_length_samples,
         clip_overlap_samples=clip_overlap_samples,
-        dataset_limit=proper_dataset_limit,
+        dataset_limit=proper_dataset_limit
     )
 
     # verify(
@@ -486,6 +535,9 @@ def main():
         batch_size=batch_size,
         epochs=epochs,
         lossfunction=lossfunction,
+        optimizer_type=optimizer_type,
+        optimizer_args=optimizer_args,
+        optimizer_kwargs=optimizer_kwargs,
         num_workers=num_workers,
         lr=lr,
         weight_decay=weight_decay,
@@ -502,7 +554,12 @@ def main():
         clip_length_samples=clip_length_samples,
         clip_overlap_samples=clip_overlap_samples,
         proper_dataset_limit=proper_dataset_limit,
-        tracker=tracker
+        fstride=fstride,
+        tstride=tstride,
+        imagenet_pretrain=imagenet_pretrain,
+        audioset_pretrain=audioset_pretrain,
+        model_size=model_size,
+        tracker=tracker,
     )
 
 if __name__ == "__main__":
