@@ -1,14 +1,14 @@
 #!/bin/sh
 #SBATCH --account=ie-idi
 #SBATCH --partition=GPUQ
-#SBATCH --time=00-167:00:00
+#SBATCH --time=00-24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
 #SBATCH --gres=gpu:1
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
-#SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm.out"
+#SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm-%j.out"
 #SBATCH --mail-user=martin.moan1@gmail.com
 #SBATCH --mail-type=ALL
 module purge
