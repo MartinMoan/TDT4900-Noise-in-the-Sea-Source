@@ -38,7 +38,7 @@ class WandbTracker(ITracker):
             "version": uname.version,
             "machine": uname.machine
         }
-        configuration = {**self.infrastructure, **kwargs}
+        configuration = {"infrastructure": self.infrastructure, **kwargs}
 
         self.run = wandb.init(
             name=name,
