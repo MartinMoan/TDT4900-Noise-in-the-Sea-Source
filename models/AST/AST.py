@@ -207,16 +207,27 @@ class ASTModel(nn.Module):
         return x
 
 if __name__ == '__main__':
+    n_mels = 1024
+    hop_length = 256
+    n_fft = 16384
+    scale_melbands=False
+    classification_threshold = 0.5
+
+    fstride=10
+    tstride=10
+    imagenet_pretrain=True
+    audioset_pretrain=False # by setting this to false, we can choose the input dimensions as we like
+    model_size="base384" # [tiny224, small224, base224, base384]
+
     batch_size = 1
     time_frames = 1024
-    mel_bands = 128
     
     model = ASTModel(
         label_dim=2, 
         fstride=10, 
         tstride=10, 
         input_tdim=time_frames, 
-        input_fdim=mel_bands, 
+        input_fdim=n_mels, 
         imagenet_pretrain=True, 
         audioset_pretrain=True, 
         verbose=True

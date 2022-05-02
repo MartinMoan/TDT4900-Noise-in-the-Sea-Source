@@ -113,6 +113,12 @@ class WandbTracker(ITracker):
             self.logger.log(f"{index} / {len(indeces)}")
 
         self.run.log({"exampes": table})
+        self.run.config.update(dict(
+            dataset_info=dict(
+                example_shape=dataset.example_shape(),
+                label_shape=dataset.label_shape()
+            )
+        ))
 
 class SummableDict:
     def _isnumber(value: any) -> bool:
