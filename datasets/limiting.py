@@ -85,7 +85,7 @@ class DatasetLimiter(ICustomDataset):
         return len(self._dataset_indeces)
 
     def __getitem__(self, index) -> LabeledAudioData:
-        if index > len(self):
+        if index >= len(self):
             raise IndexError(f"index {index} out of range for {self.__class__.__name__} object with length {len(self)}")
         raw_index = self._dataset_indeces[index]
         return self._dataset[raw_index]
