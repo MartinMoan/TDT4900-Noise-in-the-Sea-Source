@@ -222,6 +222,10 @@ class BalancedKFolder(IFolder):
     def properties(self) -> Mapping[str, any]:
         return {"k_folds": self._n_splits, "shuffle": self.shuffle, "random_state": self.random_state}
 
+    @property
+    def n_splits(self) -> int:
+        return self._n_splits
+
 class BalancedDatasetDecorator(ICustomDataset):
     def __init__(self, dataset: ICustomDataset, balancer: IDatasetBalancer, force_recarche=False, **kwargs) -> None:
         super().__init__()
