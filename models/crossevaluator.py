@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import multiprocessing
-from multiprocessing.pool import Pool
-from datetime import datetime
+from multiprocessing.pool import ThreadPool
 import sys
 import pathlib
 
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
 from interfaces import IModelProvider, ILoggerFactory, IDatasetVerifier, ICrossEvaluator, ITracker, IDatasetProvider, ITrainer, IEvaluator, IMetricComputer, IFolder, ISaver
 from tools.mapagg import MappingAggregator
 import inspect
@@ -24,6 +22,7 @@ def verify(func):
         for arg, input_value in named_args.items():
             if arg in spec.annotations:
                 expected_type = spec.annotations[arg]
+                print(input_value, expected_type)
                 if not isinstance(input_value, expected_type):
                     raise TypeError(f"Argument {arg} has incorrect type. Expected {expected_type} but received {type(input_value)}")
 
@@ -43,7 +42,8 @@ class CrossEvaluator(ICrossEvaluator):
         trainer: ITrainer,
         evaluator: IEvaluator,
         metric_computer: IMetricComputer,
-        saver: ISaver):
+        saver: ISaver,
+        n_fold_workers: int):
         
         self._logger_factory = logger_factory
         self._logger = logger_factory.create_logger()
@@ -56,6 +56,7 @@ class CrossEvaluator(ICrossEvaluator):
         self._evaluator = evaluator
         self._metric_computer = metric_computer
         self._saver = saver
+        self._n_fold_workers = n_fold_workers
 
     def afold(self, fold, dataset, training_samples, test_samples):
         bar = "----------------------------------------"
@@ -109,11 +110,11 @@ class CrossEvaluator(ICrossEvaluator):
         
         all_metrics = []
 
-        with Pool(processes=min(self._folder.n_splits, multiprocessing.cpu_count())) as pool:
+        with ThreadPool(processes=self._n_fold_workers) as pool:
             tasks = []
             
             for fold, (training_samples, test_samples) in enumerate(self._folder.split(dataset)):
-                task = pool.apply_async(self.afold, (fold, dataset, training_samples, test_samples,))    
+                task = pool.apply_async(self.afold, (fold, dataset, training_samples, test_samples,))
                 tasks.append(task)
             
             for task in tasks:
@@ -124,7 +125,7 @@ class CrossEvaluator(ICrossEvaluator):
             cumulative_metrics = MappingAggregator.add(cumulative_metrics, metrics)
         cumulative_metrics = MappingAggregator.div(cumulative_metrics, len(all_metrics))
         self._logger.log("Mean metrics:", cumulative_metrics)
-        self._tracker.track({"eval": cumulative_metrics})
+        self._tracker.track({"eval": cumulative_metrics}) 
 
 if __name__ == "__main__":
     import torch
@@ -144,8 +145,7 @@ if __name__ == "__main__":
     from mocks.mockdatasetprovider import MockDatasetProvider
     from mocks.mocktensordataset import MockTensorDataset
     from mocks.mockdatasetverifier import MockDatasetVerifier
-    from tracking.sheets import SheetClient
-    import config
+    from mocks.mocktracker import MockTracker
 
     batch_size = 16
     epochs = 3
@@ -174,14 +174,7 @@ if __name__ == "__main__":
 
     dataset_verifier = MockDatasetVerifier()
 
-    tracker = Tracker(
-        logger_factory=logger_factory,
-        client = SheetClient(
-            logger_factory=logger_factory, 
-            spreadsheet_key="1qT3gS0brhu2wj59cyeZYP3AywGErROJCqR2wYks6Hcw", 
-            sheet_id=1339590295
-        )
-    )
+    tracker = MockTracker(logger_factory=logger_factory)
     
     folder = BasicKFolder(n_splits=kfolds, shuffle=True)
 
@@ -191,36 +184,39 @@ if __name__ == "__main__":
         optimizer_kwargs={"lr": lr, "weight_decay": weight_decay}
     )
 
-    trainer = Trainer(
-        logger_factory=logger_factory,
-        optimizer_provider=optimizer_provider,
-        batch_size=batch_size,
-        epochs=epochs,
-        lossfunction=lossfunction,
-        num_workers=num_workers
-    )
-
-    evaluator = Evaluator(logger_factory=logger_factory, batch_size=16)
-
     metric_computer = BinaryMetricComputer(
         logger_factory=logger_factory,
         class_dict=dataset.classes(),
         threshold=0.5
     )
+    
+    trainer = Trainer(
+        logger_factory=logger_factory,
+        optimizer_provider=optimizer_provider,
+        tracker=tracker,
+        metric_computer=metric_computer,
+        batch_size=batch_size,
+        epochs=epochs,
+        lossfunction=lossfunction,
+        num_workers=num_workers,
+    )
+
+    evaluator = Evaluator(logger_factory=logger_factory, batch_size=16)
 
     saver = Saver(logger_factory=logger_factory)
 
     cv = CrossEvaluator(
-        model_provider, 
-        logger_factory,
-        dataset_provider,
-        dataset_verifier,
-        tracker,
-        folder,
-        trainer,
-        evaluator,
-        metric_computer,
-        saver
+        model_provider=model_provider, 
+        logger_factory=logger_factory,
+        dataset_provider=dataset_provider,
+        dataset_verifier=dataset_verifier,
+        tracker=tracker,
+        folder=folder,
+        trainer=trainer,
+        evaluator=evaluator,
+        metric_computer=metric_computer,
+        saver=saver,
+        n_fold_workers=min(kfolds, multiprocessing.cpu_count())
     )
 
     cv.kfoldcv()
