@@ -47,7 +47,10 @@ def init(
         overlap_nsamples=clip_overlap_samples,
     )
 
-    label_accessor = BinaryLabelAccessor()
+    return clipped_dataset
+
+def createspect(logger_factory, clip, n_mels, n_fft, hop_length, storepath):
+    print(n_mels, n_fft, hop_length)
     feature_accessor = MelSpectrogramFeatureAccessor(
         logger_factory=logger_factory, 
         n_mels=n_mels,
@@ -56,15 +59,15 @@ def init(
         scale_melbands=False,
         verbose=True
     )
+    X = feature_accessor(clip)
 
-    complete_tensordataset = TensorAudioDataset(
-        dataset=clipped_dataset,
-        label_accessor=label_accessor,
-        feature_accessor=feature_accessor,
-        logger_factory=logger_factory
-    )
-
-    return complete_tensordataset
+    plt.imshow(X.detach().squeeze().numpy(), aspect="auto")
+    plt.suptitle(clip.filepath.name)
+    plt.title(", ".join(clip.labels.source_class_specific.unique()))
+    filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
+    fig = plt.gcf()
+    fig.set_size_inches((8.5, 11), forward=False)
+    fig.savefig(storepath.joinpath(filename), dpi=500)
 
 def main():
     logger_factory = LoggerFactory(
@@ -101,30 +104,21 @@ def main():
     if not path.exists():
         path.mkdir(parents=False, exist_ok=False)
 
-    for n_mels in mels:
-        for n_fft in ffts:
-            for hop_length in hop_lengths:
-                print(n_mels, n_fft, hop_length)
-                feature_accessor = MelSpectrogramFeatureAccessor(
-                    logger_factory=logger_factory, 
-                    n_mels=n_mels,
-                    n_fft=n_fft,
-                    hop_length=hop_length,
-                    scale_melbands=False,
-                    verbose=True
-                )
+    clip = dataset[example_index]
 
-                dataset._feature_accessor = feature_accessor
-    
-                clip = dataset.audiodata(example_index)
-                X, Y = dataset[example_index]
-                plt.imshow(X.detach().squeeze().numpy(), aspect="auto")
-                plt.suptitle(clip.filepath.name)
-                plt.title(", ".join(clip.labels.source_class_specific.unique()))
-                filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
-                fig = plt.gcf()
-                fig.set_size_inches((8.5, 11), forward=False)
-                fig.savefig(path.joinpath(filename), dpi=500)
+    import multiprocessing
+    from multiprocessing.pool import Pool
+
+    with Pool(processes=multiprocessing.cpu_count()) as pool:
+        tasks = []
+        for n_mels in mels:
+            for n_fft in ffts:
+                for hop_length in hop_lengths:
+                    args = (logger_factory, clip, n_mels, n_fft, hop_length, path)
+                    task = pool.apply_async(createspect, args, kwds={})
+                    tasks.append(task)
+        for task in tasks:
+            task.get()
 
 if __name__ == "__main__":
     main()
