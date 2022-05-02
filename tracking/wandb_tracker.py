@@ -114,10 +114,8 @@ class WandbTracker(ITracker):
 
         self.run.log({"exampes": table})
         self.run.config.update(dict(
-            dataset_info=dict(
-                example_shape=dataset.example_shape(),
-                label_shape=dataset.label_shape()
-            )
+            example_shape=dataset.example_shape(),
+            label_shape=dataset.label_shape()
         ))
 
 class SummableDict:
