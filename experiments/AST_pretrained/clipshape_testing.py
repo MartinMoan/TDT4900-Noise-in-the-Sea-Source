@@ -23,9 +23,6 @@ import config
 
 def init(
         logger_factory,
-        n_mels,
-        n_fft,
-        hop_length,
         clip_length_samples=None,
         clip_overlap_samples=None,
         clip_duration_seconds=None,
@@ -76,10 +73,6 @@ def main():
         logger_kwargs=dict(logformatter=LogFormatter(),)
     )
 
-    # n_mels = 1024 # number of mel frequency bands
-    # n_fft = 8184*2 # length of window to compute Fourier Transform over. Higher - create frequency resolution, lower - greater time resolution
-    # hop_length = 512 # length between successive Fourier Transform windows
-
     mels = [2**i for i in range(6, 14)]
     ffts = [2**i for i in range(6, 16)]
     hop_lengths = [2**i for i in range(6, 14)]
@@ -92,9 +85,6 @@ def main():
 
     dataset = init(
         logger_factory,
-        n_mels,
-        n_fft,
-        hop_length,
         clip_duration_seconds=clip_duration_seconds,
         clip_overlap_seconds=clip_overlap_seconds
     )
