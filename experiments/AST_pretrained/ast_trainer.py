@@ -260,7 +260,7 @@ def verify(
         evaluator=evaluator,
         metric_computer=metric_computer,
         saver=saver,
-        n_fold_workers=min(kfolds, multiprocessing.cpu_count())
+        n_fold_workers=1 #min(kfolds, multiprocessing.cpu_count())
     )
     cv.kfoldcv()
     logger.log("Verification run complete!")
@@ -437,7 +437,7 @@ def proper(
         evaluator=evaluator,
         metric_computer=metric_computer,
         saver=saver,
-        n_fold_workers=min(kfolds, multiprocessing.cpu_count())
+        n_fold_workers=1 #min(kfolds, multiprocessing.cpu_count())
     )
     cv.kfoldcv()
 
