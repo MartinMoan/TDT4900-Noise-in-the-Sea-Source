@@ -11,7 +11,6 @@ import torch
 import wandb
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-from interfaces import ILoggerFactory, IModelProvider
 
 from tracking.logger import Logger, LogFormatter
 from tracking.saver import Saver
@@ -37,87 +36,7 @@ from models.crossevaluator import CrossEvaluator
 
 from metrics import BinaryMetricComputer
 
-import config
-
-class AstModelProvider(IModelProvider):
-    def __init__(
-        self,
-        logger_factory: ILoggerFactory,
-        n_model_outputs: int, 
-        n_mels: int, 
-        n_fft: int,
-        hop_length: int,
-        sr: int,
-        clip_length_samples: int,
-        clip_overlap_samples: int,
-        device: str,
-        fstride: int,
-        tstride: int,
-        imagenet_pretrain: bool,
-        audioset_pretrain: bool,
-        model_size: str) -> None:
-        
-        super().__init__()
-        self.logger_factory = logger_factory
-        self.logger = logger_factory.create_logger()
-        self.n_model_outputs = n_model_outputs
-        self.n_mels = n_mels
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.sr = sr
-        self.clip_length_samples = clip_length_samples
-        self.clip_overlap_samples = clip_overlap_samples
-        self.device = device
-        self.fstride = fstride
-        self.tstride = tstride
-        self.imagenet_pretrain = imagenet_pretrain
-        self.audioset_pretrain = audioset_pretrain
-        self.model_size = model_size
-    
-    def instantiate(self) -> torch.nn.Module:
-        self.logger.log("Instantiating model...")
-
-        t_dim = int((self.clip_length_samples / self.hop_length) + 1)
-        # Alternatively:
-        # frame_rate = self.sr / self.hop_length
-        # clip_duration_seconds = self.sr * self.clip_length_samples
-        # t_dim = int(frame_rate * clip_duration_seconds)
-        f_dim = self.n_mels
-
-        model = ASTWrapper(
-            logger_factory=self.logger_factory,
-            activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
-            label_dim=self.n_model_outputs,
-            fstride=self.fstride, 
-            tstride=self.tstride, 
-            input_fdim=t_dim, 
-            input_tdim=f_dim, 
-            imagenet_pretrain=self.imagenet_pretrain, 
-            audioset_pretrain=self.audioset_pretrain, 
-            model_size=self.model_size,
-            verbose=True
-        )
-        # self.logger.log("Freezing pre-trained model parameters...")
-        # model.freeze_pretrained_parameters()
-        # self.logger.log("Parameter freeze complete!")
-
-        if torch.cuda.device_count() > 1:
-            # Use all the available GPUs with DataParallel
-            model = torch.nn.DataParallel(model)
-        
-        model.to(self.device)
-        self.logger.log("Model instantiated!")
-        return model
-
-    @property
-    def properties(self) -> Mapping[str, any]:
-        props = {
-            "n_model_outputs": self.n_model_outputs,
-            "n_mels": self.n_mels,
-            "n_time_frames": self.n_time_frames,
-            "device": self.device,
-        }
-        return props
+from astprovider import AstModelProvider
 
 def verify(
     logger_factory,
@@ -129,7 +48,6 @@ def verify(
     n_model_outputs,
     scale_melbands,
     classification_threshold,
-    device,
     clip_length_samples,
     clip_overlap_samples,
     args
@@ -142,17 +60,18 @@ def verify(
         timeout_seconds=None
     )
 
-    model_provider = AstModelProvider(logger_factory=logger_factory,
+    model_provider = AstModelProvider(
+        logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
         n_mels=args.n_mels,
-        n_fft=args.n_fft,
         hop_length=args.hop_length,
-        device=device,
+        clip_length_samples=clip_length_samples,
+        device="cuda" if torch.cuda.is_available() else "cpu",
         fstride=args.fstride,
         tstride=args.tstride,
         imagenet_pretrain=args.imagenet_pretrain,
         audioset_pretrain=args.audioset_pretrain,
-        model_size=args.model_size
+        model_size=args.model_size,
     )
 
     clipped_dataset = CachedClippedDataset(
@@ -238,7 +157,7 @@ def verify(
         logger_factory=logger_factory, 
         batch_size=args.batch_size,
         num_workers=num_workers,
-        device=device
+        device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     saver = Saver(logger_factory=logger_factory)
@@ -306,9 +225,9 @@ def proper(
         logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
         n_mels=args.n_mels,
-        n_fft=args.n_fft,
         hop_length=args.hop_length,
-        device=args.device,
+        clip_length_samples=clip_length_samples,
+        device="cuda" if torch.cuda.is_available() else "cpu",
         fstride=args.fstride,
         tstride=args.tstride,
         imagenet_pretrain=args.imagenet_pretrain,
@@ -386,7 +305,7 @@ def proper(
         epochs=args.epochs,
         lossfunction=lossfunction,
         num_workers=num_workers,
-        device=args.device
+        device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     dataset_verifier = BinaryTensorDatasetVerifier(
@@ -399,7 +318,7 @@ def proper(
         logger_factory=logger_factory, 
         batch_size=args.batch_size,
         num_workers=num_workers,
-        device=args.device
+        device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     saver = Saver(logger_factory=logger_factory)
@@ -445,8 +364,9 @@ def init():
     parser.add_argument("-hop_length", type=int, required=True)
     parser.add_argument("-fstride", type=int, default=10)
     parser.add_argument("-tstride", type=int, default=10)
-    parser.add_argument("-imagenet_pretrain", type=bool, required=True)
-    parser.add_argument("-audioset_pretrain", type=bool, required=True)
+    parser.add_argument("--imagenet_pretrain", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--audioset_pretrain", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--verification_run", action=argparse.BooleanOptionalAction)
     parser.add_argument("-model_size", type=str, choices=["tiny224", "small224", "base224", "base384"])
     parser.add_argument("-clip_duration_seconds", type=float, required=True)
     parser.add_argument("-clip_overlap_seconds", type=float, required=True)
@@ -479,14 +399,14 @@ def main(args):
     optimizer_kwargs=dict(lr=args.learning_rate, weight_decay=args.weight_decay, betas=tuple(args.betas))
 
     n_model_outputs = 2
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     scale_melbands=False
     classification_threshold = 0.5
 
     sr = 128000
     clip_length_samples = int(sr * args.clip_duration_seconds) # ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
     clip_overlap_samples = int(sr * args.clip_overlap_seconds) #int(clip_length_samples * 0.25)
-    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     tracker = WandbTracker(
         logger_factory=logger_factory,
         name=args.tracking_name,
@@ -525,21 +445,21 @@ def main(args):
         )
     )
 
-    verify(
-        logger_factory=logger_factory,
-        lossfunction=lossfunction,
-        optimizer_type=optimizer_type,
-        optimizer_args=optimizer_args,
-        optimizer_kwargs=optimizer_kwargs,
-        num_workers=num_workers,
-        n_model_outputs=n_model_outputs,
-        scale_melbands=scale_melbands,
-        classification_threshold=classification_threshold,
-        device=device,
-        clip_length_samples=clip_length_samples,
-        clip_overlap_samples=clip_overlap_samples,
-        args=args
-    )
+    if args.verification_run:
+        verify(
+            logger_factory=logger_factory,
+            lossfunction=lossfunction,
+            optimizer_type=optimizer_type,
+            optimizer_args=optimizer_args,
+            optimizer_kwargs=optimizer_kwargs,
+            num_workers=num_workers,
+            n_model_outputs=n_model_outputs,
+            scale_melbands=scale_melbands,
+            classification_threshold=classification_threshold,
+            clip_length_samples=clip_length_samples,
+            clip_overlap_samples=clip_overlap_samples,
+            args=args
+        )
 
     proper(
         logger_factory=logger_factory,
