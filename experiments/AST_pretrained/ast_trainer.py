@@ -121,31 +121,18 @@ class AstModelProvider(IModelProvider):
 
 def verify(
     logger_factory,
-    batch_size,
-    epochs,
     lossfunction,
     optimizer_type,
     optimizer_args,
     optimizer_kwargs,
     num_workers,
-    kfolds,
     n_model_outputs,
-    verbose,
-    device,
-    n_mels,
-    hop_length,
-    n_fft,
     scale_melbands,
     classification_threshold,
+    device,
     clip_length_samples,
     clip_overlap_samples,
-    verification_dataset_limit,
-    fstride,
-    tstride,
-    imagenet_pretrain,
-    audioset_pretrain,
-    model_size,
-    tracker
+    args
 ):
     logger = logger_factory.create_logger()
 
@@ -157,15 +144,15 @@ def verify(
 
     model_provider = AstModelProvider(logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=hop_length,
+        n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         device=device,
-        fstride=fstride,
-        tstride=tstride,
-        imagenet_pretrain=imagenet_pretrain,
-        audioset_pretrain=audioset_pretrain,
-        model_size=model_size
+        fstride=args.fstride,
+        tstride=args.tstride,
+        imagenet_pretrain=args.imagenet_pretrain,
+        audioset_pretrain=args.audioset_pretrain,
+        model_size=args.model_size
     )
 
     clipped_dataset = CachedClippedDataset(
@@ -178,21 +165,21 @@ def verify(
     label_accessor = BinaryLabelAccessor()
     feature_accessor = MelSpectrogramFeatureAccessor(
         logger_factory=logger_factory, 
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=hop_length,
+        n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         scale_melbands=scale_melbands,
-        verbose=verbose
+        verbose=args.verbose
     )
 
     verification_dataset_provider = VerificationDatasetProvider(
         clipped_dataset=clipped_dataset,
-        limit=verification_dataset_limit,
+        limit=args.verification_dataset_limit,
         balancer=CachedDatasetBalancer(
             dataset=clipped_dataset,
             logger_factory=logger_factory,
             worker=worker,
-            verbose=verbose
+            verbose=args.verbose
         ),
         randomize=True,
         balanced=True,
@@ -204,7 +191,7 @@ def verify(
     dataset_verifier = BinaryTensorDatasetVerifier(
         logger_factory=logger_factory,
         worker=worker,
-        verbose=verbose
+        verbose=args.verbose
     )
 
     verification_tracker = WandbTracker(
@@ -216,12 +203,12 @@ def verify(
     )
     
     folder = BalancedKFolder(
-        n_splits=kfolds,
+        n_splits=args.kfolds,
         shuffle=True, 
         random_state=None,
         balancer_ref=DatasetBalancer,
         balancer_args=(),
-        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": args.verbose}
     )
 
     optimizer_provider = GeneralOptimizerProvider(
@@ -241,15 +228,15 @@ def verify(
         optimizer_provider=optimizer_provider,
         metric_computer=metric_computer,
         tracker=verification_tracker,
-        batch_size=batch_size,
-        epochs=epochs,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
         lossfunction=lossfunction,
         num_workers=num_workers
     )
 
     evaluator = Evaluator(
         logger_factory=logger_factory, 
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         num_workers=num_workers,
         device=device
     )
@@ -285,31 +272,18 @@ def verify(
 
 def proper(
     logger_factory,
-    batch_size,
-    epochs,
     lossfunction,
     optimizer_type,
     optimizer_args,
     optimizer_kwargs,
     num_workers,
-    kfolds,
     n_model_outputs,
-    verbose,
-    device,
-    n_mels,
-    hop_length,
-    n_fft,
     scale_melbands,
     classification_threshold,
     clip_length_samples,
     clip_overlap_samples,
-    proper_dataset_limit,
-    fstride,
-    tstride,
-    imagenet_pretrain,
-    audioset_pretrain,
-    model_size,
-    tracker
+    tracker,
+    args
     ):
 
     logger = logger_factory.create_logger()
@@ -331,15 +305,15 @@ def proper(
     model_provider = AstModelProvider(
         logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        device=device,
-        fstride=fstride,
-        tstride=tstride,
-        imagenet_pretrain=imagenet_pretrain,
-        audioset_pretrain=audioset_pretrain,
-        model_size=model_size,
+        n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        device=args.device,
+        fstride=args.fstride,
+        tstride=args.tstride,
+        imagenet_pretrain=args.imagenet_pretrain,
+        audioset_pretrain=args.audioset_pretrain,
+        model_size=args.model_size,
     )
 
     clipped_dataset = CachedClippedDataset(
@@ -353,7 +327,7 @@ def proper(
         dataset=clipped_dataset,
         logger_factory=logger_factory,
         worker=worker, 
-        verbose=verbose
+        verbose=args.verbose
     )
 
     # limited_dataset = ProportionalDatasetLimiter(
@@ -366,11 +340,11 @@ def proper(
     label_accessor = BinaryLabelAccessor()
     feature_accessor = MelSpectrogramFeatureAccessor(
         logger_factory=logger_factory, 
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=hop_length,
+        n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         scale_melbands=scale_melbands,
-        verbose=verbose
+        verbose=args.verbose
     )
 
     complete_tensordataset = TensorAudioDataset(
@@ -383,12 +357,12 @@ def proper(
     complete_dataset_provider = BasicDatasetProvider(dataset=complete_tensordataset)
 
     folder = BalancedKFolder(
-        n_splits=kfolds,
+        n_splits=args.kfolds,
         shuffle=True, 
         random_state=None,
         balancer_ref=DatasetBalancer,
         balancer_args=(),
-        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": verbose}
+        balancer_kwargs={"logger_factory": logger_factory, "worker": worker,"verbose": args.verbose}
     )
 
     optimizer_provider = GeneralOptimizerProvider(
@@ -408,29 +382,29 @@ def proper(
         optimizer_provider=optimizer_provider,
         tracker=tracker,
         metric_computer=metric_computer,
-        batch_size=batch_size,
-        epochs=epochs,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
         lossfunction=lossfunction,
         num_workers=num_workers,
-        device=device
+        device=args.device
     )
 
     dataset_verifier = BinaryTensorDatasetVerifier(
         logger_factory=logger_factory,
         worker=worker,
-        verbose=verbose
+        verbose=args.verbose
     )
 
     evaluator = Evaluator(
         logger_factory=logger_factory, 
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         num_workers=num_workers,
-        device=device
+        device=args.device
     )
 
     saver = Saver(logger_factory=logger_factory)
 
-    logger.log(f"Beginning {kfolds}-fold cross evaluation...")
+    logger.log(f"Beginning {args.kfolds}-fold cross evaluation...")
     label_distributions = {label: len(values) for label, values in balancer.label_distributions().items()}
     tracker.run.config.update(
         {
@@ -457,47 +431,35 @@ def proper(
     )
     cv.kfoldcv()
 
-def main():
-    batch_size = 16
-    epochs = 3
-    lossfunction = torch.nn.BCEWithLogitsLoss()
-    num_workers = min(multiprocessing.cpu_count(), 32) # DataLoader has max workers of 32
-    lr = 0.00001
-    weight_decay=5e-7 # Same as for AST paper code: https://github.com/YuanGongND/ast/blob/master/src/traintest
-    betas=(0.95, 0.999) # Same as for AST paper code: https://github.com/YuanGongND/ast/blob/master/src/traintest
+def init():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-batch_size", type=int, required=True)
+    parser.add_argument("-epochs", type=int, required=True)
+    parser.add_argument("-learning_rate", type=float, required=True)
+    parser.add_argument("-weight_decay", type=float, required=True)
+    parser.add_argument("-betas", type=float, nargs="+", required=True)
+    parser.add_argument("-kfolds", type=int, required=True)
+    parser.add_argument("-n_mels", type=int, required=True)
+    parser.add_argument("-n_fft", type=int, required=True)
+    parser.add_argument("-hop_length", type=int, required=True)
+    parser.add_argument("-fstride", type=int, default=10)
+    parser.add_argument("-tstride", type=int, default=10)
+    parser.add_argument("-imagenet_pretrain", type=bool, required=True)
+    parser.add_argument("-audioset_pretrain", type=bool, required=True)
+    parser.add_argument("-model_size", type=str, choices=["tiny224", "small224", "base224", "base384"])
+    parser.add_argument("-clip_duration_seconds", type=float, required=True)
+    parser.add_argument("-clip_overlap_seconds", type=float, required=True)
+    parser.add_argument("-tracking_name", type=str, required=True)
+    parser.add_argument("-tracking_note", type=str, required=True)
+    parser.add_argument("-tracking_tags", type=str, nargs="+", required=True)
+    parser.add_argument("-track_n_examples", type=int, default=50)
+    parser.add_argument("-verification_dataset_limit", type=int, default=42)
+    parser.add_argument("-proper_dataset_limit", default=0.7)
+    parser.add_argument("--verbose", action="store_true", default=False)
+    return parser.parse_args()
 
-    optimizer_type=torch.optim.Adam
-    optimizer_args=()
-    optimizer_kwargs=dict(lr=lr, weight_decay=weight_decay, betas=betas)
-
-    kfolds = 5
-    n_model_outputs = 2
-    verbose = True
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    n_mels = 1024
-    hop_length = 256
-    n_fft = 16384
-    scale_melbands=False
-    classification_threshold = 0.5
-
-    fstride=10
-    tstride=10
-    imagenet_pretrain=True
-    audioset_pretrain=False # by setting this to false, we can choose the input dimensions as we like
-    model_size="base384" # [tiny224, small224, base224, base384]
-
-    sr = 128000
-    clip_length_samples = int(sr * 30.0) # ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
-    clip_overlap_samples = int(sr * 10.0) #int(clip_length_samples * 0.25)
-
-    tracking_name=f"AST Pretrained Unfrozen"
-    note="AST Pretrained Unfrozen"
-    tags=["AST"]
-
-    ### Only used for limited dataset during verification run ###
-    verification_dataset_limit = 42
-    proper_dataset_limit = 0.7 # percentage of clips in proper dataset
-
+def main(args):
     logger_factory = LoggerFactory(
         logger_type=Logger, 
         logger_args=(LogFormatter(),)
@@ -507,103 +469,94 @@ def main():
     if not torch.cuda.is_available() and "idun" in socket.gethostname():
         logger.log(f"Cuda is not available in the current environment (hostname: {repr(socket.gethostname())}), aborting...")
         exit(1)
+    logger.log(f"Running {pathlib.Path(__file__).name} with arguments:", vars(args))
+
+    lossfunction = torch.nn.BCEWithLogitsLoss()
+    num_workers = min(multiprocessing.cpu_count(), 32) # torch DataLoader has max workers of 32
+
+    optimizer_type=torch.optim.Adam
+    optimizer_args=()
+    optimizer_kwargs=dict(lr=args.learning_rate, weight_decay=args.weight_decay, betas=tuple(args.betas))
+
+    n_model_outputs = 2
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    scale_melbands=False
+    classification_threshold = 0.5
+
+    sr = 128000
+    clip_length_samples = int(sr * args.clip_duration_seconds) # ((n_time_frames - 1) * hop_length) + 1 # Ensures that the output of MelSpectrogramFeatureAccessor will have shape (1, n_mels, n_time_frames)
+    clip_overlap_samples = int(sr * args.clip_overlap_seconds) #int(clip_length_samples * 0.25)
     
     tracker = WandbTracker(
         logger_factory=logger_factory,
-        name=tracking_name,
-        note=note,
-        tags=tags,
-        n_examples=50,
-        batch_size=batch_size,
-        epochs=epochs,
+        name=args.tracking_name,
+        note=args.tracking_note,
+        tags=args.tracking_tags,
+        n_examples=args.track_n_examples,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
         lossfunction=lossfunction,
         num_workers=num_workers,
-        kfolds=kfolds,
-        verbose=verbose,
+        kfolds=args.kfolds,
+        verbose=args.verbose,
         device=device,
         optimizer_info=dict(
             type=str(optimizer_type.__name__),
-            lr=lr,
-            weight_decay=weight_decay,
-            betas=str(betas)
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay,
+            betas=str(args.betas)
         ),
         dataset_info=dict(
-            n_mels=n_mels,
-            hop_length=hop_length,
-            n_fft=n_fft,
+            n_mels=args.n_mels,
+            hop_length=args.hop_length,
+            n_fft=args.n_fft,
             scale_melbands=scale_melbands,
             clip_length_samples=clip_length_samples,
             clip_overlap_samples=clip_overlap_samples,
-            dataset_limit=proper_dataset_limit,
+            dataset_limit=args.proper_dataset_limit,
         ),
         model_info=dict(
-            fstride=fstride,
-            tstride=tstride,
-            imagenet_pretrain=imagenet_pretrain,
-            audioset_pretrain=audioset_pretrain,
-            model_size=model_size,
+            fstride=args.fstride,
+            tstride=args.tstride,
+            imagenet_pretrain=args.imagenet_pretrain,
+            audioset_pretrain=args.audioset_pretrain,
+            model_size=args.model_size,
             n_model_outputs=n_model_outputs,
         )
     )
 
     verify(
         logger_factory=logger_factory,
-        batch_size=batch_size,
-        epochs=epochs,
         lossfunction=lossfunction,
         optimizer_type=optimizer_type,
         optimizer_args=optimizer_args,
         optimizer_kwargs=optimizer_kwargs,
         num_workers=num_workers,
-        kfolds=kfolds,
         n_model_outputs=n_model_outputs,
-        verbose=verbose,
-        device=device,
-        n_mels=n_mels,
-        hop_length=hop_length,
-        n_fft=n_fft,
         scale_melbands=scale_melbands,
         classification_threshold=classification_threshold,
+        device=device,
         clip_length_samples=clip_length_samples,
         clip_overlap_samples=clip_overlap_samples,
-        verification_dataset_limit=verification_dataset_limit,
-        fstride=fstride,
-        tstride=tstride,
-        imagenet_pretrain=imagenet_pretrain,
-        audioset_pretrain=audioset_pretrain,
-        model_size=model_size,
-        tracker=tracker
+        args=args
     )
-    
 
     proper(
         logger_factory=logger_factory,
-        batch_size=batch_size,
-        epochs=epochs,
         lossfunction=lossfunction,
         optimizer_type=optimizer_type,
         optimizer_args=optimizer_args,
         optimizer_kwargs=optimizer_kwargs,
         num_workers=num_workers,
-        kfolds=kfolds,
         n_model_outputs=n_model_outputs,
-        verbose=verbose,
-        device=device,
-        n_mels=n_mels,
-        hop_length=hop_length,
-        n_fft=n_fft,
         scale_melbands=scale_melbands,
         classification_threshold=classification_threshold,
         clip_length_samples=clip_length_samples,
         clip_overlap_samples=clip_overlap_samples,
-        proper_dataset_limit=proper_dataset_limit,
-        fstride=fstride,
-        tstride=tstride,
-        imagenet_pretrain=imagenet_pretrain,
-        audioset_pretrain=audioset_pretrain,
-        model_size=model_size,
         tracker=tracker,
+        args=args
     )
 
 if __name__ == "__main__":
-    main()
+    args = init()
+    main(args)
