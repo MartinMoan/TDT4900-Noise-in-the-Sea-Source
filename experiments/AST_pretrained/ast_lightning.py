@@ -231,10 +231,10 @@ def main(hyperparams):
     )
     
     trainer = pl.Trainer(
-        # accelerator="gpu", 
-        # devices=hyperparams.num_gpus, 
-        # num_nodes=hyperparams.num_nodes,
-        # strategy="ddp",
+        accelerator="gpu", 
+        devices=hyperparams.num_gpus, 
+        num_nodes=hyperparams.num_nodes,
+        strategy="ddp",
         logger=logger
     )
     
