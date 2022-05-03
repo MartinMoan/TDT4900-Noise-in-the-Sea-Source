@@ -62,11 +62,11 @@ def verify(
 
     model_provider = AstModelProvider(
         logger_factory=logger_factory,
+        batch_size=args.batch_size,
         n_model_outputs=n_model_outputs,
         n_mels=args.n_mels,
         hop_length=args.hop_length,
         clip_length_samples=clip_length_samples,
-        device="cuda" if torch.cuda.is_available() else "cpu",
         fstride=args.fstride,
         tstride=args.tstride,
         imagenet_pretrain=args.imagenet_pretrain,
@@ -223,16 +223,16 @@ def proper(
 
     model_provider = AstModelProvider(
         logger_factory=logger_factory,
+        batch_size=args.batch_size,
         n_model_outputs=n_model_outputs,
         n_mels=args.n_mels,
         hop_length=args.hop_length,
         clip_length_samples=clip_length_samples,
-        device="cuda" if torch.cuda.is_available() else "cpu",
         fstride=args.fstride,
         tstride=args.tstride,
         imagenet_pretrain=args.imagenet_pretrain,
         audioset_pretrain=args.audioset_pretrain,
-        model_size=args.model_size,
+        model_size=args.model_size
     )
 
     clipped_dataset = CachedClippedDataset(

@@ -5,6 +5,8 @@ from typing import Mapping
 
 import git
 import torch
+import numpy as np
+from torchinfo import summary
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 from interfaces import ILoggerFactory, IModelProvider
@@ -15,11 +17,11 @@ class AstModelProvider(IModelProvider):
     def __init__(
         self,
         logger_factory: ILoggerFactory,
+        batch_size: int,
         n_model_outputs: int, 
         n_mels: int,
         hop_length: int,
         clip_length_samples: int,
-        device: str,
         fstride: int,
         tstride: int,
         imagenet_pretrain: bool,
@@ -33,7 +35,7 @@ class AstModelProvider(IModelProvider):
         self.n_mels = n_mels
         self.hop_length = hop_length
         self.clip_length_samples = clip_length_samples
-        self.device = device
+        self.batch_size = batch_size
         self.fstride = fstride
         self.tstride = tstride
         self.imagenet_pretrain = imagenet_pretrain
@@ -63,15 +65,8 @@ class AstModelProvider(IModelProvider):
             model_size=self.model_size,
             verbose=True
         )
-        # self.logger.log("Freezing pre-trained model parameters...")
-        # model.freeze_pretrained_parameters()
-        # self.logger.log("Parameter freeze complete!")
 
-        if torch.cuda.device_count() > 1:
-            # Use all the available GPUs with DataParallel
-            model = torch.nn.DataParallel(model)
-        
-        model.to(self.device)
+        self.logger.log(summary(model, verbose=0))
         self.logger.log("Model instantiated!")
         return model
 
