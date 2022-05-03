@@ -62,7 +62,7 @@ class WandbTracker(ITracker):
         if self.n_examples <= 0:
             return
         
-        indeces = np.random.random_integers(0, len(dataset), self.n_examples)
+        indeces = np.random.random_integers(0, len(dataset) - 1, self.n_examples)
 
         table = wandb.Table(columns=[
             "audio", 
