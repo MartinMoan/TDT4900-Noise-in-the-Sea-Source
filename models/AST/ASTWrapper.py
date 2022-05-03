@@ -50,6 +50,8 @@ class ASTWrapper(torch.nn.Module):
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Expect X to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
+        # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
+        X = X.permute(0, 1, 3, 2)
         X = X.squeeze(dim=1)
         X = self._ast(X)
         if self._activation is not None:
