@@ -206,35 +206,41 @@ class ASTModel(nn.Module):
         x = self.mlp_head(x)
         return x
 
-if __name__ == '__main__':
-    n_mels = 1024
-    hop_length = 256
-    n_fft = 16384
-    scale_melbands=False
-    classification_threshold = 0.5
+if __name__ == '__main__': 
+    import argparse
+    from tracking.loggerfactory import LoggerFactory
+    from tracking.logger import Logger, LogFormatter
+    logger_factory = LoggerFactory(
+        logger_type=Logger,
+        logger_args=(),
+        logger_kwargs=dict(logformatter=LogFormatter())
+    )
 
-    fstride=10
-    tstride=10
-    imagenet_pretrain=True
-    audioset_pretrain=False # by setting this to false, we can choose the input dimensions as we like
     model_size="base384" # [tiny224, small224, base224, base384]
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--tdim", type=int, default=1024, help="The time dimension of model input")
+    parser.add_argument("-f", "--fdim", type=int, default=512, help="The frequency dimension of model input")
+    args = parser.parse_args()
+
     batch_size = 1
-    time_frames = 1024
+    time_frames = args.tdim
+    n_mels = args.fdim
     
     model = ASTModel(
+        logger_factory=logger_factory,
         label_dim=2, 
         fstride=10, 
         tstride=10, 
         input_tdim=time_frames, 
         input_fdim=n_mels, 
         imagenet_pretrain=True, 
-        audioset_pretrain=True, 
-        verbose=True
+        audioset_pretrain=False, 
+        model_size=model_size,
+        verbose=True,
     )
     
-    model.freeze_pretrained_params()
-    # test_input = torch.rand((batch_size, time_frames, mel_bands))
+    test_input = torch.rand((batch_size, time_frames, n_mels))
 
-    # out = model(test_input)
-    # print(out.shape)
+    out = model(test_input)
+    print(out.shape)
