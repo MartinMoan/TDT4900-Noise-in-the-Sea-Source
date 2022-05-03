@@ -45,7 +45,11 @@ class AstModelProvider(IModelProvider):
         logger_factory: ILoggerFactory,
         n_model_outputs: int, 
         n_mels: int, 
-        n_time_frames: int, 
+        n_fft: int,
+        hop_length: int,
+        sr: int,
+        clip_length_samples: int,
+        clip_overlap_samples: int,
         device: str,
         fstride: int,
         tstride: int,
@@ -58,7 +62,11 @@ class AstModelProvider(IModelProvider):
         self.logger = logger_factory.create_logger()
         self.n_model_outputs = n_model_outputs
         self.n_mels = n_mels
-        self.n_time_frames = n_time_frames
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.sr = sr
+        self.clip_length_samples = clip_length_samples
+        self.clip_overlap_samples = clip_overlap_samples
         self.device = device
         self.fstride = fstride
         self.tstride = tstride
@@ -68,14 +76,22 @@ class AstModelProvider(IModelProvider):
     
     def instantiate(self) -> torch.nn.Module:
         self.logger.log("Instantiating model...")
+
+        t_dim = int((self.clip_length_samples / self.hop_length) + 1)
+        # Alternatively:
+        # frame_rate = self.sr / self.hop_length
+        # clip_duration_seconds = self.sr * self.clip_length_samples
+        # t_dim = int(frame_rate * clip_duration_seconds)
+        f_dim = self.n_mels
+
         model = ASTWrapper(
             logger_factory=self.logger_factory,
             activation_func = None, # Because loss function is BCEWithLogitsLoss which includes sigmoid activation.
             label_dim=self.n_model_outputs,
             fstride=self.fstride, 
             tstride=self.tstride, 
-            input_fdim=self.n_mels, 
-            input_tdim=self.n_time_frames, 
+            input_fdim=t_dim, 
+            input_tdim=f_dim, 
             imagenet_pretrain=self.imagenet_pretrain, 
             audioset_pretrain=self.audioset_pretrain, 
             model_size=self.model_size,
@@ -116,7 +132,6 @@ def verify(
     n_model_outputs,
     verbose,
     device,
-    n_time_frames,
     n_mels,
     hop_length,
     n_fft,
@@ -143,7 +158,8 @@ def verify(
     model_provider = AstModelProvider(logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
         n_mels=n_mels,
-        n_time_frames=n_time_frames,
+        n_fft=n_fft,
+        hop_length=hop_length,
         device=device,
         fstride=fstride,
         tstride=tstride,
@@ -280,7 +296,6 @@ def proper(
     n_model_outputs,
     verbose,
     device,
-    n_time_frames,
     n_mels,
     hop_length,
     n_fft,
@@ -317,7 +332,8 @@ def proper(
         logger_factory=logger_factory,
         n_model_outputs=n_model_outputs,
         n_mels=n_mels,
-        n_time_frames=n_time_frames,
+        n_fft=n_fft,
+        hop_length=hop_length,
         device=device,
         fstride=fstride,
         tstride=tstride,
@@ -458,7 +474,6 @@ def main():
     n_model_outputs = 2
     verbose = True
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    n_time_frames = 1024 # Required by/due to the ASTModel pretraining
     n_mels = 1024
     hop_length = 256
     n_fft = 16384
@@ -544,7 +559,6 @@ def main():
         n_model_outputs=n_model_outputs,
         verbose=verbose,
         device=device,
-        n_time_frames=n_time_frames,
         n_mels=n_mels,
         hop_length=hop_length,
         n_fft=n_fft,
@@ -575,7 +589,6 @@ def main():
         n_model_outputs=n_model_outputs,
         verbose=verbose,
         device=device,
-        n_time_frames=n_time_frames,
         n_mels=n_mels,
         hop_length=hop_length,
         n_fft=n_fft,

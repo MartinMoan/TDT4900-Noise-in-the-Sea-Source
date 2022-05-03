@@ -47,7 +47,16 @@ def init(
     return clipped_dataset
 
 def createspect(logger_factory, clip, n_mels, n_fft, hop_length, storepath):
-    print(n_mels, n_fft, hop_length)
+    sr = 128000
+    clip_duration = 30.0
+    clip_overlap_dur = 10.0
+    clip_length = int(sr * clip_duration)
+    clip_overlap = int(sr * clip_overlap_dur)
+
+    # hop_length * t_dim + n_fft >= clip_length
+    t_dim = int((clip_length / hop_length) + 1)
+    f_dim = n_mels
+
     feature_accessor = MelSpectrogramFeatureAccessor(
         logger_factory=logger_factory, 
         n_mels=n_mels,
@@ -57,14 +66,16 @@ def createspect(logger_factory, clip, n_mels, n_fft, hop_length, storepath):
         verbose=True
     )
     X = feature_accessor(clip)
-
-    plt.imshow(X.detach().squeeze().numpy(), aspect="auto")
-    plt.suptitle(clip.filepath.name)
-    plt.title(", ".join(clip.labels.source_class_specific.unique()))
-    filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
-    fig = plt.gcf()
-    fig.set_size_inches((11, 6.1), forward=False)
-    fig.savefig(storepath.joinpath(filename), dpi=500)
+    assert f_dim == X.shape[1]
+    assert t_dim == X.shape[2]
+    # plt.imshow(X.detach().squeeze().numpy(), aspect="auto")
+    # plt.suptitle(clip.filepath.name)
+    # plt.title(", ".join(clip.labels.source_class_specific.unique()))
+    # filename=f"n_mels_{n_mels}_hop_length_{hop_length}_n_fft_{n_fft}.png"
+    # fig = plt.gcf()
+    # fig.set_size_inches((11, 6.1), forward=False)
+    # fig.savefig(storepath.joinpath(filename), dpi=500)
+    # plt.show()
 
 def main():
     logger_factory = LoggerFactory(
@@ -98,7 +109,8 @@ def main():
 
     import multiprocessing
     from multiprocessing.pool import Pool
-
+    # createspect(logger_factory, clip, 128, 2048, 512, path)
+    # exit()
     with Pool(processes=multiprocessing.cpu_count()) as pool:
         tasks = []
         for n_mels in mels:
