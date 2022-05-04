@@ -37,3 +37,4 @@ dependencies:
   - zipp
   - pydrive
   - wandb
+  - torchmetrics
