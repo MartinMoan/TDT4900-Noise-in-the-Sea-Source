@@ -161,12 +161,10 @@ class DatasetBalancer(IDatasetBalancer):
         
     def eval_only_indeces(self) -> Iterable[int]:
         indeces = np.concatenate([self._indeces_for_eval[key] for key in self._indeces_for_eval], axis=0)
-        np.random.shuffle(indeces)
         return indeces.astype(int)
 
     def train_indeces(self) -> Iterable[int]:
         indeces = np.concatenate([self._indeces_for_training[key] for key in self._indeces_for_training], axis=0)
-        np.random.shuffle(indeces)
         return indeces.astype(int)
 
     def label_distributions(self) -> Mapping[str, Iterable[int]]:

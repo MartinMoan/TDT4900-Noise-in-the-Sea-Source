@@ -70,22 +70,35 @@ class AstLightningWrapper(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.betas = betas
+        self.printlogger = logger_factory.create_logger()
         self.save_hyperparameters()
 
-    def forward(self, X):
+    def compute(self, X):
         X = X.permute(0, 1, 3, 2)
         X = X.squeeze(dim=1)
         return self._ast(X)
+
+    def forward(self, X):
+        return self.compute(X)
 
     def training_step(self, batch, batch_idx):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch
-        X = X.permute(0, 1, 3, 2)
-        X = X.squeeze(dim=1)
-        Yhat = self._ast(X)
+        self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
+        Yhat = self.compute(X)
         loss = self.lossfunc(Yhat, Y)
-        return dict(loss=loss)
+        return dict(loss=loss, preds=Yhat, truth=Y) # these are sent as input to training_epoch_end
+
+    def training_epoch_end(self, outputs) -> None:
+        preds = torch.cat((pred for pred in outputs["preds"]), dim=0)
+        truth = torch.cat((batch_Y for batch_Y in outputs["truth"]), dim=0)
+        acc = accuracy(preds, truth)
+        loss = np.mean(outputs["loss"])
+        self.printlogger.log("train epoch accuracy:", acc)
+        self.log("train_epoch_accuracy", acc)
+        self.log("train_epoch_loss", loss)
+        return super().training_epoch_end(outputs)
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
@@ -93,10 +106,17 @@ class AstLightningWrapper(pl.LightningModule):
         X = X.squeeze(dim=1)
         Yhat = self._ast(X)
         loss = self.lossfunc(Yhat, Y)
-        preds = torch.argmax(Yhat, dim=1)
-        acc = accuracy(preds, Y)
-        self.log("accuracy", accuracy)
-        return preds, loss, acc
+        return dict(preds=Yhat, loss=loss, truth=Y)
+
+    def test_epoch_end(self, outputs) -> None:
+        preds = torch.cat((pred for pred in outputs["preds"]), dim=0)
+        truth = torch.cat((batch_Y for batch_Y in outputs["truth"]), dim=0)
+        acc = accuracy(preds, truth)
+        loss = np.mean(outputs["loss"])
+        self.printlogger.log("test epoch accuracy:", acc)
+        self.log("test_epoch_accuracy", acc)
+        self.log("test_epoch_loss", loss)
+        return super().test_epoch_end(outputs)
 
     def configure_optimizers(self):
         return torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
