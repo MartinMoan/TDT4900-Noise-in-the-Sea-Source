@@ -41,9 +41,9 @@ class FashionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        target = torch.tensor(Y).type(torch.LongTensor)
-        loss = self.lossfunc(Yhat, target)
-        return dict(loss=loss, preds=Yhat, target=target)
+        # target = torch.tensor(Y).type(torch.LongTensor)
+        loss = self.lossfunc(Yhat, Y)
+        return dict(loss=loss, preds=Yhat, target=Y)
 
     def training_epoch_end(self, outputs) -> None:
         # print(outputs)
@@ -67,7 +67,7 @@ class FashionDataset(pl.LightningDataModule):
             root=root, 
             download=True,
             train=True,
-            # target_transform=FashionDataset.to_categorical,
+            target_transform=torchvision.transforms.ToTensor(),
             transform=torchvision.transforms.ToTensor(),
         )
         for i in range(10):
@@ -77,7 +77,7 @@ class FashionDataset(pl.LightningDataModule):
             root=root, 
             download=True,
             train=False, 
-            # target_transform=FashionDataset.to_categorical,
+            target_transform=torchvision.transforms.ToTensor(),
             transform=torchvision.transforms.ToTensor(),
         )
         self.batch_size = batch_size
