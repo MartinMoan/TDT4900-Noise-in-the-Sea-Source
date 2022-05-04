@@ -97,7 +97,6 @@ class AstLightningWrapper(pl.LightningModule):
         self.accuracy(outputs["preds"], outputs["target"])
         self.printlogger.log("train epoch accuracy:", self.accuracy)
         self.log("train_epoch_accuracy", self.accuracy)
-        return super().training_epoch_end(outputs)
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
@@ -115,7 +114,8 @@ class AstLightningWrapper(pl.LightningModule):
         self.log("test_epoch_loss", loss)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
+        optimizer = torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
+        return dict(optimizer=optimizer)
 
 class SubsetDataset(torch.utils.data.Dataset):
     def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int]) -> None:
@@ -188,13 +188,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.test = SubsetDataset(self.tensorset, subset=self.test_indeces)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
 
 
 def main(hyperparams):
