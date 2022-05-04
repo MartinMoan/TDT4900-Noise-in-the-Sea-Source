@@ -87,7 +87,7 @@ class AstLightningWrapper(pl.LightningModule):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch
-        self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
+        # self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
         Yhat = self.compute(X)
         loss = self.lossfunc(Yhat, Y)
         return dict(loss=loss, preds=Yhat, truth=Y) # these are sent as input to training_epoch_end
@@ -258,13 +258,14 @@ def main(hyperparams):
         num_nodes=hyperparams.num_nodes,
         strategy="ddp",
         logger=logger,
-        auto_scale_batch_size=True
+        # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
     
     logger.watch(model)
 
-    trainer.fit(model, dataset)
-    trainer.test(model, dataset)
+    # trainer.tune(model, datamodule=dataset)
+    trainer.fit(model, datamodule=dataset)
+    trainer.test(model, datamodule=dataset)
 
 def init():
     parser = argparse.ArgumentParser()

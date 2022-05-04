@@ -198,8 +198,11 @@ class ASTModel(nn.Module):
         x = torch.cat((cls_tokens, dist_token, x), dim=1)
         x = x + self.v.pos_embed
         x = self.v.pos_drop(x)
+        self.logger.log(f"X shape {x.shape} n bytes: {sys.getsizeof(x)}")
         for blk in self.v.blocks:
             x = blk(x)
+            self.logger.log(f"X shape {x.shape} n bytes: {sys.getsizeof(x)}")
+
         x = self.v.norm(x)
         x = (x[:, 0] + x[:, 1]) / 2
 
