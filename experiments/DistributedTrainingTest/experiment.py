@@ -32,7 +32,7 @@ class FashionModel(pl.LightningModule):
             torch.nn.Linear(n_inputs, n_inputs),
             torch.nn.Softmax()
         )
-        self.lossfunc = torch.nn.CrossEntropyLoss()
+        self.lossfunc = torch.nn.NLLLoss()
         self.accuracy = torchmetrics.Accuracy(num_classes=n_outputs)
 
     def forward(self, X):
@@ -41,11 +41,16 @@ class FashionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        loss = self.lossfunc(Yhat, Y)
+        preds = torch.argmax(Yhat, dim=0)
+        loss = self.lossfunc(preds, Y)
         return dict(loss=loss, preds=Yhat, target=Y)
 
     def training_epoch_end(self, outputs) -> None:
-        acc = self.accuracy(outputs["preds"], outputs["target"])
+        # print(outputs)
+        # acc = self.accuracy(outputs[:]["preds"], outputs[:]["target"])
+        preds = torch.cat([output["preds"] for output in outputs])
+        target = torch.cat([output["target"] for output in outputs])
+        acc = self.accuracy(preds, target)
         self.log("train_accuracy", acc)
 
     def configure_optimizers(self):
@@ -61,14 +66,16 @@ class FashionDataset(pl.LightningDataModule):
         self.train_dataset = torchvision.datasets.FashionMNIST(
             root=root, 
             download=True,
-            train=True, 
-            transform=torchvision.transforms.ToTensor()
+            train=True,
+            target_transform=lambda Y: np.eye(10, dtype='uint8')[Y],
+            transform=torchvision.transforms.ToTensor(),
         )
         self.test_dataset = torchvision.datasets.FashionMNIST(
             root=root, 
             download=True,
             train=False, 
-            transform=torchvision.transforms.ToTensor()
+            target_transform=lambda Y: np.eye(10, dtype='uint8')[Y],
+            transform=torchvision.transforms.ToTensor(),
         )
         self.batch_size = batch_size
     
@@ -84,7 +91,7 @@ def main(hyperparams):
     
     image_shape = (28, 28)
     in_features = np.prod(image_shape)
-    out_features = 1 # class index/label
+    out_features = 10 # class index/label
     model = FashionModel(n_inputs=in_features, n_outputs=out_features)
 
     logger = WandbLogger(
