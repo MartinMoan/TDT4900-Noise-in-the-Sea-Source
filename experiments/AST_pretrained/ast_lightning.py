@@ -129,58 +129,55 @@ class SubsetDataset(torch.utils.data.Dataset):
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.dataset[self.subset[index]]
 
+def create_tensorset(logger_factory, nfft, nmels, hop_length, clip_duration_seconds, clip_overlap_seconds):
+    clips = CachedClippedDataset(
+        logger_factory=logger_factory,
+        worker=Binworker(),
+        clip_duration_seconds=clip_duration_seconds,
+        clip_overlap_seconds=clip_overlap_seconds
+    )
+
+    label_accessor = BinaryLabelAccessor()
+    feature_accessor = MelSpectrogramFeatureAccessor(
+        logger_factory=logger_factory,
+        n_mels=nmels,
+        n_fft=nfft,
+        hop_length=hop_length,
+        scale_melbands=False,
+        verbose=True
+    )
+
+    tensorset = TensorAudioDataset(
+        dataset=clips,
+        label_accessor=label_accessor,
+        feature_accessor=feature_accessor,
+        logger_factory=logger_factory
+    )
+
+    balancer = CachedDatasetBalancer(
+        dataset=clips,
+        logger_factory=logger_factory,
+        worker=Binworker(),
+        verbose=True
+    )
+
+    eval_only_indeces = balancer.eval_only_indeces()
+    train_indeces = balancer.train_indeces()
+
+    return tensorset, eval_only_indeces, train_indeces
+
 class ClippedGliderDataModule(pl.LightningDataModule):
-    def __init__(
-        self,
-        logger_factory,
-        nfft,
-        nmels,
-        hop_length,
-        clip_duration_seconds,
-        clip_overlap_seconds,
-        batch_size
-        ) -> None:
+    def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int) -> None:
         super().__init__()
-        
-        self.clips = CachedClippedDataset(
-            logger_factory=logger_factory,
-            worker=Binworker(),
-            clip_duration_seconds=clip_duration_seconds,
-            clip_overlap_seconds=clip_overlap_seconds
-        )
-
-        label_accessor = BinaryLabelAccessor()
-        feature_accessor = MelSpectrogramFeatureAccessor(
-            logger_factory=logger_factory,
-            n_mels=nmels,
-            n_fft=nfft,
-            hop_length=hop_length,
-            scale_melbands=False,
-            verbose=True
-        )
-
-        self.tensorset = TensorAudioDataset(
-            dataset=self.clips,
-            label_accessor=label_accessor,
-            feature_accessor=feature_accessor,
-            logger_factory=logger_factory
-        )
-
-        self.balancer = CachedDatasetBalancer(
-            dataset=self.clips,
-            logger_factory=logger_factory,
-            worker=Binworker(),
-            verbose=True
-        )
+        self.tensorset = tensorset
+        self.eval_only_indeces = eval_only_indeces
+        self.train_indeces = train_indeces
         self.batch_size = batch_size
 
     def setup(self, stage: Optional[str] = None) -> None:
-        eval_only_indeces = self.balancer.eval_only_indeces()
-        train_indeces = self.balancer.train_indeces()
-
-        self.train_and_val_part = np.random.choice(train_indeces, size=int(len(train_indeces * 0.8))) 
-        test_part = train_indeces[~np.isin(train_indeces, self.train_and_val_part)]
-        self.test_indeces = np.concatenate([test_part, eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
+        self.train_and_val_part = np.random.choice(self.train_indeces, size=int(len(self.train_indeces * 0.8))) 
+        test_part = self.train_indeces[~np.isin(self.train_indeces, self.train_and_val_part)]
+        self.test_indeces = np.concatenate([test_part, self.eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
         self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
         
         self.train = SubsetDataset(self.tensorset, subset=self.train_indeces)
@@ -227,14 +224,20 @@ def main(hyperparams):
         model_size=hyperparams.model_size,
         verbose=hyperparams.verbose,
     )
-    
-    dataset = ClippedGliderDataModule(
+
+    tensorset, eval_only_indeces, train_indeces = create_tensorset(
         logger_factory=logger_factory,
         nfft=hyperparams.nfft,
         nmels=hyperparams.nmels,
         hop_length=hyperparams.hop_length,
         clip_duration_seconds=hyperparams.clip_duration_seconds,
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
+    )
+
+    dataset = ClippedGliderDataModule(
+        tensorset=tensorset, 
+        eval_only_indeces=eval_only_indeces, 
+        train_indeces=train_indeces,
         batch_size=hyperparams.batch_size
     )
 
