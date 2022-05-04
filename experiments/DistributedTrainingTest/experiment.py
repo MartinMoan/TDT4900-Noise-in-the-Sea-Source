@@ -67,7 +67,7 @@ class FashionDataset(pl.LightningDataModule):
             root=root, 
             download=True,
             train=True,
-            target_transform=torchvision.transforms.ToTensor(),
+            target_transform=FashionDataset.to_label_tensor,
             transform=torchvision.transforms.ToTensor(),
         )
         for i in range(10):
@@ -77,13 +77,16 @@ class FashionDataset(pl.LightningDataModule):
             root=root, 
             download=True,
             train=False, 
-            target_transform=torchvision.transforms.ToTensor(),
+            target_transform=FashionDataset.to_label_tensor,
             transform=torchvision.transforms.ToTensor(),
         )
         self.batch_size = batch_size
 
-    def to_categorical(Y):
-        return np.eye(10, dtype='uint8')[Y]
+    # def to_categorical(Y):
+    #     return np.eye(10, dtype='uint8')[Y]
+
+    def to_label_tensor(Y):
+        return torch.tensor(Y).type(torch.LongTensor)
     
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
