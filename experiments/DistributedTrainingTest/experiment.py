@@ -29,8 +29,8 @@ class FashionModel(pl.LightningModule):
         super().__init__()
         self.l = torch.nn.Sequential(
             torch.nn.Flatten(),
-            torch.nn.Linear(n_inputs, n_inputs),
-            torch.nn.Softmax()
+            torch.nn.Linear(n_inputs, n_outputs),
+            torch.nn.Softmax(dim=0)
         )
         self.lossfunc = torch.nn.NLLLoss()
         self.accuracy = torchmetrics.Accuracy(num_classes=n_outputs)
@@ -41,15 +41,15 @@ class FashionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        preds = torch.argmax(Yhat, dim=0)
-        loss = self.lossfunc(preds, Y)
-        return dict(loss=loss, preds=Yhat, target=Y)
+        target = torch.tensor(Y).type(torch.LongTensor)
+        loss = self.lossfunc(Yhat, target)
+        return dict(loss=loss, preds=Yhat, target=target)
 
     def training_epoch_end(self, outputs) -> None:
         # print(outputs)
-        # acc = self.accuracy(outputs[:]["preds"], outputs[:]["target"])
-        preds = torch.cat([output["preds"] for output in outputs])
-        target = torch.cat([output["target"] for output in outputs])
+        preds = torch.cat([output["preds"] for output in outputs], dim=0)
+        target = torch.cat([output["target"] for output in outputs], dim=0)
+        # print(target.shape, preds.shape)
         acc = self.accuracy(preds, target)
         self.log("train_accuracy", acc)
 
@@ -67,17 +67,23 @@ class FashionDataset(pl.LightningDataModule):
             root=root, 
             download=True,
             train=True,
-            target_transform=lambda Y: np.eye(10, dtype='uint8')[Y],
+            # target_transform=FashionDataset.to_categorical,
             transform=torchvision.transforms.ToTensor(),
         )
+        for i in range(10):
+            X, Y = self.train_dataset[i]
+            print(X.shape, Y)
         self.test_dataset = torchvision.datasets.FashionMNIST(
             root=root, 
             download=True,
             train=False, 
-            target_transform=lambda Y: np.eye(10, dtype='uint8')[Y],
+            # target_transform=FashionDataset.to_categorical,
             transform=torchvision.transforms.ToTensor(),
         )
         self.batch_size = batch_size
+
+    def to_categorical(Y):
+        return np.eye(10, dtype='uint8')[Y]
     
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
@@ -103,10 +109,10 @@ def main(hyperparams):
     )
     
     trainer = pl.Trainer(
-        accelerator="gpu", 
-        devices=hyperparams.num_gpus, 
-        num_nodes=hyperparams.num_nodes,
-        strategy="ddp",
+        # accelerator="gpu", 
+        # devices=hyperparams.num_gpus, 
+        # num_nodes=hyperparams.num_nodes,
+        # strategy="ddp",
         logger=logger,
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
