@@ -4,13 +4,14 @@ import os
 import sys
 import pathlib
 from turtle import forward
-from typing import Mapping, Iterable
+from typing import Mapping, Iterable, Optional
 import multiprocessing
 
 import git
 import torch
 import torch.utils.data
 from torchmetrics.functional import accuracy
+from sklearn.model_selection import train_test_split
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
@@ -18,7 +19,7 @@ from pytorch_lightning.loggers import WandbLogger
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-from interfaces import ILoggerFactory, IModelProvider, IAsyncWorker, ICustomDataset
+from interfaces import ILoggerFactory, IModelProvider, IAsyncWorker, ICustomDataset, ITensorAudioDataset
 from tracking.logger import Logger, LogFormatter
 from tracking.loggerfactory import LoggerFactory
 
@@ -100,21 +101,37 @@ class AstLightningWrapper(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
 
-class DefaultDataset(torch.utils.data.Dataset):
+class SubsetDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int]) -> None:
+        super().__init__()
+        self.dataset = dataset
+        self.subset = subset
+
+    def __len__(self) -> int:
+        return len(self.subset)
+    
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.dataset[self.subset[index]]
+
+class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(
-        self, 
-        dataset: ICustomDataset,
-        logger_factory=None, 
-        nfft=2048,
-        nmels=128,
-        hop_length=512
-    ):
-        if logger_factory is None:
-            logger_factory = LoggerFactory(
-                logger_type=Logger,
-                logger_args=(),
-                logger_kwargs=dict(logformatter=LogFormatter())
-            )
+        self,
+        logger_factory,
+        nfft,
+        nmels,
+        hop_length,
+        clip_duration_seconds,
+        clip_overlap_seconds,
+        batch_size
+        ) -> None:
+        super().__init__()
+        
+        self.clips = CachedClippedDataset(
+            logger_factory=logger_factory,
+            worker=Binworker(),
+            clip_duration_seconds=clip_duration_seconds,
+            clip_overlap_seconds=clip_overlap_seconds
+        )
 
         label_accessor = BinaryLabelAccessor()
         feature_accessor = MelSpectrogramFeatureAccessor(
@@ -127,34 +144,42 @@ class DefaultDataset(torch.utils.data.Dataset):
         )
 
         self.tensorset = TensorAudioDataset(
-            dataset=dataset,
+            dataset=self.clips,
             label_accessor=label_accessor,
             feature_accessor=feature_accessor,
             logger_factory=logger_factory
         )
 
-    def __len__(self):
-        return len(self.tensorset)
-    
-    def __getitem__(self, index):
-        return self.tensorset[index]
+        self.balancer = CachedDatasetBalancer(
+            dataset=self.clips,
+            logger_factory=logger_factory,
+            worker=Binworker(),
+            verbose=True
+        )
+        self.batch_size = batch_size
 
-def get_train_eval_indeces(
-    dataset: ICustomDataset, 
-    logger_factory: ILoggerFactory, 
-    worker: IAsyncWorker,
-    verbose: bool
-    ) -> None:
-    
-    balancer = CachedDatasetBalancer(
-        dataset=dataset,
-        logger_factory=logger_factory,
-        worker=worker,
-        verbose=verbose
-    )
-    eval_indeces = balancer.eval_only_indeces()
-    train_indeces = balancer.train_indeces()
-    return train_indeces, eval_indeces
+    def setup(self, stage: Optional[str] = None) -> None:
+        eval_only_indeces = self.balancer.eval_only_indeces()
+        train_indeces = self.balancer.train_indeces()
+
+        self.train_and_val_part = np.random.choice(train_indeces, size=int(len(train_indeces * 0.8))) 
+        test_part = train_indeces[~np.isin(train_indeces, self.train_and_val_part)]
+        self.test_indeces = np.concatenate([test_part, eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
+        self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
+        
+        self.train = SubsetDataset(self.tensorset, subset=self.train_indeces)
+        self.val = SubsetDataset(self.tensorset, subset=self.val_indeces)
+        self.test = SubsetDataset(self.tensorset, subset=self.test_indeces)
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size)
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size)
+
+    def test_dataloader(self):
+        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size)
+
 
 def main(hyperparams):
     sr = 128000
@@ -185,43 +210,17 @@ def main(hyperparams):
         model_size=hyperparams.model_size,
         verbose=hyperparams.verbose,
     )
-
-    clips = CachedClippedDataset(
-        logger_factory=logger_factory,
-        worker=Binworker(),
-        clip_duration_seconds=hyperparams.clip_duration_seconds,
-        clip_overlap_seconds=hyperparams.clip_overlap_seconds
-    )
-
-    dataset = DefaultDataset(
-        dataset=clips,
+    
+    dataset = ClippedGliderDataModule(
         logger_factory=logger_factory,
         nfft=hyperparams.nfft,
         nmels=hyperparams.nmels,
         hop_length=hyperparams.hop_length,
+        clip_duration_seconds=hyperparams.clip_duration_seconds,
+        clip_overlap_seconds=hyperparams.clip_overlap_seconds,
+        batch_size=hyperparams.batch_size
     )
 
-    train_subset, eval_subset = get_train_eval_indeces(
-        dataset=clips, 
-        logger_factory=logger_factory,
-        worker=Binworker(),
-        verbose=hyperparams.verbose
-    )
-
-    train_loader = torch.utils.data.DataLoader(
-        dataset, 
-        batch_size=hyperparams.batch_size, 
-        num_workers=multiprocessing.cpu_count(),
-        sampler=torch.utils.data.SubsetRandomSampler(train_subset)
-    )
-
-    test_loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=hyperparams.batch_size,
-        num_workers=multiprocessing.cpu_count(),
-        sampler=torch.utils.data.SubsetRandomSampler(eval_subset)
-    )
-    
     logger = WandbLogger(
         name=hyperparams.tracking_name,
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
@@ -240,15 +239,8 @@ def main(hyperparams):
     
     logger.watch(model)
 
-    trainer.fit(
-        model=model,
-        train_dataloaders=train_loader
-    )
-
-    trainer.test(
-        model=model,
-        dataloaders=test_loader
-    )
+    trainer.fit(model, dataset)
+    trainer.test(model, dataset)
 
 def init():
     parser = argparse.ArgumentParser()
