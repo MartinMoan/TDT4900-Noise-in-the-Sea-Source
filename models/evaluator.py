@@ -45,7 +45,7 @@ class Evaluator(IEvaluator):
             truth = None
             predictions = None
             for index, (X, Y) in enumerate(testset):
-                X, Y = X.to(self.device), Y.to(self.device)
+                # X, Y = X.to(self.device), Y.to(self.device)
                 Yhat = model(X)
                 
                 Yhat = Yhat.cpu()
