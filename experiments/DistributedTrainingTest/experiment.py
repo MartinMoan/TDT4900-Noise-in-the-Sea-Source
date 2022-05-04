@@ -109,10 +109,10 @@ def main(hyperparams):
     )
     
     trainer = pl.Trainer(
-        # accelerator="gpu", 
-        # devices=hyperparams.num_gpus, 
-        # num_nodes=hyperparams.num_nodes,
-        # strategy="ddp",
+        accelerator="gpu", 
+        devices=hyperparams.num_gpus, 
+        num_nodes=hyperparams.num_nodes,
+        strategy="ddp",
         logger=logger,
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
