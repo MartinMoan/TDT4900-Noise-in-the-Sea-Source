@@ -41,6 +41,7 @@ class AstLightningWrapper(pl.LightningModule):
         learning_rate: float,
         weight_decay: float,
         betas: Iterable[float],
+        batch_size: int,
         activation_func: torch.nn.Module = None, 
         n_model_outputs=2, 
         fstride=10, 
@@ -49,7 +50,7 @@ class AstLightningWrapper(pl.LightningModule):
         input_tdim=1024, 
         imagenet_pretrain=True, 
         audioset_pretrain=False, 
-        model_size='base384', 
+        model_size='base384',
         verbose=True) -> None:
 
         super().__init__()
@@ -71,6 +72,7 @@ class AstLightningWrapper(pl.LightningModule):
         self.weight_decay = weight_decay
         self.betas = betas
         self.printlogger = logger_factory.create_logger()
+        self.batch_size = batch_size
         self.save_hyperparameters()
 
     def compute(self, X):
@@ -219,6 +221,7 @@ def main(hyperparams):
         learning_rate=hyperparams.learning_rate,
         weight_decay=hyperparams.weight_decay,
         betas=hyperparams.betas,
+        batch_size=hyperparams.batch_size, # Only required for auto_scaling of batch_size
         activation_func=None,
         n_model_outputs=2,
         fstride=hyperparams.fstride,
@@ -254,7 +257,8 @@ def main(hyperparams):
         devices=hyperparams.num_gpus, 
         num_nodes=hyperparams.num_nodes,
         strategy="ddp",
-        logger=logger
+        logger=logger,
+        auto_scale_batch_size=True
     )
     
     logger.watch(model)
