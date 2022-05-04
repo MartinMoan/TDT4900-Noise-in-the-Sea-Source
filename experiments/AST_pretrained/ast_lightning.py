@@ -10,7 +10,7 @@ import multiprocessing
 import git
 import torch
 import torch.utils.data
-from torchmetrics.functional import accuracy
+import torchmetrics
 from sklearn.model_selection import train_test_split
 import numpy as np
 import pytorch_lightning as pl
@@ -73,6 +73,7 @@ class AstLightningWrapper(pl.LightningModule):
         self.betas = betas
         self.printlogger = logger_factory.create_logger()
         self.batch_size = batch_size
+        self.accuracy = torchmetrics.Accuracy(num_classes=2)
         self.save_hyperparameters()
 
     def compute(self, X):
@@ -87,19 +88,15 @@ class AstLightningWrapper(pl.LightningModule):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch
-        # self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
+        self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
         Yhat = self.compute(X)
         loss = self.lossfunc(Yhat, Y)
-        return dict(loss=loss, preds=Yhat, truth=Y) # these are sent as input to training_epoch_end
+        return dict(loss=loss, preds=Yhat, target=Y) # these are sent as input to training_epoch_end
 
     def training_epoch_end(self, outputs) -> None:
-        preds = torch.cat((pred for pred in outputs["preds"]), dim=0)
-        truth = torch.cat((batch_Y for batch_Y in outputs["truth"]), dim=0)
-        acc = accuracy(preds, truth)
-        loss = np.mean(outputs["loss"])
-        self.printlogger.log("train epoch accuracy:", acc)
-        self.log("train_epoch_accuracy", acc)
-        self.log("train_epoch_loss", loss)
+        self.accuracy(outputs["preds"], outputs["target"])
+        self.printlogger.log("train epoch accuracy:", self.accuracy)
+        self.log("train_epoch_accuracy", self.accuracy)
         return super().training_epoch_end(outputs)
 
     def test_step(self, batch, batch_idx):
@@ -108,17 +105,14 @@ class AstLightningWrapper(pl.LightningModule):
         X = X.squeeze(dim=1)
         Yhat = self._ast(X)
         loss = self.lossfunc(Yhat, Y)
-        return dict(preds=Yhat, loss=loss, truth=Y)
+        self.accuracy(Yhat, Y)
+        return dict(loss=loss)
 
     def test_epoch_end(self, outputs) -> None:
-        preds = torch.cat((pred for pred in outputs["preds"]), dim=0)
-        truth = torch.cat((batch_Y for batch_Y in outputs["truth"]), dim=0)
-        acc = accuracy(preds, truth)
         loss = np.mean(outputs["loss"])
-        self.printlogger.log("test epoch accuracy:", acc)
-        self.log("test_epoch_accuracy", acc)
+        self.printlogger.log("test epoch accuracy:", self.accuracy)
+        self.log("test_epoch_accuracy", self.accuracy)
         self.log("test_epoch_loss", loss)
-        return super().test_epoch_end(outputs)
 
     def configure_optimizers(self):
         return torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)

@@ -123,7 +123,7 @@ class ASTModel(nn.Module):
                 raise ValueError('currently model pretrained on only audioset is not supported, please set imagenet_pretrain = True to use audioset pretrained model.')
             if model_size != 'base384':
                 raise ValueError('currently only has base384 AudioSet pretrained model.')
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            
             audioset_path = pretrained_models_path.joinpath("audioset_10_10_0.4593.pth")
             if not audioset_path.exists():
                 # this model performs 0.4593 mAP on the audioset eval set
@@ -135,7 +135,7 @@ class ASTModel(nn.Module):
                 with open(audioset_path, "wb") as file:
                     file.write(res.content)
 
-            sd = torch.load(audioset_path, map_location=device)
+            sd = torch.load(audioset_path)
             audio_model = ASTModel(logger_factory=logger_factory, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=False, audioset_pretrain=False, model_size='base384', verbose=False)
             audio_model = torch.nn.DataParallel(audio_model)
             audio_model.load_state_dict(sd, strict=False)
