@@ -247,6 +247,7 @@ def main(hyperparams):
         devices=min(hyperparams.num_gpus, torch.cuda.device_count()), 
         num_nodes=hyperparams.num_nodes,
         strategy="ddp",
+        max_epochs=hyperparams.epochs,
         logger=logger,
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
@@ -271,6 +272,7 @@ def init():
 
     # Data params
     parser.add_argument("-batch_size", type=int, required=True)
+    parser.add_argument("-epochs", type=int, required=True)
     parser.add_argument("-nmels", type=int, required=True)
     parser.add_argument("-nfft", type=int, required=True)
     parser.add_argument("-hop_length", type=int, required=True)
