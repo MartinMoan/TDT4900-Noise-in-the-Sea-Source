@@ -84,10 +84,10 @@ class AstLightningWrapper(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
-        X, Y = batch
-        Yhat = self.forward(X)
+        X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
+        Yhat = self.forward(X) # [batch_size, 2]
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y)
+        self.accuracy(Yhat, Y.int())
         self.log("train_accuracy", self.accuracy, on_step=False, on_epoch=True)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
@@ -95,7 +95,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y)
+        self.accuracy(Yhat, Y.int())
         self.log("test_accuracy", self.accuracy, on_step=False, on_epoch=True)
         return dict(loss=loss)
 
@@ -103,7 +103,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y)
+        self.accuracy(Yhat, Y.int())
         self.log("val_accuracy", self.accuracy, on_step=False, on_epoch=True)
         return dict(loss=loss)
 
@@ -241,7 +241,7 @@ def main(hyperparams):
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
         entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
     )
-    
+
     trainer = pl.Trainer(
         accelerator="gpu", 
         devices=min(hyperparams.num_gpus, torch.cuda.device_count()), 
