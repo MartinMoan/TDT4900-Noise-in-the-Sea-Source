@@ -63,6 +63,14 @@ class Cacher:
         hashable_arguments: Mapping[str, any] = None,
         force_recache: bool = False):
         
+        if not config.CACHING_ENABLED:
+            self.logger.log(f"Caching is disabled")
+            return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
+        
+        if force_recache:
+            self.logger.log(f"force_recache argument flag is set, will not pickle from cache")
+            return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
+
         cache_dir = self.cache_dir(stack_depth=2) # calling from withing cacher, so the second element in the stack will point to this method, but third will point to caller of this method. Therefore stack_depth = 1
         to_hash = {}
         if hashable_arguments is None:
@@ -73,12 +81,6 @@ class Cacher:
         pickle_path = self.hash(cache_dir, to_hash)
         cache_list = [path for path in cache_dir.glob("**/*.pickle")]
         
-        if not config.CACHING_ENABLED:
-            self.logger.log(f"Caching is disabled")
-            return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
-        if force_recache:
-            self.logger.log(f"force_recache argument flag is set, will not pickle from cache")
-            return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
         if not pickle_path in cache_list:
             self.logger.log(f"Caching is enabled, and force_recaching is not set, but no pickle could be found in cache {cache_dir} for {obj_ref.__name__} object")
             self.logger.log(f"Computed cache hash filename: {pickle_path.name}")
