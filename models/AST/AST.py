@@ -199,10 +199,10 @@ class ASTModel(nn.Module):
         x = x + self.v.pos_embed
         x = self.v.pos_drop(x)
         
-        self.logger.log(f"X shape {x.shape} n bytes: {x.element_size() * x.nelement()}")
+        # self.logger.log(f"X shape {x.shape} n bytes: {x.element_size() * x.nelement()}")
         for blk in self.v.blocks:
             x = blk(x)
-            self.logger.log(f"X shape {x.shape} n bytes: {x.element_size() * x.nelement()}")
+            # self.logger.log(f"X shape {x.shape} n bytes: {x.element_size() * x.nelement()}")
 
         x = self.v.norm(x)
         x = (x[:, 0] + x[:, 1]) / 2
