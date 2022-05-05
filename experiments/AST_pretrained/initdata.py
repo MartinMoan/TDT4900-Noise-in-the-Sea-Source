@@ -80,5 +80,5 @@ if __name__ == "__main__":
         hop_length=args.hop_length,
         clip_duration_seconds=args.clip_duration_seconds,
         clip_overlap_seconds=args.clip_overlap_seconds,
-        force_recache=True
+        force_recache=False
     )

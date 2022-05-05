@@ -97,7 +97,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y.int())
+        self.accuracy.update(Yhat, Y.int())
         self.log("test_accuracy", self.accuracy, on_step=False, on_epoch=True)
         return dict(loss=loss)
 
@@ -129,8 +129,8 @@ class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int) -> None:
         super().__init__()
         self.tensorset = tensorset
-        self.eval_only_indeces = eval_only_indeces[:10] # TODO: Remove limit
-        self.train_indeces = train_indeces[:10] # TODO: Remove limit
+        self.eval_only_indeces = eval_only_indeces[:min(500, len(eval_only_indeces))] # TODO: Remove limit
+        self.train_indeces = train_indeces[:min(500, len(train_indeces))] # TODO: Remove limit
         self.batch_size = batch_size
 
     def setup(self, stage: Optional[str] = None) -> None:
