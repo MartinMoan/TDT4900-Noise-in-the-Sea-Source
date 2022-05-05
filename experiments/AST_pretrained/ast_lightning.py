@@ -31,6 +31,8 @@ from datasets.balancing import DatasetBalancer, CachedDatasetBalancer
 from datasets.binjob import Binworker
 from datasets.tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAccessor, TensorAudioDataset
 
+from experiments.AST_pretrained.initdata import create_tensorset
+
 class AstLightningWrapper(pl.LightningModule):
     """
     AST (Audio Spectrogram Transformer) pretraining wrapper. Enables custom activation
@@ -122,43 +124,6 @@ class SubsetDataset(torch.utils.data.Dataset):
     
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.dataset[self.subset[index]]
-
-def create_tensorset(logger_factory, nfft, nmels, hop_length, clip_duration_seconds, clip_overlap_seconds):
-    clips = CachedClippedDataset(
-        logger_factory=logger_factory,
-        worker=Binworker(),
-        clip_duration_seconds=clip_duration_seconds,
-        clip_overlap_seconds=clip_overlap_seconds
-    )
-
-    label_accessor = BinaryLabelAccessor()
-    feature_accessor = MelSpectrogramFeatureAccessor(
-        logger_factory=logger_factory,
-        n_mels=nmels,
-        n_fft=nfft,
-        hop_length=hop_length,
-        scale_melbands=False,
-        verbose=True
-    )
-
-    tensorset = TensorAudioDataset(
-        dataset=clips,
-        label_accessor=label_accessor,
-        feature_accessor=feature_accessor,
-        logger_factory=logger_factory
-    )
-
-    balancer = CachedDatasetBalancer(
-        dataset=clips,
-        logger_factory=logger_factory,
-        worker=Binworker(),
-        verbose=True
-    )
-
-    eval_only_indeces = balancer.eval_only_indeces()
-    train_indeces = balancer.train_indeces()
-
-    return tensorset, eval_only_indeces, train_indeces
 
 class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int) -> None:
