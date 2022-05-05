@@ -41,17 +41,18 @@ class FashionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        # target = torch.tensor(Y).type(torch.LongTensor)
         loss = self.lossfunc(Yhat, Y)
-        return dict(loss=loss, preds=Yhat, target=Y)
+        self.accuracy(Yhat, Y)
+        self.log("train_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        return dict(loss=loss)
 
-    def training_epoch_end(self, outputs) -> None:
-        # print(outputs)
-        preds = torch.cat([output["preds"] for output in outputs], dim=0)
-        target = torch.cat([output["target"] for output in outputs], dim=0)
-        # print(target.shape, preds.shape)
-        acc = self.accuracy(preds, target)
-        self.log("train_accuracy", acc)
+    def test_step(self, batch, batch_idx):
+        X, Y = batch
+        Yhat = self.forward(X)
+        loss = self.lossfunc(Yhat, Y)
+        self.accuracy(Yhat, Y)
+        self.log("test_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        return dict(loss=loss)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-4, weight_decay=1e-5)
@@ -81,9 +82,6 @@ class FashionDataset(pl.LightningDataModule):
             transform=torchvision.transforms.ToTensor(),
         )
         self.batch_size = batch_size
-
-    # def to_categorical(Y):
-    #     return np.eye(10, dtype='uint8')[Y]
 
     def to_label_tensor(Y):
         return torch.tensor(Y).type(torch.LongTensor)
@@ -124,7 +122,7 @@ def main(hyperparams):
     logger.watch(model)
 
     # trainer.tune(model, datamodule=dataset)
-    trainer.fit(model, datamodule=dataset)
+    # trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
 
 def init():
