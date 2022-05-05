@@ -4,6 +4,9 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=42000
+#SBATCH --job-name="AST Training"
 #SBATCH --time=00-02:00:00
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm-%j.out"
 
