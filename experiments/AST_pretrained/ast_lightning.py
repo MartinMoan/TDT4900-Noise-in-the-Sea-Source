@@ -272,7 +272,6 @@ def init():
 
     # Data params
     parser.add_argument("-batch_size", type=int, required=True)
-    parser.add_argument("-epochs", type=int, required=True)
     parser.add_argument("-nmels", type=int, required=True)
     parser.add_argument("-nfft", type=int, required=True)
     parser.add_argument("-hop_length", type=int, required=True)
