@@ -93,7 +93,7 @@ class FashionDataset(pl.LightningDataModule):
         return dl
     
     def test_dataloader(self):
-        dl = torch.utils.data.DataLoader(dataset=self.test_dataloader, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        dl = torch.utils.data.DataLoader(dataset=self.test_dataset, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
         print(dl, dl.dataset)
         return dl
 
