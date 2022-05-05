@@ -74,6 +74,7 @@ class FashionDataset(pl.LightningDataModule):
         for i in range(10):
             X, Y = self.train_dataset[i]
             print(X.shape, Y)
+
         self.test_dataset = torchvision.datasets.FashionMNIST(
             root=root, 
             download=True,
@@ -87,10 +88,14 @@ class FashionDataset(pl.LightningDataModule):
         return torch.tensor(Y).type(torch.LongTensor)
     
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        dl = torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        print(dl)
+        return dl
     
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test_dataloader, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        dl = torch.utils.data.DataLoader(dataset=self.test_dataloader, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        print(dl)
+        return dl
 
 def main(hyperparams):
     batch_size = hyperparams.batch_size
