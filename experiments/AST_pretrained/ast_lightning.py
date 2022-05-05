@@ -244,7 +244,7 @@ def main(hyperparams):
     
     trainer = pl.Trainer(
         accelerator="gpu", 
-        devices=hyperparams.num_gpus, 
+        devices=min(hyperparams.num_gpus, torch.cuda.device_count()), 
         num_nodes=hyperparams.num_nodes,
         strategy="ddp",
         logger=logger,
