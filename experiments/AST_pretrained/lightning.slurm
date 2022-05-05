@@ -3,7 +3,7 @@
 #SBATCH --partition=GPUQ
 #SBATCH --nodes=4
 #SBATCH --gres=gpu:2
-#SBATCH --ntasks-per-node=8
+#SBATCH --ntasks-per-node=2
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
