@@ -127,7 +127,7 @@ def main(hyperparams):
     logger.watch(model)
 
     # trainer.tune(model, datamodule=dataset)
-    # trainer.fit(model, datamodule=dataset)
+    trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
 
 def init():
