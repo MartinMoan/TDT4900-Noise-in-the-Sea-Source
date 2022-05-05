@@ -76,42 +76,36 @@ class AstLightningWrapper(pl.LightningModule):
         self.accuracy = torchmetrics.Accuracy(num_classes=2)
         self.save_hyperparameters()
 
-    def compute(self, X):
+    def forward(self, X):
         X = X.permute(0, 1, 3, 2)
         X = X.squeeze(dim=1)
         return self._ast(X)
-
-    def forward(self, X):
-        return self.compute(X)
 
     def training_step(self, batch, batch_idx):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch
-        self.printlogger.log(f"Training step {batch_idx} X shape {X.shape} Y shape {Y.shape}")
-        Yhat = self.compute(X)
+        Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        return dict(loss=loss, preds=Yhat, target=Y) # these are sent as input to training_epoch_end
-
-    def training_epoch_end(self, outputs) -> None:
-        self.accuracy(outputs["preds"], outputs["target"])
-        self.printlogger.log("train epoch accuracy:", self.accuracy)
-        self.log("train_epoch_accuracy", self.accuracy)
+        self.accuracy(Yhat, Y)
+        self.log("train_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
-        X = X.permute(0, 1, 3, 2)
-        X = X.squeeze(dim=1)
-        Yhat = self._ast(X)
+        Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
         self.accuracy(Yhat, Y)
+        self.log("test_accuracy", self.accuracy, on_step=False, on_epoch=True)
         return dict(loss=loss)
 
-    def test_epoch_end(self, outputs) -> None:
-        loss = np.mean(outputs["loss"])
-        self.printlogger.log("test epoch accuracy:", self.accuracy)
-        self.log("test_epoch_accuracy", self.accuracy)
-        self.log("test_epoch_loss", loss)
+    def validation_step(self, batch, batch_idx):
+        X, Y = batch
+        Yhat = self.forward(X)
+        loss = self.lossfunc(Yhat, Y)
+        self.accuracy(Yhat, Y)
+        self.log("val_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        return dict(loss=loss)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
@@ -170,8 +164,8 @@ class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int) -> None:
         super().__init__()
         self.tensorset = tensorset
-        self.eval_only_indeces = eval_only_indeces
-        self.train_indeces = train_indeces
+        self.eval_only_indeces = eval_only_indeces[:10] # TODO: Remove limit
+        self.train_indeces = train_indeces[:10] # TODO: Remove limit
         self.batch_size = batch_size
 
     def setup(self, stage: Optional[str] = None) -> None:
@@ -180,9 +174,9 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.test_indeces = np.concatenate([test_part, self.eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
         self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
         
-        self.train = SubsetDataset(self.tensorset, subset=self.train_indeces)
-        self.val = SubsetDataset(self.tensorset, subset=self.val_indeces)
-        self.test = SubsetDataset(self.tensorset, subset=self.test_indeces)
+        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces)
+        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces)
+        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
@@ -192,7 +186,6 @@ class ClippedGliderDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
-
 
 def main(hyperparams):
     sr = 128000

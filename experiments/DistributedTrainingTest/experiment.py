@@ -71,9 +71,6 @@ class FashionDataset(pl.LightningDataModule):
             target_transform=FashionDataset.to_label_tensor,
             transform=torchvision.transforms.ToTensor(),
         )
-        for i in range(10):
-            X, Y = self.train_dataset[i]
-            print(X.shape, Y)
 
         self.test_dataset = torchvision.datasets.FashionMNIST(
             root=root, 
