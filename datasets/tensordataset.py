@@ -24,7 +24,7 @@ class LabelRollAccessor(ILabelAccessor):
 
 class BinaryLabelAccessor(ILabelAccessor):
     def __call__(self, audio_data: LabeledAudioData, features: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        return _to_tensor(audio_data.binary())
+        return _to_tensor(audio_data.binary()).type(dtype=torch.LongTensor)
 
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
     def __init__(
