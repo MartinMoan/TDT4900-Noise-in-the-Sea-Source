@@ -78,7 +78,7 @@ class AstLightningWrapper(pl.LightningModule):
         self.accuracy = torchmetrics.Accuracy(num_classes=2)
         self.auc = torchmetrics.AUC(reorder=True)
         self.aucroc = torchmetrics.AUROC(num_classes=2)
-        self.precision = torchmetrics.Precision(num_classes=2)
+        self.precision = torchmetrics.Precision(num_classes=2).update()
         self.recall = torchmetrics.Recall(num_classes=2)
         self.average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self.f1 = torchmetrics.F1Score(num_classes=2)
@@ -86,14 +86,14 @@ class AstLightningWrapper(pl.LightningModule):
         self.save_hyperparameters()
 
     def update_metrics(self, stepname, Yhat, Y):
-        self.accuracy(Yhat, Y.int())
-        self.auc.update(Yhat, Y.int())
-        self.aucroc.update(Yhat, Y.int())
-        self.precision.update(Yhat, Y.int())
-        self.recall.update(Yhat, Y.int())
-        self.average_precision.update(Yhat, Y.int())
-        self.f1.update(Yhat, Y.int())
-        self.confusion_matrics.update(Yhat, Y.int())
+        self.accuracy(Yhat.float(), Y.int())
+        self.auc.update(Yhat.float(), Y.int())
+        self.aucroc.update(Yhat.float(), Y.int())
+        self.precision.update(Yhat.float(), Y.int())
+        self.recall.update(Yhat.float(), Y.int())
+        self.average_precision.update(Yhat.float(), Y.int())
+        self.f1.update(Yhat.float(), Y.int())
+        self.confusion_matrics.update(Yhat.float(), Y.int())
         self.log(f"{stepname}_accuracy", self.accuracy, on_step=False, on_epoch=True)
         self.log(f"{stepname}_aucroc", self.aucroc, on_step=False, on_epoch=True)
         self.log(f"{stepname}_precision", self.precision, on_step=False, on_epoch=True)
@@ -282,7 +282,6 @@ def init():
     args = parser.parse_args()
     args.betas = tuple(args.betas)
     return args
-
 
 if __name__ == "__main__":
     hyperparams = init()
