@@ -112,21 +112,21 @@ class AstLightningWrapper(pl.LightningModule):
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
-        loss = self.lossfunc(Yhat, Y)
+        loss = self._lossfunc(Yhat, Y)
         self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        loss = self.lossfunc(Yhat, Y)
+        loss = self._lossfunc(Yhat, Y)
         self.update_metrics("test", Yhat, Y)
         return dict(loss=loss)
 
     def validation_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
-        loss = self.lossfunc(Yhat, Y)
+        loss = self._lossfunc(Yhat, Y)
         self.update_metrics("val", Yhat, Y)
         return dict(loss=loss)
 
@@ -229,10 +229,10 @@ def main(hyperparams):
     )
 
     trainer = pl.Trainer(
-        accelerator="gpu", 
-        devices=hyperparams.num_gpus, 
-        num_nodes=hyperparams.num_nodes,
-        strategy="ddp",
+        # accelerator="gpu", 
+        # devices=hyperparams.num_gpus, 
+        # num_nodes=hyperparams.num_nodes,
+        # strategy="ddp",
         max_epochs=hyperparams.epochs,
         logger=logger,
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
