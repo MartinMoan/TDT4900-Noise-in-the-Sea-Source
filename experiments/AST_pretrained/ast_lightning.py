@@ -76,7 +76,31 @@ class AstLightningWrapper(pl.LightningModule):
         self.printlogger = logger_factory.create_logger()
         self.batch_size = batch_size
         self.accuracy = torchmetrics.Accuracy(num_classes=2)
+        self.auc = torchmetrics.AUC(reorder=True)
+        self.aucroc = torchmetrics.AUROC(num_classes=2)
+        self.precision = torchmetrics.Precision(num_classes=2)
+        self.recall = torchmetrics.Recall(num_classes=2)
+        self.average_precision = torchmetrics.AveragePrecision(num_classes=2)
+        self.f1 = torchmetrics.F1Score(num_classes=2)
+        self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
         self.save_hyperparameters()
+
+    def update_metrics(self, stepname, Yhat, Y):
+        self.accuracy(Yhat, Y.int())
+        self.auc.update(Yhat, Y.int())
+        self.aucroc.update(Yhat, Y.int())
+        self.precision.update(Yhat, Y.int())
+        self.recall.update(Yhat, Y.int())
+        self.average_precision.update(Yhat, Y.int())
+        self.f1.update(Yhat, Y.int())
+        self.confusion_matrics.update(Yhat, Y.int())
+        self.log(f"{stepname}_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_aucroc", self.aucroc, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_precision", self.precision, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_recall", self.recall, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_average_precision", self.average_precision, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_f1", self.f1, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_confusion_matrix", self.confusion_matrix, on_step=False, on_epoch=True)
 
     def forward(self, X):
         X = X.permute(0, 1, 3, 2)
@@ -89,24 +113,21 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y.int())
-        self.log("train_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy.update(Yhat, Y.int())
-        self.log("test_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        self.update_metrics("test", Yhat, Y)
         return dict(loss=loss)
 
     def validation_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self.lossfunc(Yhat, Y)
-        self.accuracy(Yhat, Y.int())
-        self.log("val_accuracy", self.accuracy, on_step=False, on_epoch=True)
+        self.update_metrics("val", Yhat, Y)
         return dict(loss=loss)
 
     def configure_optimizers(self):
@@ -162,8 +183,8 @@ def main(hyperparams):
         logger_args=(),
         logger_kwargs=dict(logformatter=LogFormatter())
     )
-    logger = logger_factory.create_logger()
-    logger.log("Received hyperparams:", vars(hyperparams))
+    mylogger = logger_factory.create_logger()
+    mylogger.log("Received hyperparams:", vars(hyperparams))
 
     model = AstLightningWrapper(
         logger_factory=logger_factory,
@@ -200,7 +221,7 @@ def main(hyperparams):
     )
 
     logger = WandbLogger(
-        name=hyperparams.tracking_name,
+        # name=hyperparams.tracking_name,
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
@@ -218,7 +239,6 @@ def main(hyperparams):
     )
     
     logger.watch(model)
-
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
