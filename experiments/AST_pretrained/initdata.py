@@ -17,7 +17,15 @@ from datasets.balancing import DatasetBalancer, CachedDatasetBalancer
 from datasets.binjob import Binworker
 from datasets.tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAccessor, TensorAudioDataset
 
-def create_tensorset(logger_factory: ILoggerFactory, nfft: int, nmels: int, hop_length: int, clip_duration_seconds: float, clip_overlap_seconds: float, force_recache: bool = False) -> Tuple[ITensorAudioDataset, Iterable[int], Iterable[int]]:
+def create_tensorset(
+    logger_factory: ILoggerFactory, 
+    nfft: int, 
+    nmels: int, 
+    hop_length: int, 
+    clip_duration_seconds: float, 
+    clip_overlap_seconds: float, 
+    force_recache: bool = False) -> Tuple[ITensorAudioDataset, Iterable[int], Iterable[int]]:
+
     clips = CachedClippedDataset(
         logger_factory=logger_factory,
         worker=Binworker(),
@@ -80,5 +88,5 @@ if __name__ == "__main__":
         hop_length=args.hop_length,
         clip_duration_seconds=args.clip_duration_seconds,
         clip_overlap_seconds=args.clip_overlap_seconds,
-        force_recache=False
+        force_recache=True
     )
