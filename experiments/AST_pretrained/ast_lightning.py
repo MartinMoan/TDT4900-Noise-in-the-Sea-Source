@@ -131,7 +131,7 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(params=self.parameters(), lr=self.learning_rate, betas=self.betas, weight_decay=self.weight_decay)
+        optimizer = torch.optim.Adam(params=self.parameters(), lr=self._learning_rate, betas=self._betas, weight_decay=self._weight_decay)
         return dict(optimizer=optimizer)
 
 class SubsetDataset(torch.utils.data.Dataset):
