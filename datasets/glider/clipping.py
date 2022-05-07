@@ -29,12 +29,21 @@ class CachedClippedDataset(ICustomDataset):
         cls, 
         worker: IAsyncWorker, 
         logger_factory: ILoggerFactory, 
-        force_recache=False, 
-        **kwargs) -> ICustomDataset:
+        clip_duration_seconds: float = None, 
+        clip_overlap_seconds: float = None, 
+        clip_nsamples: int = None, 
+        overlap_nsamples: int = None,
+        force_recache=False) -> ICustomDataset:
 
         cacher = Cacher(logger_factory=logger_factory)
-        init_kwargs = {"logger_factory": logger_factory, "worker": worker, **kwargs}
-        return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=kwargs, force_recache=force_recache)
+        hashable_arguments = dict(
+            clip_duration_seconds=clip_duration_seconds,
+            clip_overlap_seconds=clip_overlap_seconds,
+            clip_nsamples=clip_nsamples,
+            overlap_nsamples=overlap_nsamples,
+        )
+        init_kwargs = {"logger_factory": logger_factory, "worker": worker, **hashable_arguments}
+        return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
 
 class ClippedDataset(ICustomDataset):
     def __init__(self, 
