@@ -69,38 +69,38 @@ class AstLightningWrapper(pl.LightningModule):
             verbose=verbose
         )
         self._activation = activation_func
-        self.lossfunc = torch.nn.BCEWithLogitsLoss()
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.betas = betas
-        self.printlogger = logger_factory.create_logger()
-        self.batch_size = batch_size
-        self.accuracy = torchmetrics.Accuracy(num_classes=2)
-        self.auc = torchmetrics.AUC(reorder=True)
-        self.aucroc = torchmetrics.AUROC(num_classes=2)
-        self.precision = torchmetrics.Precision(num_classes=2)
-        self.recall = torchmetrics.Recall(num_classes=2)
-        self.average_precision = torchmetrics.AveragePrecision(num_classes=2)
-        self.f1 = torchmetrics.F1Score(num_classes=2)
-        self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
+        self._lossfunc = torch.nn.BCEWithLogitsLoss()
+        self._learning_rate = learning_rate
+        self._weight_decay = weight_decay
+        self._betas = betas
+        self._printlogger = logger_factory.create_logger()
+        self._batch_size = batch_size
+        self._accuracy = torchmetrics.Accuracy(num_classes=2)
+        self._auc = torchmetrics.AUC(reorder=True)
+        self._aucroc = torchmetrics.AUROC(num_classes=2)
+        self._precision = torchmetrics.Precision(num_classes=2)
+        self._recall = torchmetrics.Recall(num_classes=2)
+        self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
+        self._f1 = torchmetrics.F1Score(num_classes=2)
+        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
         self.save_hyperparameters()
 
     def update_metrics(self, stepname, Yhat, Y):
-        self.accuracy(Yhat.float(), Y.int())
-        self.auc.update(Yhat.float(), Y.int())
-        self.aucroc.update(Yhat.float(), Y.int())
-        self.precision.update(Yhat.float(), Y.int())
-        self.recall.update(Yhat.float(), Y.int())
-        self.average_precision.update(Yhat.float(), Y.int())
-        self.f1.update(Yhat.float(), Y.int())
-        self.confusion_matrics.update(Yhat.float(), Y.int())
-        self.log(f"{stepname}_accuracy", self.accuracy, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_aucroc", self.aucroc, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_precision", self.precision, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_recall", self.recall, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_average_precision", self.average_precision, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_f1", self.f1, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_confusion_matrix", self.confusion_matrix, on_step=False, on_epoch=True)
+        self._accuracy(Yhat.float(), Y.int())
+        self._auc.update(Yhat.float(), Y.int())
+        self._aucroc.update(Yhat.float(), Y.int())
+        self._precision.update(Yhat.float(), Y.int())
+        self._recall.update(Yhat.float(), Y.int())
+        self._average_precision.update(Yhat.float(), Y.int())
+        self._f1.update(Yhat.float(), Y.int())
+        self._confusion_matrics.update(Yhat.float(), Y.int())
+        self.log(f"{stepname}_accuracy", self._accuracy, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_aucroc", self._aucroc, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_precision", self._precision, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_recall", self._recall, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_average_precision", self._average_precision, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_f1", self._f1, on_step=False, on_epoch=True)
+        self.log(f"{stepname}_confusion_matrix", self._confusion_matrix, on_step=False, on_epoch=True)
 
     def forward(self, X):
         X = X.permute(0, 1, 3, 2)
