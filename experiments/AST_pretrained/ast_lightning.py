@@ -78,7 +78,7 @@ class AstLightningWrapper(pl.LightningModule):
         self.accuracy = torchmetrics.Accuracy(num_classes=2)
         self.auc = torchmetrics.AUC(reorder=True)
         self.aucroc = torchmetrics.AUROC(num_classes=2)
-        self.precision = torchmetrics.Precision(num_classes=2).update()
+        self.precision = torchmetrics.Precision(num_classes=2)
         self.recall = torchmetrics.Recall(num_classes=2)
         self.average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self.f1 = torchmetrics.F1Score(num_classes=2)
