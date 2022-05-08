@@ -11,6 +11,10 @@ import git
 import torch
 import torch.utils.data
 import torchmetrics
+import wandb
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 import numpy as np
 import pytorch_lightning as pl
@@ -82,7 +86,7 @@ class AstLightningWrapper(pl.LightningModule):
         self._recall = torchmetrics.Recall(num_classes=2)
         self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self._f1 = torchmetrics.F1Score(num_classes=2)
-        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
+        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5)
         self._verbose = verbose
         self.save_hyperparameters()
 
@@ -100,7 +104,25 @@ class AstLightningWrapper(pl.LightningModule):
         self.log(f"{stepname}_recall", self._recall, on_step=False, on_epoch=True)
         self.log(f"{stepname}_average_precision", self._average_precision, on_step=False, on_epoch=True)
         self.log(f"{stepname}_f1", self._f1, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_confusion_matrix", self._confusion_matrix, on_step=False, on_epoch=True)
+        # self.log(f"{stepname}_confusion_matrix", self._confusion_matrix, on_step=False, on_epoch=True)
+        confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
+        biophonic_confusion = confusion[0]
+        anthropogenic_confusion = confusion[1]
+
+        biodf = pd.DataFrame(biophonic_confusion, index=["not bio", "bio"], columns=["not bio", "bio"])
+        anthdf = pd.DataFrame(anthropogenic_confusion, index=["not anth", "anth"], columns=["not anth", "anth"])
+
+        cmap = "rocket_r"
+
+        fig = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
+        fig.set(xlabel="Predicted", ylabel="Truth", title="Biophonic")
+        wandb.log({f"{stepname}_biophonic_confusion_matrix": fig})
+
+        fig = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
+        fig.set(xlabel="Predicted", ylabel="Truth", title="Anthropogenic")
+        wandb.log({f"{stepname}_anthropogenic_confusion_matrix": fig})
+        
+        # self.logger.experiment.log()
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
@@ -111,7 +133,6 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
-        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
@@ -119,7 +140,6 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("test", Yhat, Y)
         return dict(loss=loss)
 
@@ -127,7 +147,6 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("val", Yhat, Y)
         return dict(loss=loss)
 

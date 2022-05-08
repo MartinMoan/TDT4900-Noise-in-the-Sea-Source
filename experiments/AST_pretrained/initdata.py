@@ -125,8 +125,9 @@ if __name__ == "__main__":
         model_size="tiny224", 
         verbose=True
     )
-    n = 10
+    n = 20
     batch_size = 3
+    print(tensorset.classes())
     for i in range(min(n, len(train))):
         # batch_size, 1, n_mel_bands, n_time_frames
         X, Y = tensorset[train[i]] # X.shape=(1, n_mels, n_time_frames), Y.shape = (2)
@@ -135,6 +136,7 @@ if __name__ == "__main__":
         X = X.repeat(batch_size, 1, 1, 1) # Simulate batch size by repeating X and Y along their first dimension
         Y = Y.repeat(batch_size, 1)
         Yhat = ast(X)
+        Yhat[0, 0] = 0.9999
         print(i, min(n, len(train)), X.min(), X.max(), Y, Yhat)
         
         accuracy.update(Yhat, Y.int())
@@ -151,4 +153,28 @@ if __name__ == "__main__":
     print("recall:", recall.compute())
     print("average_precision:", average_precision.compute())
     print("f1:", f1.compute())
-    print("confusion_matrix:", confusion_matrix.compute())
+
+    confusion = confusion_matrix.compute()
+    print("confusion_matrix:", confusion)
+
+    # import pandas as pd
+    # bio = confusion[0]
+    # anth = confusion[1]
+    # biodf = pd.DataFrame(bio, index=["not bio", "bio"], columns=["not bio", "bio"])
+    # anthdf = pd.DataFrame(anth, index=["not anth", "anth"], columns=["not anth", "anth"])
+    
+
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    
+    # cmap = "rocket_r"
+    # plt.subplot(2, 1, 1)
+    # s = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
+    # s.set(xlabel="Predicted", ylabel="Truth")
+    # plt.subplot(2, 1, 2)
+    # s = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
+    # s.set(xlabel="Predicted", ylabel="Truth")
+    # plt.show()
+
+
+
