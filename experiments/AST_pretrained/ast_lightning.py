@@ -93,7 +93,7 @@ class AstLightningWrapper(pl.LightningModule):
         self._recall.update(Yhat.float(), Y.int())
         self._average_precision.update(Yhat.float(), Y.int())
         self._f1.update(Yhat.float(), Y.int())
-        self._confusion_matrics.update(Yhat.float(), Y.int())
+        self._confusion_matrix.update(Yhat.float(), Y.int())
         self.log(f"{stepname}_accuracy", self._accuracy, on_step=False, on_epoch=True)
         self.log(f"{stepname}_aucroc", self._aucroc, on_step=False, on_epoch=True)
         self.log(f"{stepname}_precision", self._precision, on_step=False, on_epoch=True)
