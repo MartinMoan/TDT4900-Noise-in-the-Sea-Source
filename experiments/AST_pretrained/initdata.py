@@ -127,11 +127,11 @@ if __name__ == "__main__":
     n = 50
     for i in range(min(n, len(train))):
         # batch_size, 1, n_mel_bands, n_time_frames
-        X, Y = tensorset[train[i]]
-        X = X.unsqueeze(1)
-        Y = Y.unsqueeze(0)
+        X, Y = tensorset[train[i]] # X.shape=(1, n_mels, n_time_frames), Y.shape = (2)
+        X = X.unsqueeze(1) # X.shape=(1, 1, n_mels, n_time_frames) -> e.g. batch_size = 1
+        Y = Y.unsqueeze(0) # Y.shape=(1, 2) -> e.g. batch_size = 1
         Yhat = ast(X)
-        print(i, min(n, len(train)), Y, Yhat)
+        print(i, min(n, len(train)), X.min(), X.max(), Y, Yhat)
         
         accuracy.update(Yhat, Y.int())
         auc.update(Yhat, Y)

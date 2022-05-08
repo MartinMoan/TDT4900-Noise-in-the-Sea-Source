@@ -84,6 +84,7 @@ class AstLightningWrapper(pl.LightningModule):
         self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self._f1 = torchmetrics.F1Score(num_classes=2)
         self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
+        self._verbose = verbose
         self.save_hyperparameters()
 
     def update_metrics(self, stepname, Yhat, Y):
@@ -106,14 +107,15 @@ class AstLightningWrapper(pl.LightningModule):
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
-        X = X.permute(0, 1, 3, 2)
-        X = X.squeeze(dim=1)
+        # X = X.permute(0, 1, 3, 2)
+        # X = X.squeeze(dim=1)
         return self._ast(X)
 
     def training_step(self, batch, batch_idx):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
+        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
@@ -121,6 +123,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
+        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("test", Yhat, Y)
         return dict(loss=loss)
 
@@ -128,6 +131,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
+        print("X.shape: ", X.shape, "Y.shape:", Y.shape, "Yhat.shape:", Yhat.shape)
         self.update_metrics("val", Yhat, Y)
         return dict(loss=loss)
 
