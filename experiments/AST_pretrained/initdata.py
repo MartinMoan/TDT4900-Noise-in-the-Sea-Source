@@ -5,6 +5,8 @@ import pathlib
 from typing import Tuple, Iterable
 
 import git
+from torch import tensor
+from rich import print
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
@@ -99,7 +101,6 @@ if __name__ == "__main__":
     np.random.shuffle(train)
 
     accuracy = torchmetrics.Accuracy(num_classes=2)
-    auc = torchmetrics.AUC(reorder=True)
     aucroc = torchmetrics.AUROC(num_classes=2)
     precision = torchmetrics.Precision(num_classes=2)
     recall = torchmetrics.Recall(num_classes=2)
@@ -124,17 +125,19 @@ if __name__ == "__main__":
         model_size="tiny224", 
         verbose=True
     )
-    n = 50
+    n = 10
+    batch_size = 3
     for i in range(min(n, len(train))):
         # batch_size, 1, n_mel_bands, n_time_frames
         X, Y = tensorset[train[i]] # X.shape=(1, n_mels, n_time_frames), Y.shape = (2)
         X = X.unsqueeze(1) # X.shape=(1, 1, n_mels, n_time_frames) -> e.g. batch_size = 1
         Y = Y.unsqueeze(0) # Y.shape=(1, 2) -> e.g. batch_size = 1
+        X = X.repeat(batch_size, 1, 1, 1) # Simulate batch size by repeating X and Y along their first dimension
+        Y = Y.repeat(batch_size, 1)
         Yhat = ast(X)
         print(i, min(n, len(train)), X.min(), X.max(), Y, Yhat)
         
         accuracy.update(Yhat, Y.int())
-        auc.update(Yhat, Y)
         aucroc.update(Yhat, Y.int())
         precision.update(Yhat, Y.int())
         recall.update(Yhat, Y.int())
@@ -143,7 +146,6 @@ if __name__ == "__main__":
         confusion_matrix.update(Yhat, Y.int())
 
     print("accuracy:", accuracy.compute())
-    print("auc:", auc.compute())
     print("aucroc:", aucroc.compute())
     print("precision:", precision.compute())
     print("recall:", recall.compute())
