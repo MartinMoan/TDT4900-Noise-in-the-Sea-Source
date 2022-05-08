@@ -17,6 +17,10 @@ from datasets.balancing import DatasetBalancer, CachedDatasetBalancer
 from datasets.binjob import Binworker
 from datasets.tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAccessor, TensorAudioDataset
 
+from models.AST.AST import ASTModel
+from models.AST.ASTWrapper import ASTWrapper
+import torchmetrics
+
 def create_tensorset(
     logger_factory: ILoggerFactory, 
     nfft: int, 
@@ -81,12 +85,68 @@ if __name__ == "__main__":
         logger_kwargs=dict(logformatter=LogFormatter())
     )
 
-    create_tensorset(
+    tensorset, eval_only, train = create_tensorset(
         logger_factory=logger_factory,
         nfft=args.nfft,
         nmels=args.nmels,
         hop_length=args.hop_length,
         clip_duration_seconds=args.clip_duration_seconds,
         clip_overlap_seconds=args.clip_overlap_seconds,
-        force_recache=True
+        force_recache=False
     )
+
+    import numpy as np
+    np.random.shuffle(train)
+
+    accuracy = torchmetrics.Accuracy(num_classes=2)
+    auc = torchmetrics.AUC(reorder=True)
+    aucroc = torchmetrics.AUROC(num_classes=2)
+    precision = torchmetrics.Precision(num_classes=2)
+    recall = torchmetrics.Recall(num_classes=2)
+    average_precision = torchmetrics.AveragePrecision(num_classes=2)
+    f1 = torchmetrics.F1Score(num_classes=2)
+    confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True)
+
+    sr = 128000
+    fdim = args.nmels
+    tdim = int((args.clip_duration_seconds * sr / args.hop_length) + 1)
+    import torch
+    ast = ASTWrapper(
+        logger_factory=logger_factory,
+        activation_func=torch.nn.Sigmoid(),
+        label_dim=2, 
+        fstride=16, 
+        tstride=16, 
+        input_fdim=fdim, 
+        input_tdim=tdim, 
+        imagenet_pretrain=True, 
+        audioset_pretrain=False, 
+        model_size="tiny224", 
+        verbose=True
+    )
+    n = 50
+    for i in range(min(n, len(train))):
+        # batch_size, 1, n_mel_bands, n_time_frames
+        X, Y = tensorset[train[i]]
+        X = X.unsqueeze(1)
+        Y = Y.unsqueeze(0)
+        Yhat = ast(X)
+        print(i, min(n, len(train)), Y, Yhat)
+        
+        accuracy.update(Yhat, Y.int())
+        auc.update(Yhat, Y)
+        aucroc.update(Yhat, Y.int())
+        precision.update(Yhat, Y.int())
+        recall.update(Yhat, Y.int())
+        average_precision.update(Yhat, Y)
+        f1.update(Yhat, Y.int())
+        confusion_matrix.update(Yhat, Y.int())
+
+    print("accuracy:", accuracy.compute())
+    print("auc:", auc.compute())
+    print("aucroc:", aucroc.compute())
+    print("precision:", precision.compute())
+    print("recall:", recall.compute())
+    print("average_precision:", average_precision.compute())
+    print("f1:", f1.compute())
+    print("confusion_matrix:", confusion_matrix.compute())

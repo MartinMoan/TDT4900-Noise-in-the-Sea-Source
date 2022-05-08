@@ -56,8 +56,9 @@ class AstLightningWrapper(pl.LightningModule):
         verbose=True) -> None:
 
         super().__init__()
-        self._ast = ASTModel(
+        self._ast = ASTWrapper(
             logger_factory=logger_factory,
+            activation_func=torch.nn.Sigmoid(),
             label_dim=n_model_outputs, 
             fstride=fstride, 
             tstride=tstride, 
@@ -103,13 +104,13 @@ class AstLightningWrapper(pl.LightningModule):
         self.log(f"{stepname}_confusion_matrix", self._confusion_matrix, on_step=False, on_epoch=True)
 
     def forward(self, X):
+        """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
+        # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X = X.permute(0, 1, 3, 2)
         X = X.squeeze(dim=1)
         return self._ast(X)
 
     def training_step(self, batch, batch_idx):
-        """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
-        # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
