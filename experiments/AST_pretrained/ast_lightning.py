@@ -77,7 +77,6 @@ class AstLightningWrapper(pl.LightningModule):
         self._printlogger = logger_factory.create_logger()
         self._batch_size = batch_size
         self._accuracy = torchmetrics.Accuracy(num_classes=2)
-        self._auc = torchmetrics.AUC(reorder=True)
         self._aucroc = torchmetrics.AUROC(num_classes=2)
         self._precision = torchmetrics.Precision(num_classes=2)
         self._recall = torchmetrics.Recall(num_classes=2)
@@ -89,7 +88,6 @@ class AstLightningWrapper(pl.LightningModule):
 
     def update_metrics(self, stepname, Yhat, Y):
         self._accuracy(Yhat.float(), Y.int())
-        self._auc.update(Yhat.float(), Y.int())
         self._aucroc.update(Yhat.float(), Y.int())
         self._precision.update(Yhat.float(), Y.int())
         self._recall.update(Yhat.float(), Y.int())
@@ -107,8 +105,6 @@ class AstLightningWrapper(pl.LightningModule):
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
-        # X = X.permute(0, 1, 3, 2)
-        # X = X.squeeze(dim=1)
         return self._ast(X)
 
     def training_step(self, batch, batch_idx):
