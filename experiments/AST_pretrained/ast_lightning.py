@@ -114,14 +114,14 @@ class AstLightningWrapper(pl.LightningModule):
 
         cmap = "rocket_r"
 
-        ax = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
-        ax.set(xlabel="Predicted", ylabel="Truth", title="Biophonic")
-        fig = plt.gcf()
+        fig, ax = plt.subplots()
+        s = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True), ax=ax)
+        s.set(xlabel="Predicted", ylabel="Truth", title="Biophonic")
         self.logger.experiment.log({f"{stepname}_biophonic_confusion_matrix": fig})
-
-        ax = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
-        ax.set(xlabel="Predicted", ylabel="Truth", title="Anthropogenic")
-        fig = plt.gcf()
+        
+        fig, ax = plt.subplots()
+        s = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True), ax=ax)
+        s.set(xlabel="Predicted", ylabel="Truth", title="Anthropogenic")
         self.logger.experiment.log({f"{stepname}_anthropogenic_confusion_matrix": fig})
         
         # self.logger.experiment.log()
