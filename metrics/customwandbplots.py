@@ -39,7 +39,7 @@ def confusion_matrix(confusion: Union[torch.Tensor, np.ndarray], class_names: Li
     for i in range(n_classes):
         for j in range(n_classes):
             data.append([class_names[i], class_names[j], values[i, j]])
-    print(data)
+    
     return wandb.plot_table(
         "wandb/confusion_matrix/v1",
         wandb.Table(columns=["Actual", "Predicted", "nPredictions"], data=data),
