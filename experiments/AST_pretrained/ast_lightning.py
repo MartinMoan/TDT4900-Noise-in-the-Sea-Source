@@ -81,7 +81,7 @@ class AstLightningWrapper(pl.LightningModule):
         self._recall = torchmetrics.Recall(num_classes=2)
         self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self._f1 = torchmetrics.F1Score(num_classes=2)
-        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5, normalize="true")
+        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5) # Dont normalize here, send raw values to wandb and normalize in GUI
         self._verbose = verbose
         self.save_hyperparameters()
 

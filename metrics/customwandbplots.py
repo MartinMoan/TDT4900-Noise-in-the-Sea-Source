@@ -99,8 +99,9 @@ if __name__ == "__main__":
     # c2 (5 TN, 4 FP, 3 FN, 2 TP)
     # expect confusion[0] (class 1) to be: [[2, 3], [4, 5]]
     # expect confusion[1] (class 2) to be: [[5, 4], [3, 2]]
-    confusion_matrix.update(preds, target)
-    confusion = confusion_matrix.compute()
+    cnf.update(preds, target)
+    confusion = cnf.compute()
+
     print(confusion)
     print(confusion[0])
     print(confusion[1])
