@@ -10,6 +10,7 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
+  - pytorch-lightning
   - cudatoolkit[version='=11.3|10.2|9.0']
   - bibtexparser=1.1.0
   - scipy=1.7.3
