@@ -270,8 +270,6 @@ def main(hyperparams):
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
     )
 
-    track_dataset(tensorset, n_examples=50)
-
     dataset = ClippedGliderDataModule(
         tensorset=tensorset, 
         balancer=balancer,
@@ -293,6 +291,8 @@ def main(hyperparams):
     
     logger.watch(model)
     wandb.config.update(vars(hyperparams))
+    track_dataset(tensorset, n_examples=50)
+    
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
