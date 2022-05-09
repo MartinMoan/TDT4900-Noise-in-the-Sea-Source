@@ -2,11 +2,14 @@
 import argparse
 import sys
 import pathlib
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Union, List
 
 import git
-from torch import tensor
+import torch
 from rich import print
+import wandb
+import numpy as np
+import torchmetrics
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
@@ -21,7 +24,7 @@ from datasets.tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAcc
 
 from models.AST.AST import ASTModel
 from models.AST.ASTWrapper import ASTWrapper
-import torchmetrics
+from metrics import customwandbplots
 
 def create_tensorset(
     logger_factory: ILoggerFactory, 
@@ -128,6 +131,7 @@ if __name__ == "__main__":
     n = 20
     batch_size = 3
     print(tensorset.classes())
+    Yhats, Ys = None, None
     for i in range(min(n, len(train))):
         # batch_size, 1, n_mel_bands, n_time_frames
         X, Y = tensorset[train[i]] # X.shape=(1, n_mels, n_time_frames), Y.shape = (2)
@@ -138,7 +142,16 @@ if __name__ == "__main__":
         Yhat = ast(X)
         Yhat[0, 0] = 0.9999
         print(i, min(n, len(train)), X.min(), X.max(), Y, Yhat)
-        
+        if Yhats is None:
+            Yhats = Yhat
+        else:
+            Yhats = torch.concat((Yhats, Yhat), dim=0)
+
+        if Ys is None:
+            Ys = Y
+        else:
+            Ys = torch.concat((Ys, Y), dim=0)
+
         accuracy.update(Yhat, Y.int())
         aucroc.update(Yhat, Y.int())
         precision.update(Yhat, Y.int())
@@ -157,24 +170,10 @@ if __name__ == "__main__":
     confusion = confusion_matrix.compute()
     print("confusion_matrix:", confusion)
 
-    # import pandas as pd
+    # import os
+    # run = wandb.init(project=os.environ.get("WANDB_PROJECT"), entity=os.environ.get("WANDB_ENTITY"))
+
     # bio = confusion[0]
     # anth = confusion[1]
-    # biodf = pd.DataFrame(bio, index=["not bio", "bio"], columns=["not bio", "bio"])
-    # anthdf = pd.DataFrame(anth, index=["not anth", "anth"], columns=["not anth", "anth"])
-    
-
-    # import matplotlib.pyplot as plt
-    # import seaborn as sns
-    
-    # cmap = "rocket_r"
-    # plt.subplot(2, 1, 1)
-    # s = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
-    # s.set(xlabel="Predicted", ylabel="Truth")
-    # plt.subplot(2, 1, 2)
-    # s = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True))
-    # s.set(xlabel="Predicted", ylabel="Truth")
-    # plt.show()
-
-
-
+    # wandb.log({"bio": customwandbplots.confusion_matrix(bio, class_names=["not bio", "bio"], title="Biophonic")})
+    # wandb.log({"anth": customwandbplots.confusion_matrix(anth, class_names=["not anth", "anth"], title="Anthropogenic")})
