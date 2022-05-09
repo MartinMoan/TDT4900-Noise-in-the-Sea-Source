@@ -114,8 +114,8 @@ class AstLightningWrapper(pl.LightningModule):
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
-        self.log({"bio": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
-        self.log({"anth": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
+        self.logger.experiment.log({"bio": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
+        self.logger.experiment.log({"anth": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
@@ -123,16 +123,14 @@ class AstLightningWrapper(pl.LightningModule):
         return self._ast(X)
 
     def training_step(self, batch, batch_idx):
+        print("training_step", batch_idx)
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
-        self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
-    def training_epoch_end(self, outputs) -> None:
-        self.log_confusion_matrix("train")
-
     def test_step(self, batch, batch_idx):
+        print("test_step", batch_idx)
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
@@ -140,9 +138,11 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss)
 
     def test_epoch_end(self, outputs) -> None:
+        print("test_epoch_end")
         self.log_confusion_matrix("test")
 
     def validation_step(self, batch, batch_idx):
+        print("validation_step", batch_idx)
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
@@ -150,6 +150,7 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss)
     
     def validation_epoch_end(self, outputs) -> None:
+        print("validation_epoch_end")
         self.log_confusion_matrix("val")
 
     def configure_optimizers(self):
