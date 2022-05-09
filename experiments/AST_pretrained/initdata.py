@@ -14,7 +14,7 @@ import torchmetrics
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
 from interfaces import ILoggerFactory, ITensorAudioDataset
-from tracking.logger import Logger, LogFormatter
+from tracking.logger import BasicLogger
 from tracking.loggerfactory import LoggerFactory
 
 from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
@@ -82,11 +82,7 @@ def getargs():
 
 if __name__ == "__main__":
     args = getargs()
-    logger_factory = LoggerFactory(
-        logger_type=Logger,
-        logger_args=(),
-        logger_kwargs=dict(logformatter=LogFormatter())
-    )
+    logger_factory = LoggerFactory(logger_type=BasicLogger)
 
     tensorset, balancer = create_tensorset(
         logger_factory=logger_factory,
