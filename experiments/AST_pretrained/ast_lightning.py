@@ -92,28 +92,30 @@ class AstLightningWrapper(pl.LightningModule):
         self._verbose = verbose
         self.save_hyperparameters()
 
-    def update_metrics(self, Yhat, Y):
+    def update_metrics(self, stepname, Yhat, Y):
         self._accuracy(Yhat.float(), Y.int())
         self._aucroc.update(Yhat.float(), Y.int())
         self._precision.update(Yhat.float(), Y.int())
         self._recall.update(Yhat.float(), Y.int())
         self._average_precision.update(Yhat.float(), Y.int())
         self._f1.update(Yhat.float(), Y.int())
-        self._confusion_matrix.update(Yhat.float(), Y.int())
-
-    def log_metrics(self, stepname):
+        
         self.log(f"{stepname}_accuracy", self._accuracy, on_step=False, on_epoch=True)
         self.log(f"{stepname}_aucroc", self._aucroc, on_step=False, on_epoch=True)
         self.log(f"{stepname}_precision", self._precision, on_step=False, on_epoch=True)
         self.log(f"{stepname}_recall", self._recall, on_step=False, on_epoch=True)
         self.log(f"{stepname}_average_precision", self._average_precision, on_step=False, on_epoch=True)
         self.log(f"{stepname}_f1", self._f1, on_step=False, on_epoch=True)
-        # self.log(f"{stepname}_confusion_matrix", self._confusion_matrix, on_step=False, on_epoch=True)
+
+        self._confusion_matrix.update(Yhat.float(), Y.int())
+
+    def log_confusion_matrix(self, stepname):
         confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
-        wandb.log({"bio": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
-        wandb.log({"anth": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
+        
+        self.log({"bio": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
+        self.log({"anth": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
@@ -124,31 +126,31 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
-        self.update_metrics(Yhat, Y)
+        self.update_metrics("train", Yhat, Y)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def training_epoch_end(self, outputs) -> None:
-        self.log_metrics("train")
+        self.log_confusion_matrix("train")
 
     def test_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        self.update_metrics(Yhat, Y)
+        self.update_metrics("test", Yhat, Y)
         return dict(loss=loss)
 
     def test_epoch_end(self, outputs) -> None:
-        self.log_metrics("test")
+        self.log_confusion_matrix("test")
 
     def validation_step(self, batch, batch_idx):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        self.update_metrics(Yhat, Y)
+        self.update_metrics("val", Yhat, Y)
         return dict(loss=loss)
-
+    
     def validation_epoch_end(self, outputs) -> None:
-        self.log_metrics("val")
+        self.log_confusion_matrix("val")
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(params=self.parameters(), lr=self._learning_rate, betas=self._betas, weight_decay=self._weight_decay)
