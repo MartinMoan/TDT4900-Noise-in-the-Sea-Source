@@ -24,7 +24,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 
 from interfaces import ILoggerFactory, IModelProvider, IAsyncWorker, ICustomDataset, ITensorAudioDataset
-from tracking.logger import Logger, LogFormatter
+from tracking.logger import Logger, LogFormatter, BasicLogger
 from tracking.loggerfactory import LoggerFactory
 
 from models.AST.ASTWrapper import ASTWrapper
@@ -207,11 +207,8 @@ def main(hyperparams):
     fdim = hyperparams.nmels
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
 
-    logger_factory = LoggerFactory(
-        logger_type=Logger,
-        logger_args=(),
-        logger_kwargs=dict(logformatter=LogFormatter())
-    )
+    logger_factory = LoggerFactory(logger_type=BasicLogger)
+    
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
 
