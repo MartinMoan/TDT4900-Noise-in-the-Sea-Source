@@ -113,7 +113,6 @@ class AstLightningWrapper(pl.LightningModule):
         anthdf = pd.DataFrame(anthropogenic_confusion, index=["not anth", "anth"], columns=["not anth", "anth"])
 
         cmap = "rocket_r"
-
         fig, ax = plt.subplots()
         s = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True), ax=ax)
         s.set(xlabel="Predicted", ylabel="Truth", title="Biophonic")
