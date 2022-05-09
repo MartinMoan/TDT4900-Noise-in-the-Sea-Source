@@ -38,3 +38,4 @@ dependencies:
   - pydrive
   - wandb
   - torchmetrics
+  - plotly
