@@ -31,6 +31,7 @@ from datasets.tensordataset import TensorAudioDataset
 from experiments.AST_pretrained.initdata import create_tensorset
 
 from metrics import customwandbplots
+from tracking.datasettracker import track_dataset
 
 class AstLightningWrapper(pl.LightningModule):
     """
@@ -268,6 +269,8 @@ def main(hyperparams):
         clip_duration_seconds=hyperparams.clip_duration_seconds,
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
     )
+
+    track_dataset(tensorset, n_examples=50)
 
     dataset = ClippedGliderDataModule(
         tensorset=tensorset, 
