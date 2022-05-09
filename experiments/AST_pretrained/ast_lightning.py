@@ -268,9 +268,9 @@ def main(hyperparams):
         tensorset=tensorset, 
         balancer=balancer,
         batch_size=hyperparams.batch_size,
-        train_limit=500,
-        test_limit=100,
-        val_limit=100,
+        train_limit=None,
+        test_limit=None,
+        val_limit=None,
     )
 
     trainer = pl.Trainer(
