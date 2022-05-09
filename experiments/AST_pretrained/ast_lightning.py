@@ -105,7 +105,6 @@ class AstLightningWrapper(pl.LightningModule):
 
     def log_confusion_matrix(self, stepname):
         confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
-        print(confusion)
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
@@ -118,7 +117,6 @@ class AstLightningWrapper(pl.LightningModule):
         return self._ast(X)
 
     def training_step(self, batch, batch_idx):
-        print("training_step", batch_idx)
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
@@ -126,7 +124,6 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def test_step(self, batch, batch_idx):
-        print("test_step", batch_idx)
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
@@ -134,11 +131,9 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss)
 
     def test_epoch_end(self, outputs) -> None:
-        print("test_epoch_end")
         self.log_confusion_matrix("test")
 
     def validation_step(self, batch, batch_idx):
-        print("validation_step", batch_idx)
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
@@ -146,7 +141,6 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(loss=loss)
     
     def validation_epoch_end(self, outputs) -> None:
-        print("validation_epoch_end")
         self.log_confusion_matrix("val")
 
     def configure_optimizers(self):
@@ -292,7 +286,7 @@ def main(hyperparams):
     logger.watch(model)
     wandb.config.update(vars(hyperparams))
     track_dataset(tensorset, n_examples=50)
-    
+
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
