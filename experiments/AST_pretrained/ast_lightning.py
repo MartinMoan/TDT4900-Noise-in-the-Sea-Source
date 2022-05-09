@@ -208,7 +208,7 @@ def main(hyperparams):
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
 
     logger_factory = LoggerFactory(logger_type=BasicLogger)
-    
+
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
 
@@ -230,7 +230,7 @@ def main(hyperparams):
         verbose=hyperparams.verbose,
     )
 
-    tensorset, eval_only_indeces, train_indeces = create_tensorset(
+    tensorset, balancer = create_tensorset(
         logger_factory=logger_factory,
         nfft=hyperparams.nfft,
         nmels=hyperparams.nmels,
@@ -238,6 +238,9 @@ def main(hyperparams):
         clip_duration_seconds=hyperparams.clip_duration_seconds,
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
     )
+
+    eval_only_indeces = balancer.eval_only_indeces()
+    train_indeces = balancer.train_indeces()
 
     dataset = ClippedGliderDataModule(
         tensorset=tensorset, 

@@ -69,10 +69,7 @@ def create_tensorset(
     )
     balancer.log_balanced_stats()
 
-    eval_only_indeces = balancer.eval_only_indeces()
-    train_indeces = balancer.train_indeces()
-
-    return tensorset, eval_only_indeces, train_indeces
+    return tensorset, balancer
 
 def getargs():
     parser = argparse.ArgumentParser()
@@ -91,7 +88,7 @@ if __name__ == "__main__":
         logger_kwargs=dict(logformatter=LogFormatter())
     )
 
-    tensorset, eval_only, train = create_tensorset(
+    tensorset, balancer = create_tensorset(
         logger_factory=logger_factory,
         nfft=args.nfft,
         nmels=args.nmels,
@@ -100,6 +97,9 @@ if __name__ == "__main__":
         clip_overlap_seconds=args.clip_overlap_seconds,
         force_recache=False
     )
+
+    eval_only = balancer.eval_only_indeces()
+    train = balancer.train_indeces()
 
     import numpy as np
     np.random.shuffle(train)
