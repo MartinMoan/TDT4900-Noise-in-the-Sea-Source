@@ -108,8 +108,8 @@ class AstLightningWrapper(pl.LightningModule):
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
-        self.logger.experiment.log({"bio": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
-        self.logger.experiment.log({"anth": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
+        self.logger.experiment.log({f"{stepname}_bio_confusion_matrix": customwandbplots.confusion_matrix(biophonic_confusion, class_names=["not bio", "bio"], title=f"{stepname} confusion matrix (biophonic)")})
+        self.logger.experiment.log({f"{stepname}_anth_confusion_matrix": customwandbplots.confusion_matrix(anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{stepname} confusion matrix (anthropogenic)")})
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
