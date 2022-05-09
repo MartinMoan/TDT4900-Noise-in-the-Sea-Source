@@ -111,6 +111,7 @@ class AstLightningWrapper(pl.LightningModule):
 
     def log_confusion_matrix(self, stepname):
         confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
+        print(confusion)
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
@@ -127,6 +128,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
+        self.log("train_loss", loss)
         return dict(loss=loss) # these are sent as input to training_epoch_end    
 
     def test_step(self, batch, batch_idx):
@@ -158,10 +160,11 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(optimizer=optimizer)
 
 class SubsetDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int]) -> None:
+    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int], limit: int = None) -> None:
         super().__init__()
         self.dataset = dataset
-        self.subset = subset
+        self.limit = limit if limit is not None else len(subset)
+        self.subset = subset[:self.limit]
 
     def __len__(self) -> int:
         return len(self.subset)
@@ -170,22 +173,25 @@ class SubsetDataset(torch.utils.data.Dataset):
         return self.dataset[self.subset[index]]
 
 class ClippedGliderDataModule(pl.LightningDataModule):
-    def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int) -> None:
+    def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int, train_limit: int = None, val_limit: int = None, test_limit: int = None) -> None:
         super().__init__()
         self.tensorset = tensorset
-        self.eval_only_indeces = eval_only_indeces[:min(500, len(eval_only_indeces))] # TODO: Remove limit
-        self.train_indeces = train_indeces[:min(500, len(train_indeces))] # TODO: Remove limit
+        self.eval_only_indeces = eval_only_indeces
+        self.train_indeces = train_indeces
         self.batch_size = batch_size
+        self.train_limit = train_limit
+        self.test_limit = test_limit
+        self.val_limit = val_limit
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.train_and_val_part = np.random.choice(self.train_indeces, size=int(len(self.train_indeces * 0.8))) 
         test_part = self.train_indeces[~np.isin(self.train_indeces, self.train_and_val_part)]
         self.test_indeces = np.concatenate([test_part, self.eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
         self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
-        
-        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces)
-        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces)
-        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces)
+
+        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces, limit=self.train_limit)
+        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces, limit=self.val_limit)
+        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces, limit=self.test_limit)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
@@ -240,7 +246,10 @@ def main(hyperparams):
         tensorset=tensorset, 
         eval_only_indeces=eval_only_indeces, 
         train_indeces=train_indeces,
-        batch_size=hyperparams.batch_size
+        batch_size=hyperparams.batch_size,
+        train_limit=500,
+        test_limit=100,
+        val_limit=100,
     )
 
     logger = WandbLogger(
