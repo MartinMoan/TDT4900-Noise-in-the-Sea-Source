@@ -23,3 +23,6 @@ class IDatasetBalancer(metaclass=abc.ABCMeta):
             Mapping[str, Iterable[int]]: {label: indeces, ...}
         """
         raise NotImplementedError
+
+    def shuffle(self) -> None:
+        raise NotImplementedError

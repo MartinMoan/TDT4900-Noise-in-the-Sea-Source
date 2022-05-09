@@ -12,9 +12,6 @@ import torch
 import torch.utils.data
 import torchmetrics
 import wandb
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.model_selection import train_test_split
 import numpy as np
 import pytorch_lightning as pl
@@ -23,17 +20,13 @@ from pytorch_lightning.loggers import WandbLogger
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-from interfaces import ILoggerFactory, IModelProvider, IAsyncWorker, ICustomDataset, ITensorAudioDataset
-from tracking.logger import Logger, LogFormatter, BasicLogger
+from interfaces import ILoggerFactory, ITensorAudioDataset, IDatasetBalancer
+from tracking.logger import BasicLogger
 from tracking.loggerfactory import LoggerFactory
 
 from models.AST.ASTWrapper import ASTWrapper
-from models.AST.AST import ASTModel
 
-from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
-from datasets.balancing import DatasetBalancer, CachedDatasetBalancer
-from datasets.binjob import Binworker
-from datasets.tensordataset import BinaryLabelAccessor, MelSpectrogramFeatureAccessor, TensorAudioDataset
+from datasets.tensordataset import TensorAudioDataset
 
 from experiments.AST_pretrained.initdata import create_tensorset
 
@@ -88,7 +81,7 @@ class AstLightningWrapper(pl.LightningModule):
         self._recall = torchmetrics.Recall(num_classes=2)
         self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
         self._f1 = torchmetrics.F1Score(num_classes=2)
-        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5)
+        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5, normalize="true")
         self._verbose = verbose
         self.save_hyperparameters()
 
@@ -173,25 +166,53 @@ class SubsetDataset(torch.utils.data.Dataset):
         return self.dataset[self.subset[index]]
 
 class ClippedGliderDataModule(pl.LightningDataModule):
-    def __init__(self, tensorset: TensorAudioDataset, eval_only_indeces: Iterable[int], train_indeces: Iterable[int], batch_size: int, train_limit: int = None, val_limit: int = None, test_limit: int = None) -> None:
+    def __init__(self, tensorset: TensorAudioDataset, balancer: IDatasetBalancer, batch_size: int, train_limit: int = None, val_limit: int = None, test_limit: int = None) -> None:
         super().__init__()
         self.tensorset = tensorset
-        self.eval_only_indeces = eval_only_indeces
-        self.train_indeces = train_indeces
+        self.balancer = balancer
         self.batch_size = batch_size
         self.train_limit = train_limit
         self.test_limit = test_limit
         self.val_limit = val_limit
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_and_val_part = np.random.choice(self.train_indeces, size=int(len(self.train_indeces * 0.8))) 
-        test_part = self.train_indeces[~np.isin(self.train_indeces, self.train_and_val_part)]
-        self.test_indeces = np.concatenate([test_part, self.eval_only_indeces]) # this part for testing only, not seen anytime during training nor validation
+        self.balancer.shuffle()
+
+        self.eval_only_indeces = self.balancer.eval_only_indeces()
+        self.train_indeces = self.balancer.train_indeces()
+
+        distributions = self.balancer.label_distributions()
+        n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
+
+
+        train_val_percentage = 0.8
+        test_percentage = 1 - train_val_percentage
+        
+        n_for_training = int(len(self.train_indeces) * train_val_percentage)
+        n_from_eval_only = int(len(self.eval_only_indeces) * test_percentage)
+
+        # Indeces used for training and validation
+        self.train_and_val_part = self.train_indeces[:n_for_training]
         self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
 
+        # Indeces for testing
+        test_part = self.train_indeces[n_for_training:] # These are balanced
+        unbalanced_parts = self.eval_only_indeces[:n_from_eval_only] # These are unbalanced
+        self.test_indeces = np.concatenate([test_part, unbalanced_parts]) # This way label distribution is maintained for testset
+
+        # Train-, val- and testsets as subset datasets
         self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces, limit=self.train_limit)
         self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces, limit=self.val_limit)
         self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces, limit=self.test_limit)
+
+        to_log = {
+            "train_loader_size": len(self.train),
+            "val_loader_size": len(self.val),
+            "test_loader_size": len(self.test),
+            "label_distributions": n_per_label,
+            "tensorset_size": len(self.tensorset)
+        }
+        wandb.config.update(to_log)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
@@ -208,9 +229,16 @@ def main(hyperparams):
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
 
     logger_factory = LoggerFactory(logger_type=BasicLogger)
-
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
+
+    logger = WandbLogger(
+        # name=hyperparams.tracking_name,
+        save_dir=str(config.HOME_PROJECT_DIR.absolute()),
+        offline=False,
+        project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
+        entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
+    )
 
     model = AstLightningWrapper(
         logger_factory=logger_factory,
@@ -239,25 +267,13 @@ def main(hyperparams):
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
     )
 
-    eval_only_indeces = balancer.eval_only_indeces()
-    train_indeces = balancer.train_indeces()
-
     dataset = ClippedGliderDataModule(
         tensorset=tensorset, 
-        eval_only_indeces=eval_only_indeces, 
-        train_indeces=train_indeces,
+        balancer=balancer,
         batch_size=hyperparams.batch_size,
         train_limit=500,
         test_limit=100,
         val_limit=100,
-    )
-
-    logger = WandbLogger(
-        # name=hyperparams.tracking_name,
-        save_dir=str(config.HOME_PROJECT_DIR.absolute()),
-        offline=False,
-        project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
-        entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
     )
 
     trainer = pl.Trainer(
@@ -271,6 +287,7 @@ def main(hyperparams):
     )
     
     logger.watch(model)
+    wandb.config.update(vars(hyperparams))
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
