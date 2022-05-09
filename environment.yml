@@ -33,7 +33,6 @@ dependencies:
   - google-api-python-client
   - azure-storage-blob
   - llvmlite=0.36.0
-  - timm=0.4.9
   - wget
   - zipp
   - pydrive
