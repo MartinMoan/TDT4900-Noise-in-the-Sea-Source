@@ -206,9 +206,11 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces, limit=self.test_limit)
 
         to_log = {
-            "train_loader_size": len(self.train),
-            "val_loader_size": len(self.val),
-            "test_loader_size": len(self.test),
+            "loader_sizes": {
+                "train_loader_size": len(self.train),
+                "val_loader_size": len(self.val),
+                "test_loader_size": len(self.test)
+            },
             "label_distributions": n_per_label,
             "tensorset_size": len(self.tensorset)
         }
