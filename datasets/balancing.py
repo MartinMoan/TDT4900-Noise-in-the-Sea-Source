@@ -170,6 +170,12 @@ class DatasetBalancer(IDatasetBalancer):
     def label_distributions(self) -> Mapping[str, Iterable[int]]:
         return self._label_distributions
 
+    def shuffle(self) -> None:
+        for label in self._label_distributions.keys():
+            indeces = self._label_distributions[label]
+            np.random.shuffle(indeces)
+            self._label_distributions[label] = indeces
+
 class BalancedKFolder(IFolder):
     def __init__(
         self, 
