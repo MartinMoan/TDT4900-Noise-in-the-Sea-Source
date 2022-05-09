@@ -67,6 +67,7 @@ def create_tensorset(
         verbose=True,
         force_recache=force_recache
     )
+    balancer.log_balanced_stats()
 
     eval_only_indeces = balancer.eval_only_indeces()
     train_indeces = balancer.train_indeces()

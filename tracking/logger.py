@@ -106,6 +106,13 @@ class Logger(ILogger):
                 print(header_with_style, line)
                 logfile.write(f"{basic_header} {line}\n")
 
+class BasicLogger(ILogger):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
+
+    def log(self, *args, **kwargs) -> None:
+        print(*args, **kwargs)
+
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"
     logger = Logger(logformatter=LogFormatter())
