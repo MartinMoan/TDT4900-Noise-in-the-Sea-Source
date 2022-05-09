@@ -116,12 +116,12 @@ class AstLightningWrapper(pl.LightningModule):
         fig, ax = plt.subplots()
         s = sns.heatmap(biodf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True), ax=ax)
         s.set(xlabel="Predicted", ylabel="Truth", title="Biophonic")
-        wandb.log({f"{stepname}_biophonic_confusion_matrix": fig})
+        wandb.log({f"{stepname}_biophonic_confusion_matrix": plt})
         
         fig, ax = plt.subplots()
         s = sns.heatmap(anthdf, annot=True, cmap=sns.color_palette(cmap, as_cmap=True), ax=ax)
         s.set(xlabel="Predicted", ylabel="Truth", title="Anthropogenic")
-        wandb.log({f"{stepname}_anthropogenic_confusion_matrix": fig})
+        wandb.log({f"{stepname}_anthropogenic_confusion_matrix": plt})
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
