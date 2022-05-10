@@ -3,7 +3,6 @@ import argparse
 import os
 import sys
 import pathlib
-from turtle import forward
 from typing import Mapping, Iterable, Optional
 import multiprocessing
 
@@ -228,13 +227,14 @@ def main(hyperparams):
     logger_factory = LoggerFactory(logger_type=BasicLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
-
+    
     logger = WandbLogger(
-        # name=hyperparams.tracking_name,
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
         entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
+        tags=hyperparams.tracking_tags,
+        note=hyperparams.tracking_note,
     )
 
     model = AstLightningWrapper(
@@ -316,9 +316,8 @@ def init():
     parser.add_argument("-kfolds", type=int, required=True)
     
     # Tracking params
-    parser.add_argument("-tracking_name", type=str, required=True)
-    parser.add_argument("-tracking_note", type=str, required=True)
-    parser.add_argument("-tracking_tags", type=str, nargs="+", required=True)
+    parser.add_argument("-tracking_note", type=str, required=False)
+    parser.add_argument("-tracking_tags", type=str, nargs="+", required=False)
     parser.add_argument("-track_n_examples", type=int, default=50)
     # Other params
     parser.add_argument("--verbose", action="store_true", default=False)
@@ -329,6 +328,9 @@ def init():
     # parser.add_argument("-proper_dataset_limit", default=0.7)
     args = parser.parse_args()
     args.betas = tuple(args.betas)
+    env = "Prod" if "idun" in os.uname().nodename else "Dev"
+    args.tracking_tags.append(env)
+    args.tracking_tags.append(args.model_size)
     return args
 
 if __name__ == "__main__":
@@ -336,6 +338,5 @@ if __name__ == "__main__":
     main(hyperparams)
 '''
 Run with:
-
-python ast_lightning.py -batch_size 16 -epochs 3 -learning_rate 0.0001 -weight_decay 5e-7 -betas 0.95 0.999 -kfolds 5 -nmels 128 -hop_length 512 -nfft 2046 -fstride 10 -tstride 10 -model_size base384 -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0 -tracking_name "AST ImageNet Pretrained" -tracking_note "AST pretrained on ImageNet (but not AudioSet, to enable differing input shapes)" -tracking_tags "AST" "ImageNet" "No-AudioSet" --imagenet_pretrain --no-audioset_pretrain --verbose
+python ast_lightning.py -batch_size 16 -epochs 3 -learning_rate 0.0001 -weight_decay 5e-7 -betas 0.95 0.999 -kfolds 5 -nmels 128 -hop_length 512 -nfft 2046 -fstride 10 -tstride 10 -model_size base384 -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0 -tracking_tags "AST" "ImageNet" "No-AudioSet" --imagenet_pretrain --no-audioset_pretrain --verbose -num_gpus 0 -num_nodes 1
 '''
