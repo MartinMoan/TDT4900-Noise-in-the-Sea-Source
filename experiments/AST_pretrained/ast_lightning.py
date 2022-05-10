@@ -12,6 +12,7 @@ import torch.utils.data
 import torchmetrics
 import wandb
 from sklearn.model_selection import train_test_split
+from test_tube.hpc import SlurmCluster, HyperOptArgumentParser, AbstractCluster
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
@@ -219,7 +220,9 @@ class ClippedGliderDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
 
-def main(hyperparams):
+def main(hyperparams, *slurmargs):
+    hyperparams.betas = [float(val) for val in hyperparams.betas.split(", ")]
+    hyperparams.tracking_tags = [tag for tag in hyperparams.tracking_tags.split(", ")]
     sr = 128000
     fdim = hyperparams.nmels
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
@@ -234,7 +237,7 @@ def main(hyperparams):
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
         entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
         tags=hyperparams.tracking_tags,
-        note=hyperparams.tracking_note,
+        notes=hyperparams.tracking_note,
     )
 
     model = AstLightningWrapper(
@@ -273,10 +276,11 @@ def main(hyperparams):
         val_limit=None,
     )
 
+    prod = "idun" in os.uname().nodename
     trainer = pl.Trainer(
-        # accelerator="gpu", 
-        # devices=hyperparams.num_gpus, 
-        # num_nodes=hyperparams.num_nodes,
+        accelerator="gpu" if prod else None, 
+        devices=hyperparams.num_gpus if prod else None, 
+        num_nodes=hyperparams.num_nodes if prod else None,
         # strategy="ddp",
         max_epochs=hyperparams.epochs,
         logger=logger,
@@ -292,51 +296,83 @@ def main(hyperparams):
     trainer.test(model, datamodule=dataset)
 
 def init():
-    parser = argparse.ArgumentParser()
+    parser = HyperOptArgumentParser(strategy="random_search")
     # Model params
-    parser.add_argument("-weight_decay", type=float, required=True)
-    parser.add_argument("-learning_rate", type=float, required=True)
-    parser.add_argument("-betas", type=float, nargs="+", required=True)
-    parser.add_argument("-fstride", type=int, default=10)
-    parser.add_argument("-tstride", type=int, default=10)
-    parser.add_argument("--imagenet_pretrain", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--audioset_pretrain", action=argparse.BooleanOptionalAction)
-    parser.add_argument("-model_size", type=str, choices=["tiny224", "small224", "base224", "base384"])
-
+    parser.opt_list("--learning_rate", type=float, tunable=True, options=[0.001, 0.0005, 0.00001])
+    parser.opt_range("--weight_decay", type=float, tunable=True, low=1e-7, high=1e-2, nb_samples=8)
+    parser.add_argument("--betas", type=str, default="0.95, 0.999") # Because test-tube wont handle args with nargs="+", split by "," and cast to float later
+    parser.opt_list("--fstride", type=int, default=10, tunable=True, options=[10, 16])
+    parser.opt_list("--tstride", type=int, default=10, tunable=True, options=[10, 16])
+    parser.add_argument("--imagenet_pretrain", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--audioset_pretrain", action=argparse.BooleanOptionalAction, default=False)
+    parser.opt_list("--model_size", type=str, tunable=True, options=["tiny224", "small224", "base224", "base384"])
     # Data params
-    parser.add_argument("-batch_size", type=int, required=True)
-    parser.add_argument("-nmels", type=int, required=True)
-    parser.add_argument("-nfft", type=int, required=True)
-    parser.add_argument("-hop_length", type=int, required=True)
-    parser.add_argument("-clip_duration_seconds", type=float, required=True)
-    parser.add_argument("-clip_overlap_seconds", type=float, required=True)
+    parser.opt_list("--batch_size", type=int, tunable=True, options=[4, 8, 16, 32, 64])
+    
+    parser.opt_list("--nmels", type=int, tunable=True, default=128, options=[128, 64, 256, 512, 1024])
+    parser.opt_list("--nfft", type=int, tunable=True, default=3200, options=[3200, 4096, 8192])
+    parser.opt_list("--hop_length", type=int, tunable=True, default=1280, options=[1280, 512, 1024, 2048, 4096])
+    parser.add_argument("--clip_duration_seconds", type=float, default=10.0)
+    parser.add_argument("--clip_overlap_seconds", type=float, default=4.0) 
 
     # Training params
-    parser.add_argument("-epochs", type=int, required=True)
-    parser.add_argument("-kfolds", type=int, required=True)
+    parser.opt_list("--epochs", type=int, tunable=True, options=[3, 10, 20, 50, 100])
     
     # Tracking params
-    parser.add_argument("-tracking_note", type=str, required=False)
-    parser.add_argument("-tracking_tags", type=str, nargs="+", required=False)
-    parser.add_argument("-track_n_examples", type=int, default=50)
+    parser.add_argument("--tracking_note", type=str, required=False)
+    parser.add_argument("--tracking_tags", type=str, required=False, default="AST")
+    parser.add_argument("--track_n_examples", type=int, default=50)
     # Other params
     parser.add_argument("--verbose", action="store_true", default=False)
-    parser.add_argument("-num_gpus", type=int, required=True)
-    parser.add_argument("-num_nodes", type=int, required=True)
+    parser.add_argument("--num_gpus", type=int, default=2) # Number of GPUs per run
+    parser.add_argument("--num_nodes", type=int, default=1) # Number of compute nodes per run
+    parser.add_argument("--num_cpus", type=int, default=32) # Number of CPUs per run
+    parser.add_argument("--mem", type=int, default=42000) # Allocated memory in MB for each run
 
-    # parser.add_argument("-verification_dataset_limit", type=int, default=42)
-    # parser.add_argument("-proper_dataset_limit", default=0.7)
     args = parser.parse_args()
-    args.betas = tuple(args.betas)
+    
     env = "Prod" if "idun" in os.uname().nodename else "Dev"
-    args.tracking_tags.append(env)
-    args.tracking_tags.append(args.model_size)
+    args.tracking_tags += f", {env}"
+    if args.model_size is not None: args.tracking_tags += f", {args.model_size}"
+    
+    args.tracking_tags += f", {'No-' if not args.audioset_pretrain else ''}AudioSet"
+    args.tracking_tags += f", {'No-' if not args.imagenet_pretrain else ''}ImageNet"
     return args
+
+def start_slurmjobs(hyperparams):
+    cluster = SlurmCluster(
+        hyperparam_optimizer=hyperparams,
+        log_path=config.SLURM_LOGS_DIR,
+        python_cmd="python"
+    )
+    cluster.notify_job_status(email=os.environ.get("SLURM_NOTIFY_EMAIL_ADDRESS"), on_done=True, on_fail=True)
+    cluster.job_time = "00-48:00:00"
+    cluster.minutes_to_checkpoint_before_walltime = 2
+    cluster.per_experiment_nb_cpus = hyperparams.num_cpus # Number of CPUs each experiment/run gets
+    cluster.per_experiment_nb_gpus = hyperparams.num_gpus # Number of GPUs each experiment/run gets
+    cluster.per_experiment_nb_nodes = hyperparams.num_nodes # Number of Compute Nodes each experminet/run gets
+    cluster.memory_mb_per_node = hyperparams.mem
+    # cluster.gpu_type = '1080ti'
+
+    cluster.add_command("module purge")
+    cluster.add_command("module load Anaconda3/2020.07")
+    cluster.add_command("module load NCCL/2.8.3-CUDA-11.1.1")
+
+    cluster.add_command("conda init --all")
+    cluster.add_command("source ~/.bashrc")
+    cluster.add_command("conda activate TDT4900")
+    cluster.add_command("conda info --envs")
+    cluster.add_command("export NCCL_DEBUG=INFO")
+    cluster.add_command("export PYTHONFAULTHANDLER=1")
+
+    initdata_script = pathlib.Path(__file__).parent.joinpath("initdata.py").absolute()
+    cluster.add_command(f"python {initdata_script} -nmels {hyperparams.nmels} -hop_length {hyperparams.hop_length} -nfft {hyperparams.nfft} -clip_duration_seconds {hyperparams.clip_duration_seconds} -clip_overlap_seconds {hyperparams.clip_overlap_seconds}")
+    
+    cluster.add_slurm_cmd(cmd="account", value="ie-idi", comment="Accounting job to use for the job")
+    cluster.add_slurm_cmd(cmd="partition", value="GPUQ", comment="Job partition (CPUQ/GPUQ)")
+
+    cluster.optimize_parallel_cluster_gpu(main, nb_trials=1, job_name="AST")
 
 if __name__ == "__main__":
     hyperparams = init()
-    main(hyperparams)
-'''
-Run with:
-python ast_lightning.py -batch_size 16 -epochs 3 -learning_rate 0.0001 -weight_decay 5e-7 -betas 0.95 0.999 -kfolds 5 -nmels 128 -hop_length 512 -nfft 2046 -fstride 10 -tstride 10 -model_size base384 -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0 -tracking_tags "AST" "ImageNet" "No-AudioSet" --imagenet_pretrain --no-audioset_pretrain --verbose -num_gpus 0 -num_nodes 1
-'''
+    start_slurmjobs(hyperparams)
