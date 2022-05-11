@@ -328,7 +328,7 @@ def init():
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument("--num_gpus", type=int, default=2) # Number of GPUs per run
     parser.add_argument("--num_nodes", type=int, default=1) # Number of compute nodes per run
-    parser.add_argument("--num_cpus", type=int, default=32) # Number of CPUs per run
+    parser.add_argument("--num_cpus", type=int, default=20) # Number of CPUs per run
     parser.add_argument("--mem", type=int, default=42000) # Allocated memory in MB for each run
 
     args = parser.parse_args()
