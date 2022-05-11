@@ -381,7 +381,6 @@ def start_slurmjobs(hyperparams):
     cluster.add_command("module purge")
     cluster.add_command("module load Anaconda3/2020.07")
     cluster.add_command("module load PyTorch/1.8.1-fosscuda-2020b")
-    cluster.add_command("module load NCCL/2.8.3-CUDA-11.1.1")
 
     cluster.add_command("conda init --all")
     cluster.add_command("source ~/.bashrc")
