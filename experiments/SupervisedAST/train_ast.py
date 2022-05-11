@@ -298,6 +298,7 @@ def main(hyperparams, *slurmargs):
 
 def init():
     parser = HyperOptArgumentParser(strategy="random_search")
+    parser.add_argument("--n_experiments", type=int, default=1)
     # Model params
     parser.opt_list("--learning_rate", type=float, tunable=True, options=[0.001, 0.0005, 0.00001])
     parser.opt_range("--weight_decay", type=float, tunable=True, low=1e-7, high=1e-2, nb_samples=8)
@@ -351,10 +352,9 @@ def override_slurm_cmd_command(cluster: SlurmCluster) -> SlurmCluster:
     Returns:
         SlurmCluster: The same SlurmCluster instance, but with it's __build_slurm_command method overridden. 
     """
-    def overridden(*args, **kwargs):
+    def overridden(*args, **kwargs): 
         cmd = helper(*args, **kwargs)
         new = re.sub(r"srun\s*", "", cmd)
-        print(new)
         return new
     
     helper = cluster._SlurmCluster__build_slurm_command
@@ -396,7 +396,7 @@ def start_slurmjobs(hyperparams):
     cluster.add_slurm_cmd(cmd="account", value="ie-idi", comment="Accounting job to use for the job")
     cluster.add_slurm_cmd(cmd="partition", value="GPUQ", comment="Job partition (CPUQ/GPUQ)")
 
-    cluster.optimize_parallel_cluster_gpu(main, nb_trials=1, job_name="AST")
+    cluster.optimize_parallel_cluster_gpu(main, nb_trials=hyperparams.n_experiments, job_name="AST")
 
 if __name__ == "__main__":
     hyperparams = init()
