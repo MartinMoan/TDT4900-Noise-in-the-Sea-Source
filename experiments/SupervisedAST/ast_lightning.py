@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import re
 import sys
 import pathlib
 from typing import Mapping, Iterable, Optional
@@ -28,7 +29,7 @@ from models.AST.ASTWrapper import ASTWrapper
 
 from datasets.tensordataset import TensorAudioDataset
 
-from experiments.AST_pretrained.initdata import create_tensorset
+from experiments.SupervisedAST.initdata import create_tensorset
 
 from metrics import customwandbplots
 from tracking.datasettracker import track_dataset
@@ -339,12 +340,35 @@ def init():
     args.tracking_tags += f", {'No-' if not args.imagenet_pretrain else ''}ImageNet"
     return args
 
+def override_slurm_cmd_command(cluster: SlurmCluster) -> SlurmCluster:
+    """According to the HPC department at NTNU, responsible for the Idun cluster, sbatch scripts should not contain any 'srun' calls.
+    The default SlurmCluster implementation however does call srun. Therefore we must remove any 'srun' strings from the SlurmCluster __build_slurm_command method
+    If in contact with the NTNU Hjelp in the future, reference casenumber NTNU0505485
+
+    Args:
+        cluster (SlurmCluster): The original SlurmCluster object instance
+
+    Returns:
+        SlurmCluster: The same SlurmCluster instance, but with it's __build_slurm_command method overridden. 
+    """
+    def overridden(*args, **kwargs):
+        cmd = helper(*args, **kwargs)
+        new = re.sub(r"srun\s*", "", cmd)
+        print(new)
+        return new
+    
+    helper = cluster._SlurmCluster__build_slurm_command
+    cluster._SlurmCluster__build_slurm_command = overridden
+    return cluster
+
 def start_slurmjobs(hyperparams):
     cluster = SlurmCluster(
         hyperparam_optimizer=hyperparams,
         log_path=config.SLURM_LOGS_DIR,
         python_cmd="python"
     )
+    cluster = override_slurm_cmd_command(cluster)
+    
     cluster.notify_job_status(email=os.environ.get("SLURM_NOTIFY_EMAIL_ADDRESS"), on_done=True, on_fail=True)
     cluster.job_time = "00-48:00:00"
     cluster.minutes_to_checkpoint_before_walltime = 2
@@ -356,6 +380,7 @@ def start_slurmjobs(hyperparams):
 
     cluster.add_command("module purge")
     cluster.add_command("module load Anaconda3/2020.07")
+    cluster.add_command("module load PyTorch/1.8.1-fosscuda-2020b")
     cluster.add_command("module load NCCL/2.8.3-CUDA-11.1.1")
 
     cluster.add_command("conda init --all")
