@@ -313,7 +313,6 @@ def init():
 
     # Training params
     parser.add_argument("-epochs", type=int, required=True)
-    parser.add_argument("-kfolds", type=int, required=True)
     
     # Tracking params
     parser.add_argument("-tracking_name", type=str, required=True)
