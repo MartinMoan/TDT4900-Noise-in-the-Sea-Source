@@ -162,7 +162,15 @@ class SubsetDataset(torch.utils.data.Dataset):
         return self.dataset[self.subset[index]]
 
 class ClippedGliderDataModule(pl.LightningDataModule):
-    def __init__(self, tensorset: TensorAudioDataset, balancer: IDatasetBalancer, batch_size: int, train_limit: int = None, val_limit: int = None, test_limit: int = None) -> None:
+    def __init__(
+        self, 
+        tensorset: TensorAudioDataset, 
+        balancer: IDatasetBalancer, 
+        num_workers: int,
+        batch_size: int, 
+        train_limit: int = None, 
+        val_limit: int = None, 
+        test_limit: int = None) -> None:
         super().__init__()
         self.tensorset = tensorset
         self.balancer = balancer
@@ -170,6 +178,7 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.train_limit = train_limit
         self.test_limit = test_limit
         self.val_limit = val_limit
+        self.num_workers = num_workers
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.balancer.shuffle()
@@ -213,13 +222,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         wandb.config.update(to_log)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=self.num_workers)
 
 def main(hyperparams, *slurmargs):
     hyperparams.betas = [float(val) for val in hyperparams.betas.split(", ")]
@@ -271,6 +280,7 @@ def main(hyperparams, *slurmargs):
     dataset = ClippedGliderDataModule(
         tensorset=tensorset, 
         balancer=balancer,
+        num_workers=hyperparams.num_cpus,
         batch_size=hyperparams.batch_size,
         train_limit=None,
         test_limit=None,
@@ -380,7 +390,8 @@ def start_slurmjobs(hyperparams):
 
     cluster.add_command("module purge")
     cluster.add_command("module load Anaconda3/2020.07")
-    cluster.add_command("module load PyTorch/1.8.1-fosscuda-2020b")
+    # cluster.add_command("module load PyTorch/1.8.1-fosscuda-2020b")
+    cluster.add_command("module load NCCL/2.8.3-CUDA-11.1.1")
 
     cluster.add_command("conda init --all")
     cluster.add_command("source ~/.bashrc")
