@@ -22,4 +22,4 @@ conda info --envs
 # load cuda
 module load NCCL/2.8.3-CUDA-11.1.1
 
-python experiment.py -batch_size 16 -tracking_name "Experiment" -tracking_note "Testing FashionMNIST model to ensure distributed training on SLURM cluster works." --verbose -num_gpus 2 -num_nodes 2
+srun python experiment.py -batch_size 16 -tracking_name "Experiment" -tracking_note "Testing FashionMNIST model to ensure distributed training on SLURM cluster works." --verbose -num_gpus 2 -num_nodes 2
