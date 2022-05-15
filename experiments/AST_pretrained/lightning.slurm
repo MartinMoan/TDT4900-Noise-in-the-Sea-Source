@@ -1,12 +1,12 @@
 #!/bin/bash -l
 #SBATCH --account=ie-idi
 #SBATCH --partition=GPUQ
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --gres=gpu:2
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=2
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Training"
-#SBATCH --time=00-02:00:00
+#SBATCH --time=00-48:00:00
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm-%j.out"
 
 module purge
@@ -29,7 +29,7 @@ CLIP_OVERLAP=4.0
 NMELS=128
 HOPLENGTH=1280
 NFFT=3200
-MODEL_SIZE="tiny244"
+MODEL_SIZE="base384"
 
 LEARNING_RATE=0.00001
 WEIGHT_DECAY=5e-7
@@ -41,4 +41,4 @@ MAX_EPOCHS=50
 # python initdata.py -nmels 128 -hop_length 1280 -nfft 3200 -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0
 python initdata.py -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP
 
-srun python ast_lightning.py -batch_size 8 -epochs $MAX_EPOCHS -learning_rate $LEARNING_RATE -weight_decay $WEIGHT_DECAY -betas 0.95 0.999 -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -fstride 16 -tstride 16 -model_size $MODEL_SIZE -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP -tracking_name "AST ImageNet Pretrained" -tracking_note "AST pretrained on ImageNet (but not AudioSet, to enable differing input shapes)" -tracking_tags "AST" "ImageNet" "No-AudioSet" $MODEL_SIZE --imagenet_pretrain --no-audioset_pretrain --verbose -num_gpus 2 -num_nodes 1
+python ast_lightning.py -batch_size 8 -epochs $MAX_EPOCHS -learning_rate $LEARNING_RATE -weight_decay $WEIGHT_DECAY -betas 0.95 0.999 -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -fstride 16 -tstride 16 -model_size $MODEL_SIZE -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP -tracking_name "AST ImageNet Pretrained" -tracking_note "AST pretrained on ImageNet (but not AudioSet, to enable differing input shapes)" -tracking_tags "AST" "ImageNet" "No-AudioSet" $MODEL_SIZE --imagenet_pretrain --no-audioset_pretrain --verbose -num_gpus 2 -num_nodes 2 -dev_run

@@ -212,19 +212,21 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         wandb.config.update(to_log)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size) 
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size)
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=multiprocessing.cpu_count())
+        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size)
 
 def main(hyperparams):
+    pl.seed_everything(42)
     sr = 128000
     fdim = hyperparams.nmels
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
 
+    print("Instantiating LoggerFactory")
     logger_factory = LoggerFactory(logger_type=BasicLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
@@ -274,17 +276,18 @@ def main(hyperparams):
     )
 
     trainer = pl.Trainer(
-        # accelerator="gpu", 
-        # devices=hyperparams.num_gpus, 
-        # num_nodes=hyperparams.num_nodes,
-        # strategy="ddp",
+        accelerator="gpu", 
+        devices=hyperparams.num_gpus, 
+        num_nodes=hyperparams.num_nodes,
+        strategy="ddp",
         max_epochs=hyperparams.epochs,
         logger=logger,
+        fast_dev_run=hyperparams.dev_run
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
     
     logger.watch(model)
-    wandb.config.update(vars(hyperparams))
+    logger.experiment.config.update(vars(hyperparams))
     track_dataset(tensorset, n_examples=50)
 
     # trainer.tune(model, datamodule=dataset)
@@ -323,6 +326,7 @@ def init():
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument("-num_gpus", type=int, required=True)
     parser.add_argument("-num_nodes", type=int, required=True)
+    parser.add_argument("-dev_run", action="store_true", default=False)
 
     # parser.add_argument("-verification_dataset_limit", type=int, default=42)
     # parser.add_argument("-proper_dataset_limit", default=0.7)
@@ -331,6 +335,7 @@ def init():
     return args
 
 if __name__ == "__main__":
+    print(os.environ)
     hyperparams = init()
     main(hyperparams)
 '''
