@@ -23,7 +23,9 @@ conda info --envs
 module load NCCL/2.8.3-CUDA-11.1.1
 
 # srun python experiment.py -batch_size 16 -tracking_name "Experiment" -tracking_note "Testing FashionMNIST model to ensure distributed training on SLURM cluster works." --verbose -num_gpus 2 -num_nodes 2
-
+echo "Without srun"
 python test.py
 
+echo "With srun"
 srun python test.py
+echo "Done!"
