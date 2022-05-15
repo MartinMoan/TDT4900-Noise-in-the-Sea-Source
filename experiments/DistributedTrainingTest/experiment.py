@@ -143,6 +143,8 @@ def init():
     return parser.parse_args()
 
 if __name__ == "__main__":
+    from pprint import pprint
+    pprint(os.environ)
     hyperparams = init()
     main(hyperparams)
 '''
