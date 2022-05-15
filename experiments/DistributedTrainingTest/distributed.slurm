@@ -2,10 +2,9 @@
 #SBATCH --account=ie-idi
 #SBATCH --partition=GPUQ
 #SBATCH --time=00-00:10:00
-#SBATCH --nodes=4
-#SBATCH --gres=gpu:8
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
+#SBATCH --nodes=2
+#SBATCH --gres=gpu:2
+#SBATCH --ntasks-per-node=2
 #SBATCH --mem=42000
 #SBATCH --job-name="DistributedTrainingTest"
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/dist.slurm-%j.out"
