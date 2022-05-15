@@ -21,7 +21,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 
 from interfaces import ILoggerFactory, ITensorAudioDataset, IDatasetBalancer
-from tracking.logger import BasicLogger
+from tracking.logger import SlurmLogger
 from tracking.loggerfactory import LoggerFactory
 
 from models.AST.ASTWrapper import ASTWrapper
@@ -226,8 +226,7 @@ def main(hyperparams):
     fdim = hyperparams.nmels
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
 
-    print("Instantiating LoggerFactory")
-    logger_factory = LoggerFactory(logger_type=BasicLogger)
+    logger_factory = LoggerFactory(logger_type=SlurmLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
 
@@ -335,7 +334,6 @@ def init():
     return args
 
 if __name__ == "__main__":
-    print(os.environ)
     hyperparams = init()
     main(hyperparams)
 '''
