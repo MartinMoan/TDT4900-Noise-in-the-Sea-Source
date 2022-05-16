@@ -248,8 +248,6 @@ def main(hyperparams):
         notes=hyperparams.tracking_notes,
     )
 
-    logger.log_table()
-
     model = AstLightningWrapper(
         logger_factory=logger_factory,
         learning_rate=hyperparams.learning_rate,
