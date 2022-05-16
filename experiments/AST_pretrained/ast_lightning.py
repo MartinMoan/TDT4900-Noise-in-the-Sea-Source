@@ -171,14 +171,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.val_limit = val_limit
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.balancer.shuffle()
+        self.balancer.shuffle() # In DDP this will be done for every process, but setting pl.seed_everything(), we set the seed before setup() call
 
         self.eval_only_indeces = self.balancer.eval_only_indeces()
         self.train_indeces = self.balancer.train_indeces()
 
         distributions = self.balancer.label_distributions()
         n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
-
 
         train_val_percentage = 0.8
         test_percentage = 1 - train_val_percentage
@@ -209,7 +208,12 @@ class ClippedGliderDataModule(pl.LightningDataModule):
             "label_distributions": n_per_label,
             "tensorset_size": len(self.tensorset)
         }
-        wandb.config.update(to_log)
+        
+        if int(os.environ.get("SLURM_PROCID", default=-1)) == 0:
+            # setup is run for every process/GPU on every compute node. 
+            # But the wandb.config object only exist on process with global rank 0 (node-0 process/gpu 0)
+            # Only call update from global rank 0
+            wandb.config.update(to_log)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size) 
