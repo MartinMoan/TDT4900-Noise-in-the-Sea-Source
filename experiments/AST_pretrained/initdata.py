@@ -71,7 +71,7 @@ def get_clips(
     expected_pickle_path = get_clips_cache_dir().joinpath(f"{hex_hash}.pickle")
 
     slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
-    if slurm_procid == 0 or slurm_procid == -1 and not expected_pickle_path.exists():
+    if (slurm_procid == 0 or slurm_procid == -1) and not expected_pickle_path.exists():
         # slurm_procid == 0: Running as slurm managed process, and has global rank 0, in which case we should instantiate the dataset as a new object.
         # slurm_procid == -1: Either running on local dev machine, or running on cluster as standalone process not managed by slurm.
         clips = ClippedDataset(
@@ -107,7 +107,7 @@ def get_balancer(
     expected_pickle_path = get_balancer_cache_dir().joinpath(f"{hex_hash}.pickle")
     
     slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
-    if slurm_procid == 0 or slurm_procid == -1 and not expected_pickle_path.exists():
+    if (slurm_procid == 0 or slurm_procid == -1) and not expected_pickle_path.exists():
         # slurm_procid == 0: Running as slurm managed process, and has global rank 0, in which case we should instantiate the dataset as a new object.
         # slurm_procid == -1: Either running on local dev machine, or running on cluster as standalone process not managed by slurm.
         
