@@ -151,7 +151,9 @@ class ClippedDataset(ICustomDataset):
         # Remove any files from self._audilfiles that cannot be found in local dataset directory
         # and ensure that all filename values in the self._audiofiles dataframe are PosixPath objects. 
         # local_audiofiles = self.filelistprovider.list()
-        local_audiofiles = config.list_local_audiofiles()
+        local_audiofiles = list(config.DATASET_DIRECTORY.glob("**/*.wav"))
+        if len(local_audiofiles) == 0:
+            raise Exception(f"No audiofiles could be found in dataset directory: {config.DATASET_DIRECTORY}")
         if len(local_audiofiles) != len(self._audiofiles):
             if len(local_audiofiles) > len(self._audiofiles):
                 warnings.warn(f"There are local files that do not exist among the described in the csv at {config.PARSED_LABELS_PATH}")
