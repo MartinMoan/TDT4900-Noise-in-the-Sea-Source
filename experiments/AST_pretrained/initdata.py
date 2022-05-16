@@ -58,6 +58,8 @@ def get_clips(
     overlap_nsamples: int = None
     ) -> ClippedDataset:
     
+    logger = logger_factory.create_logger()
+
     hashable_arguments = dict(
         clip_duration_seconds=clip_duration_seconds,
         clip_overlap_seconds=clip_overlap_seconds,
@@ -84,13 +86,13 @@ def get_clips(
         if not expected_pickle_path.parent.exists():
             expected_pickle_path.parent.mkdir(parents=True, exist_ok=False)
 
-        print(f"Pickling ClippedDataset object to {expected_pickle_path}")
+        logger.log(f"Pickling ClippedDataset object to {expected_pickle_path}")
         with open(expected_pickle_path, "wb") as binary_file:
             pickle.dump(clips, binary_file)
         
         return clips
     
-    print(f"Pickling ClippedDataset object from {expected_pickle_path}")
+    logger.log(f"Pickling ClippedDataset object from {expected_pickle_path}")
     with open(expected_pickle_path, "rb") as binary_file:
         return pickle.load(binary_file)
 
@@ -98,6 +100,8 @@ def get_balancer(
     clips: ClippedDataset, 
     logger_factory: ILoggerFactory,
     worker: IAsyncWorker) -> IDatasetBalancer:
+
+    logger = logger_factory.create_logger()
 
     hex_hash = hash(clips=clips)
     expected_pickle_path = get_balancer_cache_dir().joinpath(f"{hex_hash}.pickle")
@@ -117,13 +121,13 @@ def get_balancer(
         if not expected_pickle_path.parent.exists():
             expected_pickle_path.parent.mkdir(parents=True, exist_ok=False)
         
-        print(f"Pickling DatasetBalancer object to {expected_pickle_path}")
+        logger.log(f"Pickling DatasetBalancer object to {expected_pickle_path}")
         with open(expected_pickle_path, "wb") as binary_file:
             pickle.dump(balancer, binary_file)
         
         return balancer
 
-    print(f"Pickling DatasetBalancer object from {expected_pickle_path}")
+    logger.log(f"Pickling DatasetBalancer object from {expected_pickle_path}")
     with open(expected_pickle_path, "rb") as binary_file:
         return pickle.load(binary_file)
 
