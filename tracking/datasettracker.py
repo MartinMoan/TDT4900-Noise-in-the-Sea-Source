@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import os 
 
 import numpy as np
 from rich import print
@@ -12,6 +13,10 @@ import config
 from datasets.tensordataset import TensorAudioDataset
 
 def track_dataset(dataset: TensorAudioDataset, n_examples: int = 50):
+    slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
+    if slurm_procid != 0 and slurm_procid != -1:
+        return
+
     if n_examples <= 0 or len(dataset) < n_examples:
         return
     
