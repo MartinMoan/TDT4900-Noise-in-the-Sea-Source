@@ -229,15 +229,26 @@ def main(hyperparams):
     logger_factory = LoggerFactory(logger_type=SlurmLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
-    
+    # run = wandb.init(
+    #     dir=str(config.HOME_PROJECT_DIR.absolute()),
+    #     config=vars(hyperparams),
+    #     project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
+    #     entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
+    #     tags=hyperparams.tracking_tags,
+    #     name=hyperparams.tracking_name,
+    #     notes=hyperparams.tracking_notes,
+    # )
     logger = WandbLogger(
-        # name=hyperparams.tracking_name,
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
         entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
-        **vars(hyperparams) # These are added to wandb.init call as part of the config
+        config=vars(hyperparams), # These are added to wandb.init call as part of the config,
+        tags=hyperparams.tracking_tags,
+        notes=hyperparams.tracking_notes,
     )
+
+    logger.log_table()
 
     model = AstLightningWrapper(
         logger_factory=logger_factory,
