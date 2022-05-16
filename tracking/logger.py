@@ -120,7 +120,7 @@ class SlurmLogger(ILogger):
     def log(self, *args, **kwargs) -> None:
         slurm_procid = os.environ.get("SLURM_PROCID")
         header = f"SLURM_PROCID [{slurm_procid}]: "
-        print((header, *args), **kwargs)
+        print(*(header, *args), **kwargs)
 
 if __name__ == "__main__":
     text = "[bold red]Firstline[/bold red]\nSecondline\n\nBlank line above"
