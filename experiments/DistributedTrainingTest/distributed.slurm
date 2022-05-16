@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH --mem=42000
 #SBATCH --job-name="SrunInSbatchScriptTest"
-#SBATCH --output="sruntest.slurm-%j.out"
+#SBATCH --output="sruntest.slurm.out"
 
 module purge
 module load Anaconda3/2020.07
