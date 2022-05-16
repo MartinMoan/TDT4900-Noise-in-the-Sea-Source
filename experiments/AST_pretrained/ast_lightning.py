@@ -329,7 +329,7 @@ def init():
     
     # Tracking params
     parser.add_argument("-tracking_name", type=str, required=True)
-    parser.add_argument("-tracking_note", type=str, required=True)
+    parser.add_argument("-tracking_notes", type=str, required=True)
     parser.add_argument("-tracking_tags", type=str, nargs="+", required=True)
     parser.add_argument("-track_n_examples", type=int, default=50)
     # Other params
