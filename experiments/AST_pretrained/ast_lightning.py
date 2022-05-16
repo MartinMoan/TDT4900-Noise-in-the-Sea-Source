@@ -229,13 +229,14 @@ def main(hyperparams):
     logger_factory = LoggerFactory(logger_type=SlurmLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
-
+    
     logger = WandbLogger(
         # name=hyperparams.tracking_name,
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
         project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
         entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
+        **vars(hyperparams) # These are added to wandb.init call as part of the config
     )
 
     model = AstLightningWrapper(
@@ -286,7 +287,6 @@ def main(hyperparams):
     )
     
     logger.watch(model)
-    logger.experiment.config.update(vars(hyperparams))
     track_dataset(tensorset, n_examples=50)
 
     # trainer.tune(model, datamodule=dataset)
