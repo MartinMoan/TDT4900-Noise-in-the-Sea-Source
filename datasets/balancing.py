@@ -52,9 +52,6 @@ class DatasetBalancer(IDatasetBalancer):
         if self._min_size == 0:
             raise Exception(f"Unable to balance dataset, because there is a label presence pair that has no values: {str({key: len(self._label_distributions[key]) for key in self._label_distributions.keys()})}")
 
-        if verbose:
-            self.log_balanced_stats()
-
     @property
     def _min_size(self):
         return np.min([len(self._label_distributions[key]) for key in self._label_distributions.keys()], axis=0)
@@ -95,29 +92,6 @@ class DatasetBalancer(IDatasetBalancer):
             eval_part = indeces[self._min_size:]
             out[key] = eval_part
         return out
-    
-    def log_balanced_stats(self):
-        self.logger.log(f"{self.__class__.__name__} class/label-presence distribution:")
-        self.logger.log(f"Size of dataset: {len(self._dataset)}")
-        self.logger.log("The instances under for training and eval will be split according to the current fold train/test split. And the eval only instances will be added to the test part of the split for every fold.")
-        self.logger.log("---- FOR TRAINING AND EVAL ---- ")
-        for key in self._indeces_for_training.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
-        
-        self.logger.log("---- FOR EVAL ONLY ---- ")
-        for key in self._indeces_for_eval.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
-        self.logger.log("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
-        for key in self._label_distributions.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._label_distributions[key])}")
-
-        num_for_training = np.sum([len(self._indeces_for_training[key]) for key in self._indeces_for_training.keys()])
-        num_for_eval = np.sum([len(self._indeces_for_eval[key]) for key in self._indeces_for_eval.keys()])
-        self.logger.log(f"Total number of instances for training: {num_for_training}")
-        self.logger.log(f"Total number of instances for eval: {num_for_eval}")
-        self.logger.log(f"Total number of instances for both training and eval: {(num_for_training + num_for_eval)}")
-        self.logger.log(f"Input dataset length: {len(self._dataset)}")
-        self.logger.log(f"The number of instances is as expected?: {(num_for_training + num_for_eval) == len(self._dataset)}")
 
     def _func(self, dataset: ICustomDataset, start: int, stop: int):
         proc = multiprocessing.current_process()
