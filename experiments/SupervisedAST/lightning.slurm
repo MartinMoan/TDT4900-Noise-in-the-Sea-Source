@@ -8,6 +8,8 @@
 #SBATCH --job-name="AST Training"
 #SBATCH --time=00-48:00:00
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm-%j.out"
+# Checkpoint and requeue this job @N seconds before hitting wall time (https://pytorch-lightning.readthedocs.io/en/stable/clouds/cluster.html#wall-time-auto-resubmit)
+#SBATCH --signal=SIGUSR1@180
 
 module purge
 module load Anaconda3/2020.07
