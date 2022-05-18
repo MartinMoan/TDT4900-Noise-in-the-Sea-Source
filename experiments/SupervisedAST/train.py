@@ -156,7 +156,10 @@ def init():
         'Audioset' if args.audioset_pretrain else 'No-Audioset',
         args.model_size
     ]
-    args.tracking_tags += default_tags
+    if args.tracking_tags is None:
+        args.tracking_tags = default_tags
+    else:
+        args.tracking_tags += default_tags
 
     if args.num_nodes is None and args.strategy.lower().strip() in ["ddp", "ddp2"] and os.environ.get("SLURM_NNODES", default=None) is None:
         raise Exception(f"No 'num_nodes' argument was not provided, and no usable value could be inferred. Strategy was {args.strategy} and environment variable 'SLURM_NNODES' was not found.")
