@@ -40,6 +40,17 @@ def main(hyperparams):
         name=hyperparams.tracking_name
     )
 
+    dataset = ClippedGliderDataModule(
+        batch_size=hyperparams.batch_size,
+        nfft=hyperparams.nfft,
+        nmels=hyperparams.nmels,
+        hop_length=hyperparams.hop_length,
+        clip_duration_seconds=hyperparams.clip_duration_seconds,
+        clip_overlap_seconds=hyperparams.clip_overlap_seconds,
+        logger_factory=logger_factory,
+    )
+    track_dataset(dataset, n_examples=hyperparams.track_n_examples)
+
     model = AstLightningWrapper(
         logger_factory=logger_factory,
         learning_rate=hyperparams.learning_rate,
@@ -58,16 +69,6 @@ def main(hyperparams):
         verbose=hyperparams.verbose,
     )
 
-    dataset = ClippedGliderDataModule(
-        batch_size=hyperparams.batch_size,
-        nfft=hyperparams.nfft,
-        nmels=hyperparams.nmels,
-        hop_length=hyperparams.hop_length,
-        clip_duration_seconds=hyperparams.clip_duration_seconds,
-        clip_overlap_seconds=hyperparams.clip_overlap_seconds,
-        logger_factory=logger_factory,
-    )
-
     trainer = pl.Trainer(
         accelerator=hyperparams.accelerator, 
         devices=hyperparams.num_gpus, 
@@ -84,7 +85,6 @@ def main(hyperparams):
     )
     
     logger.watch(model)
-    track_dataset(dataset, n_examples=hyperparams.track_n_examples)
 
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
