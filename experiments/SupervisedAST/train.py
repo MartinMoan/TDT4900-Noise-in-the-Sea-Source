@@ -84,7 +84,7 @@ def main(hyperparams):
     )
     
     logger.watch(model)
-    track_dataset(dataset, n_examples=50)
+    track_dataset(dataset, n_examples=hyperparams.track_n_examples)
 
     # trainer.tune(model, datamodule=dataset)
     trainer.fit(model, datamodule=dataset)
@@ -109,7 +109,7 @@ def init():
     parser.add_argument("--audioset_pretrain", action=argparse.BooleanOptionalAction, help=f"Wheter to instantiate the AST using weights pretrained on AudioSet (which themselves are pretrained on ImageNet). Will cause an exception if '--no-imagenet_pretrain' argument is also provided, as no model pretrained solely on audioset is currently supported. If set, the '--model_size' must be '{ModelSize.base384.value}'")
     parser.add_argument("--imagenet_pretrain", action=argparse.BooleanOptionalAction, help="Wheter to instantiate the AST using weights pretrained on ImageNet")
     
-    parser.add_argument("-model_size", type=str, choices=[ModelSize.tiny224.value, ModelSize.small224.value, ModelSize.base224.value, ModelSize.base384.value], help=f"Which pre-trained parameters/model size to instantiate the AST from. If '--no-audioset_pretrain' is also provided the only valid option is '{ModelSize.base384.value}'")
+    parser.add_argument("-model_size", type=str, default=ModelSize.base384.value, choices=[ModelSize.tiny224.value, ModelSize.small224.value, ModelSize.base224.value, ModelSize.base384.value], help=f"Which pre-trained parameters/model size to instantiate the AST from. If '--no-audioset_pretrain' is also provided the only valid option is '{ModelSize.base384.value}'")
 
     # Data params
     parser.add_argument("-batch_size", type=int, required=True, help="The batch size to use during training, testing and evaluation")
@@ -121,7 +121,9 @@ def init():
 
     # Training params
     parser.add_argument("-epochs", type=int, required=True, help="The maximum number of epochs to train for before performing testing. For every epoch the model is trained and validated.")
-    parser.add_argument("--strategy", type=str, default="ddp", help="The strategy name passed to the PytorchLightning.Trainer instantiation")
+
+    default_strategy = "ddp" if os.environ.get("SLURM_JOBID", default=None) is not None else None
+    parser.add_argument("--strategy", type=str, default=default_strategy, help="The strategy name passed to the PytorchLightning.Trainer instantiation")
     parser.add_argument("--accelerator", type=str, default="gpu", help="The accelerator name passed to the PytorchLightning.Trainer instantiation")
     
     # Tracking params
@@ -137,7 +139,13 @@ def init():
         num_gpus_default = torch.cuda.device_count()
         
     parser.add_argument("--num_gpus", type=int, default=num_gpus_default, help="The number of GPUs to use during training. Defaults to the environment variable 'SLURM_GPUS_ON_NODE' if present, if not set and the environment variable is not found defaults to 'torch.cuda.device_count()'.")
-    parser.add_argument("--num_nodes", type=int, required=False, help="The number of compute nodes to use during training. Defaults to the environment vairable 'SLURM_NNODES' if present. If not set and the environment variable is not found and the '--strategy' argument is 'ddp' or 'ddp2' will raise an exception, if other strategy is used will default to 'None'")
+
+    num_nodes_default = int(os.environ.get("SLURM_NNODES", default=-1))
+    if num_nodes_default == -1:
+        num_nodes_default = None
+
+    parser.add_argument("--num_nodes", type=int, default=num_nodes_default, help="The number of compute nodes to use during training. Defaults to the environment vairable 'SLURM_NNODES' if present. If not set and the environment variable is not found and the '--strategy' argument is 'ddp' or 'ddp2' will raise an exception, if other strategy is used will default to 'None'")
+
     parser.add_argument("--dev_run", action="store_true", default=False, help="If this flag is provided the PytorchLightning.Trainer instantiation will receive 'fast_dev_run=True'")
     parser.add_argument("--limit_train_batches", type=int, default=None, required=False, help="The number of instances of the training dataset to use. If not provided will use the entire training dataset.")
     parser.add_argument("--limit_test_batches", type=int, default=None, required=False, help="The number of instances of the testing dataset to use. If not provided will use the entire testing dataset.")
@@ -161,11 +169,11 @@ def init():
     else:
         args.tracking_tags += default_tags
 
-    if args.num_nodes is None and args.strategy.lower().strip() in ["ddp", "ddp2"] and os.environ.get("SLURM_NNODES", default=None) is None:
+    if args.num_nodes is None and args.strategy.lower().strip() in ["ddp", "ddp2"]:
         raise Exception(f"No 'num_nodes' argument was not provided, and no usable value could be inferred. Strategy was {args.strategy} and environment variable 'SLURM_NNODES' was not found.")
 
     return args
 
 if __name__ == "__main__":
     hyperparams = init()
-    # main(hyperparams)
+    main(hyperparams)

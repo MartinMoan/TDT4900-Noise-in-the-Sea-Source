@@ -19,11 +19,10 @@ from tracking.logger import BasicLogger
 from datasets.initdata import create_tensorset
 
 class SubsetDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int], limit: int = None) -> None:
+    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int]) -> None:
         super().__init__()
         self.dataset = dataset
-        self.limit = limit if limit is not None else len(subset)
-        self.subset = subset[:self.limit]
+        self.subset = subset
 
     def __len__(self) -> int:
         return len(self.subset)
@@ -65,6 +64,7 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         )
         self.tensorset = tensorset
         self.balancer = balancer
+        self._setup_done = False
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.eval_only_indeces = self.balancer.eval_only_indeces()
@@ -86,9 +86,10 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.test_indeces = np.concatenate([test_part, unbalanced_parts]) # This way label distribution is maintained for testset
 
         # Train-, val- and testsets as subset datasets
-        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces, limit=self.train_limit)
-        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces, limit=self.val_limit)
-        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces, limit=self.test_limit)
+        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces)
+        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces)
+        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces)
+        self._setup_done = True
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size) 
@@ -100,6 +101,9 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size)
 
     def loggables(self) -> Mapping[str, any]:
+        if not self._setup_done:
+            self.setup()
+
         distributions = self.balancer.label_distributions()
         n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
 
