@@ -147,9 +147,9 @@ def init():
     parser.add_argument("--num_nodes", type=int, default=num_nodes_default, help="The number of compute nodes to use during training. Defaults to the environment vairable 'SLURM_NNODES' if present. If not set and the environment variable is not found and the '--strategy' argument is 'ddp' or 'ddp2' will raise an exception, if other strategy is used will default to 'None'")
 
     parser.add_argument("--dev_run", action="store_true", default=False, help="If this flag is provided the PytorchLightning.Trainer instantiation will receive 'fast_dev_run=True'")
-    parser.add_argument("--limit_train_batches", type=int, default=None, required=False, help="The number of instances of the training dataset to use. If not provided will use the entire training dataset.")
-    parser.add_argument("--limit_test_batches", type=int, default=None, required=False, help="The number of instances of the testing dataset to use. If not provided will use the entire testing dataset.")
-    parser.add_argument("--limit_val_batches", type=int, default=None, required=False, help="The number of instances of the validation dataset to use. If not provided will use the entire validation dataset.")
+    parser.add_argument("--limit_train_batches", type=int, default=1.0, required=False, help="The number of instances of the training dataset to use. If not provided will use the entire training dataset.")
+    parser.add_argument("--limit_test_batches", type=int, default=1.0, required=False, help="The number of instances of the testing dataset to use. If not provided will use the entire testing dataset.")
+    parser.add_argument("--limit_val_batches", type=int, default=1.0, required=False, help="The number of instances of the validation dataset to use. If not provided will use the entire validation dataset.")
     parser.add_argument("--overfit_batches", type=float_or_int_argtype, default=0.0, required=False, help="The PytorchLightning.Trainer(overfit_batches) argument value. If and integer is provided will use that number of batches to overfit on, if a float value is provided will use that fraction of the training set to overfit on. Usefull for debugging. Defaults to 0.0")
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
 
