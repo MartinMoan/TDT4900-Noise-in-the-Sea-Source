@@ -20,6 +20,7 @@ from datasets.datamodule import ClippedGliderDataModule
 from tracking.datasettracker import track_dataset
 
 def main(hyperparams):
+    # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
     pl.seed_everything(hyperparams.seed_value)
     sr = 128000
     fdim = hyperparams.nmels
