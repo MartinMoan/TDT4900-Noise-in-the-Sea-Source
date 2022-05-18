@@ -25,7 +25,7 @@ def confusion_matrix(confusion: Union[torch.Tensor, np.ndarray], class_names: Li
 
     values = None
     if isinstance(confusion, torch.Tensor):
-        values = confusion.detach().numpy()
+        values = confusion.detach().cpu().numpy()
     else: # is instance of np.ndarray
         values = confusion
 
