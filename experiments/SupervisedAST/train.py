@@ -125,10 +125,10 @@ def init():
     parser.add_argument("--accelerator", type=str, default="gpu", help="The accelerator name passed to the PytorchLightning.Trainer instantiation")
     
     # Tracking params
-    parser.add_argument("-tracking_name", type=str, required=True, help="The WandB run name to use during the run. If not provided a WandB will generate a name automatically.")
-    parser.add_argument("-tracking_notes", type=str, required=True, help="Any notes to use for the WandB run.")
-    parser.add_argument("-tracking_tags", type=str, nargs="+", required=True, help="Any WandB tags to use during the run in addition to the default tags ['AST', 'Prod' (if script is run in SLURM managed environment), model size value, 'AudioSet'/'No-AudioSet', 'ImageNet'/'No-ImageNet']")
-    parser.add_argument("-track_n_examples", type=int, default=50)
+    parser.add_argument("--tracking_name", type=str, required=False, help="The WandB run name to use during the run. If not provided a WandB will generate a name automatically.")
+    parser.add_argument("--tracking_notes", type=str, required=False, help="Any notes to use for the WandB run.")
+    parser.add_argument("--tracking_tags", type=str, nargs="+", required=False, help="Any WandB tags to use during the run in addition to the default tags ['AST', 'Prod' (if script is run in SLURM managed environment), model size value, 'AudioSet'/'No-AudioSet', 'ImageNet'/'No-ImageNet']")
+    parser.add_argument("--track_n_examples", type=int, default=50)
     # Other params
     parser.add_argument("--verbose", action="store_true", default=False)
 
