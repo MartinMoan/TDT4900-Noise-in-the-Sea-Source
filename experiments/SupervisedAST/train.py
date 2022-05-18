@@ -49,7 +49,7 @@ def main(hyperparams):
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
         logger_factory=logger_factory,
     )
-    track_dataset(logger, dataset, n_examples=hyperparams.track_n_examplesm)
+    track_dataset(logger, dataset, n_examples=hyperparams.track_n_examples)
 
     model = AstLightningWrapper(
         logger_factory=logger_factory,
