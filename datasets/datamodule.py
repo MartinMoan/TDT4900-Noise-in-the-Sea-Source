@@ -39,7 +39,8 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         hop_length: int,
         clip_duration_seconds: float,
         clip_overlap_seconds: float,
-        logger_factory: ILoggerFactory=None,
+        logger_factory: Optional[ILoggerFactory]=None,
+        num_workers: Optional[int] = 0,
         train_transforms=None, 
         val_transforms=None, 
         test_transforms=None, 
@@ -53,6 +54,7 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.clip_duration_seconds = clip_duration_seconds
         self.clip_overlap_seconds = clip_overlap_seconds
         self.logger_factory = logger_factory if logger_factory is not None else LoggerFactory(logger_type=BasicLogger)
+        self.num_workers = num_workers
 
         tensorset, balancer = create_tensorset(
             logger_factory=self.logger_factory,
@@ -92,13 +94,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self._setup_done = True
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size) 
+        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def loggables(self) -> Mapping[str, any]:
         if not self._setup_done:
