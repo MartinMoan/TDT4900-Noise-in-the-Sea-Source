@@ -8,7 +8,6 @@ import pathlib
 import pickle
 
 import git
-from rich import print
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -144,7 +143,6 @@ def create_tensorset(
         logger_factory=logger_factory,
         worker=Binworker()
     )
-    balancer.log_balanced_stats()
 
     label_accessor = BinaryLabelAccessor()
     feature_accessor = MelSpectrogramFeatureAccessor(
