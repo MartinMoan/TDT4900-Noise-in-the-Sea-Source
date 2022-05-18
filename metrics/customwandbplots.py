@@ -4,8 +4,9 @@ from typing import Union, List
 import torch
 import numpy as np
 import wandb
+from pytorch_lightning.loggers import WandbLogger
 
-def confusion_matrix(confusion: Union[torch.Tensor, np.ndarray], class_names: List[str] = None, title: str = None):
+def confusion_matrix(logger: WandbLogger, confusion: Union[torch.Tensor, np.ndarray], class_names: List[str] = None, title: str = None):
     if not isinstance(confusion, (torch.Tensor, np.ndarray)):
         raise TypeError(f"Incorrect type for confusion matrix argument, expected torch.Tensor or numpy.ndarray but received type {type(confusion)}")
     if len(confusion.shape) != 2: # Must be 2 dimensional
@@ -40,7 +41,7 @@ def confusion_matrix(confusion: Union[torch.Tensor, np.ndarray], class_names: Li
         for j in range(n_classes):
             data.append([class_names[i], class_names[j], values[i, j]])
     
-    return wandb.plot_table(
+    return logger.experiment.plot_table(
         "wandb/confusion_matrix/v1",
         wandb.Table(columns=["Actual", "Predicted", "nPredictions"], data=data),
         fields,
