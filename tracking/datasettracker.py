@@ -76,5 +76,6 @@ def track_dataset(logger: WandbLogger, datamodule: ClippedGliderDataModule, n_ex
     logger.experiment.config.update(dict(
         example_shape=dataset.example_shape(),
         label_shape=dataset.label_shape(),
-        **datamodule.loggables()
+        **datamodule.loggables(),
+        slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}
     ))
