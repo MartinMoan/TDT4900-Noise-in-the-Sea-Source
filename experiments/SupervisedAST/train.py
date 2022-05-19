@@ -93,10 +93,14 @@ def main(hyperparams):
     trainer.test(model, datamodule=dataset)
 
 def float_or_int_argtype(value):
-    if isinstance(value, (float, int)):
-        return value
-    else:
-        raise argparse.ArgumentTypeError(f"Argument '{value}' has incorrect type, expected 'float' or 'int' but received type {type(value)}")
+    try:
+        return int(value)
+    except Exception:
+        pass
+    try:
+        return float(value)
+    except Exception:
+        raise argparse.ArgumentTypeError(f"Argument '{value}' has incorrect type, expected 'float' or 'int' but received '{type(value)}' with value {value}")
 
 def init():
     parser = argparse.ArgumentParser(
@@ -158,8 +162,6 @@ def init():
     parser.add_argument("--overfit_batches", type=float_or_int_argtype, default=0.0, required=False, help="The PytorchLightning.Trainer(overfit_batches) argument value. If and integer is provided will use that number of batches to overfit on, if a float value is provided will use that fraction of the training set to overfit on. Usefull for debugging. Defaults to 0.0")
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
 
-    # parser.add_argument("-verification_dataset_limit", type=int, default=42)
-    # parser.add_argument("-proper_dataset_limit", default=0.7)
     args = parser.parse_args()
     args.betas = tuple(args.betas)
     default_tags = [
