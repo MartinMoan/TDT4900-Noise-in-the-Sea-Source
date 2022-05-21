@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import pathlib
+from turtle import forward
 from typing import Iterable, NewType
 from enum import Enum
 
@@ -14,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 
 from interfaces import ILoggerFactory
 from models.AST.ASTWrapper import ASTWrapper
-from metrics import customwandbplots
+from metrics import customwandbplots, multilabelmap
 
 class ModelSize(Enum):
     tiny224 = "tiny224"
@@ -66,32 +67,29 @@ class AstLightningWrapper(pl.LightningModule):
         self._betas = betas
         self._printlogger = logger_factory.create_logger()
         self._batch_size = batch_size
-        self._accuracy = torchmetrics.Accuracy(num_classes=2)
-        self._aucroc = torchmetrics.AUROC(num_classes=2)
-        self._precision = torchmetrics.Precision(num_classes=2)
-        self._recall = torchmetrics.Recall(num_classes=2)
-        self._average_precision = torchmetrics.AveragePrecision(num_classes=2)
-        self._f1 = torchmetrics.F1Score(num_classes=2)
+
+        metric_average_method = "weighted"
+        self.metrics = torchmetrics.MetricCollection(
+            torchmetrics.Accuracy(num_classes=2, average=metric_average_method),
+            torchmetrics.AUROC(num_classes=2, average=metric_average_method),
+            torchmetrics.Precision(num_classes=2, average=metric_average_method),
+            torchmetrics.Recall(num_classes=2, average=metric_average_method),
+            torchmetrics.AveragePrecision(num_classes=2, average=metric_average_method),
+            torchmetrics.F1Score(num_classes=2, average=metric_average_method),
+            multilabelmap.MeanAveragePrecision(num_classes=2)
+        )
+        # keep this separate for custom loggin implementation for confusion matrix
         self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5) # Dont normalize here, send raw values to wandb and normalize in GUI
         self._verbose = verbose
         self.save_hyperparameters()
 
     def update_metrics(self, stepname, Yhat, Y):
-        self._accuracy(Yhat.float(), Y.int())
-        self._aucroc.update(Yhat.float(), Y.int())
-        self._precision.update(Yhat.float(), Y.int())
-        self._recall.update(Yhat.float(), Y.int())
-        self._average_precision.update(Yhat.float(), Y.int())
-        self._f1.update(Yhat.float(), Y.int())
-        
-        self.log(f"{stepname}_accuracy", self._accuracy, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_aucroc", self._aucroc, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_precision", self._precision, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_recall", self._recall, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_average_precision", self._average_precision, on_step=False, on_epoch=True)
-        self.log(f"{stepname}_f1", self._f1, on_step=False, on_epoch=True)
+        self.metrics.update(Yhat, Y)
 
-        self._confusion_matrix.update(Yhat.float(), Y.int())
+    def log_metrics(self, step):
+        metrics = self.metrics.compute()
+        for metric, values in metrics.items():
+            self.log(f"{step}_{metric.lower().strip()}", values)
 
     def log_confusion_matrix(self, stepname):
         confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
@@ -106,29 +104,30 @@ class AstLightningWrapper(pl.LightningModule):
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         return self._ast(X)
 
-    def training_step(self, batch, batch_idx):
+    def forward_batch(self, step, batch, batch_idx):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
-        self.log("train_loss", loss)
-        return dict(loss=loss) # these are sent as input to training_epoch_end    
-
-    def test_step(self, batch, batch_idx):
-        X, Y = batch
-        Yhat = self.forward(X)
-        loss = self._lossfunc(Yhat, Y)
-        self.update_metrics("test", Yhat, Y)
+        self.log("loss", loss)
+        if step != "train":
+            self.metrics.update(Yhat, Y)
         return dict(loss=loss)
 
-    def test_epoch_end(self, outputs) -> None:
-        self.log_confusion_matrix("test")
+    def training_step(self, batch, batch_idx):
+        return self.forward_batch("train", batch, batch_idx)
 
     def validation_step(self, batch, batch_idx):
-        X, Y = batch
-        Yhat = self.forward(X)
-        loss = self._lossfunc(Yhat, Y)
-        self.update_metrics("val", Yhat, Y)
-        return dict(loss=loss)
+        return self.forward_batch("val", batch, batch_idx)
+
+    def test_step(self, batch, batch_idx):
+        return self.forward_batch("test", batch, batch_idx)
+
+    def test_epoch_end(self, outputs) -> None:
+        metrics = self.metrics.compute()
+        for 
+        self.log_confusion_matrix("test")
+
+    
     
     def validation_epoch_end(self, outputs) -> None:
         self.log_confusion_matrix("val")
