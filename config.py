@@ -137,3 +137,7 @@ if not CHECKPOINTS_PATH.exists():
     CHECKPOINTS_PATH.mkdir(parents=True, exist_ok=False)
 
 LOG_INTERVAL_SECONDS = float(os.environ.get("LOG_INTERVAL_SECONDS", 10.0))
+
+LIGHTNING_CHECKPOINT_PATH = HOME_PROJECT_DIR.joinpath("lightning", "checkpoints").absolute()
+if not LIGHTNING_CHECKPOINT_PATH.exists():
+    LIGHTNING_CHECKPOINT_PATH.mkdir(parents=True, exist_ok=False)
