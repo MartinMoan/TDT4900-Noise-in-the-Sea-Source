@@ -3,11 +3,14 @@ import argparse
 import os
 import sys
 import pathlib
+from typing import Dict, Any
 
 import git
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import Callback
+import wandb
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -19,6 +22,16 @@ from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
 from datasets.datamodule import ClippedGliderDataModule
 from tracking.datasettracker import track_dataset
 
+class WanbdCheckpointCallback(Callback):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def on_save_checkpoint(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", checkpoint: Dict[str, Any]) -> dict:
+        return super().on_save_checkpoint(trainer, pl_module, checkpoint)
+
+    def on_load_checkpoint(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", callback_state: Dict[str, Any]) -> None:
+        return super().on_load_checkpoint(trainer, pl_module, callback_state)
+
 def main(hyperparams):
     # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
     pl.seed_everything(hyperparams.seed_value)
@@ -29,7 +42,8 @@ def main(hyperparams):
     logger_factory = LoggerFactory(logger_type=SlurmLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
-    
+    # import wandb.util
+    # run_id = os.environ.get("WANDB_RUN_ID", default=None)
     logger = WandbLogger(
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
@@ -38,7 +52,9 @@ def main(hyperparams):
         config=vars(hyperparams), # These are added to wandb.init call as part of the config,
         tags=hyperparams.tracking_tags,
         notes=hyperparams.tracking_notes,
-        name=hyperparams.tracking_name
+        name=hyperparams.tracking_name,
+        # resume="allow",
+        # id=run
     )
 
     dataset = ClippedGliderDataModule(
@@ -68,7 +84,8 @@ def main(hyperparams):
         imagenet_pretrain=hyperparams.imagenet_pretrain,
         audioset_pretrain=hyperparams.audioset_pretrain,
         model_size=hyperparams.model_size,
-        verbose=hyperparams.verbose,
+        class_names=dataset.class_names(),
+        verbose=hyperparams.verbose
     )
 
     trainer = pl.Trainer(
@@ -82,7 +99,9 @@ def main(hyperparams):
         overfit_batches=hyperparams.overfit_batches,
         limit_train_batches=hyperparams.limit_train_batches,
         limit_test_batches=hyperparams.limit_test_batches,
-        limit_val_batches=hyperparams.limit_val_batches
+        limit_val_batches=hyperparams.limit_val_batches,
+        default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
+        log_every_n_steps=hyperparams.log_every_n_steps
         # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
     
@@ -146,10 +165,7 @@ def init():
         
     parser.add_argument("--num_gpus", type=int, default=num_gpus_default, help="The number of GPUs to use during training. Defaults to the environment variable 'SLURM_GPUS_ON_NODE' if present, if not set and the environment variable is not found defaults to 'torch.cuda.device_count()'.")
 
-    num_nodes_default = int(os.environ.get("SLURM_NNODES", default=-1))
-    if num_nodes_default == -1:
-        num_nodes_default = None
-
+    num_nodes_default = int(os.environ.get("SLURM_NNODES", default=1))
     parser.add_argument("--num_nodes", type=int, default=num_nodes_default, help="The number of compute nodes to use during training. Defaults to the environment vairable 'SLURM_NNODES' if present. If not set and the environment variable is not found and the '--strategy' argument is 'ddp' or 'ddp2' will raise an exception, if other strategy is used will default to 'None'")
     
     num_workers_default = int(os.environ.get("SLURM_CPUS_ON_NODE", default=0))
@@ -161,12 +177,13 @@ def init():
     parser.add_argument("--limit_val_batches", type=int, default=1.0, required=False, help="The number of instances of the validation dataset to use. If not provided will use the entire validation dataset.")
     parser.add_argument("--overfit_batches", type=float_or_int_argtype, default=0.0, required=False, help="The PytorchLightning.Trainer(overfit_batches) argument value. If and integer is provided will use that number of batches to overfit on, if a float value is provided will use that fraction of the training set to overfit on. Usefull for debugging. Defaults to 0.0")
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
+    parser.add_argument("--log_every_n_steps", type=int, default=50, help="The log interval in number of training steps. Will be passed to Trainer instantiation as PytorchLightning.Trainer(log_every_n_steps=args.log_every_n_steps)")
 
     args = parser.parse_args()
     args.betas = tuple(args.betas)
     default_tags = [
         'AST',
-        'Prod' if len([key for key, value in os.environ.items() if "SLURM" in key]) > 0 else 'Dev',
+        'Prod' if len([key for key, value in os.environ.items() if "SLURM" in key]) > 0 and "idun" in os.uname().nodename else 'Dev', # if running on cluster, and in SLURM managed environment, the environment tag should be Prod
         'ImageNet' if args.imagenet_pretrain else 'No-ImageNet',
         'Audioset' if args.audioset_pretrain else 'No-Audioset',
         args.model_size
@@ -176,7 +193,7 @@ def init():
     else:
         args.tracking_tags += default_tags
 
-    if args.num_nodes is None and args.strategy.lower().strip() in ["ddp", "ddp2"]:
+    if args.num_nodes is None and args.strategy is not None and args.strategy.lower().strip() in ["ddp", "ddp2"]:
         raise Exception(f"No 'num_nodes' argument was not provided, and no usable value could be inferred. Strategy was {args.strategy} and environment variable 'SLURM_NNODES' was not found.")
 
     return args
