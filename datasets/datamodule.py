@@ -190,7 +190,12 @@ class ClippedGliderDataModule(pl.LightningDataModule):
     def get_tensor_audio_dataset(self):
         return self.tensorset
 
-
+    def class_names(self) -> Iterable[str]:
+        classes = self.tensorset.classes()
+        output = np.array(list(classes.keys()))
+        order = list(classes.values())
+        return output[order]
+        
 if __name__ == "__main__":
     dataset = ClippedGliderDataModule(
         batch_size=8,
@@ -204,3 +209,4 @@ if __name__ == "__main__":
     dataset.setup()
     from rich import print
     print(dataset.loggables())
+    print(dataset.class_names())
