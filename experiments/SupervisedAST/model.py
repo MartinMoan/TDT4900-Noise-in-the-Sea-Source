@@ -30,7 +30,6 @@ class AstLightningWrapper(pl.LightningModule):
     """
     def __init__(
         self, 
-        logger_factory: ILoggerFactory,
         learning_rate: float,
         weight_decay: float,
         betas: Iterable[float],
@@ -49,7 +48,6 @@ class AstLightningWrapper(pl.LightningModule):
 
         super().__init__()
         self._ast = ASTWrapper(
-            logger_factory=logger_factory,
             activation_func=None, # Because we use BCEWithLogitsLoss
             label_dim=n_model_outputs, 
             fstride=fstride, 
@@ -66,7 +64,6 @@ class AstLightningWrapper(pl.LightningModule):
         self._learning_rate = learning_rate
         self._weight_decay = weight_decay
         self._betas = betas
-        self._printlogger = logger_factory.create_logger()
         self._batch_size = batch_size
 
         self.metrics = GliderMetrics(num_classes=n_model_outputs, class_names=class_names)
@@ -127,11 +124,7 @@ class AstLightningWrapper(pl.LightningModule):
         return dict(optimizer=optimizer)
 
 if __name__ == "__main__":
-    from tracking.loggerfactory import LoggerFactory
-    from tracking.logger import BasicLogger
-    factory = LoggerFactory(logger_type=BasicLogger)
     m = AstLightningWrapper(
-        logger_factory=factory,
         learning_rate=0.1,
         weight_decay=0.5,
         betas=[0.1, 0.2],

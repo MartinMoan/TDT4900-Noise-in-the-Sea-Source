@@ -12,9 +12,6 @@ from pytorch_lightning.loggers import WandbLogger
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
 
-from tracking.logger import SlurmLogger
-from tracking.loggerfactory import LoggerFactory
-
 from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
 from datasets.datamodule import ClippedGliderDataModule
 from tracking.datasettracker import track_dataset
@@ -25,10 +22,7 @@ def main(hyperparams):
     sr = 128000
     fdim = hyperparams.nmels
     tdim = int((hyperparams.clip_duration_seconds * sr / hyperparams.hop_length) + 1)
-
-    logger_factory = LoggerFactory(logger_type=SlurmLogger)
-    mylogger = logger_factory.create_logger()
-    mylogger.log("Received hyperparams:", vars(hyperparams))
+    print("Received hyperparams:", vars(hyperparams))
 
     logger = WandbLogger(
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
@@ -48,13 +42,11 @@ def main(hyperparams):
         hop_length=hyperparams.hop_length,
         clip_duration_seconds=hyperparams.clip_duration_seconds,
         clip_overlap_seconds=hyperparams.clip_overlap_seconds,
-        logger_factory=logger_factory,
         num_workers=hyperparams.num_workers
     )
     track_dataset(logger, dataset, n_examples=hyperparams.track_n_examples)
 
     model = AstLightningWrapper(
-        logger_factory=logger_factory,
         learning_rate=hyperparams.learning_rate,
         weight_decay=hyperparams.weight_decay,
         betas=hyperparams.betas,
