@@ -11,13 +11,8 @@ import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ILoggerFactory
-from tracking.logger import Logger
 
 class Cacher:
-    def __init__(self, logger_factory: ILoggerFactory) -> None:
-        self.logger = logger_factory.create_logger()
-        
     def _args_by_inspection(obj_ref: Type, *args) -> Mapping[str, any]:
         sig = inspect.getfullargspec(obj_ref)
         sigargs = [arg for arg in sig.args if arg != "self"]
@@ -74,35 +69,35 @@ class Cacher:
         cache_list = [path for path in cache_dir.glob("**/*.pickle")]
         
         if not config.CACHING_ENABLED:
-            self.logger.log(f"Caching is disabled")
+            print(f"Caching is disabled")
             return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
         if force_recache:
-            self.logger.log(f"force_recache argument flag is set, will not pickle from cache")
+            print(f"force_recache argument flag is set, will not pickle from cache")
             return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
         if not pickle_path in cache_list:
-            self.logger.log(f"Caching is enabled, and force_recaching is not set, but no pickle could be found in cache {cache_dir} for {obj_ref.__name__} object")
-            self.logger.log(f"Computed cache hash filename: {pickle_path.name}")
+            print(f"Caching is enabled, and force_recaching is not set, but no pickle could be found in cache {cache_dir} for {obj_ref.__name__} object")
+            print(f"Computed cache hash filename: {pickle_path.name}")
             return self._instantiate(obj_ref, pickle_path, *init_args, **init_kwargs)
 
         obj = self._load(obj_ref, pickle_path)
         return obj
 
     def _instantiate(self, obj_ref: Type, pickle_path: pathlib.PosixPath, *args: tuple[any], **kwargs: Mapping[str, any]) -> any:
-        self.logger.log(f"Instantiating new {obj_ref.__name__} object, rather than pickling from cache")
+        print(f"Instantiating new {obj_ref.__name__} object, rather than pickling from cache")
         obj = obj_ref(*args, **kwargs)
-        self.logger.log(f"{obj_ref.__name__} instantiated.")
+        print(f"{obj_ref.__name__} instantiated.")
         self.dump(obj, pickle_path)
         return obj
 
     def _load(self, obj_ref: Type, pickle_path: pathlib.PosixPath, **kwargs) -> any:
-        self.logger.log(f"Pickling {obj_ref.__name__} object from {pickle_path}")
+        print(f"Pickling {obj_ref.__name__} object from {pickle_path}")
         with open(pickle_path, "rb") as binary_file:
             obj = pickle.load(binary_file)
-            self.logger.log(f"Pickled object {obj.__class__.__name__}")
+            print(f"Pickled object {obj.__class__.__name__}")
             return obj
 
     def dump(self, object: any, pickle_path: pathlib.PosixPath) -> None:
-        self.logger.log(f"Caching object {object.__class__.__name__} to {pickle_path}")
+        print(f"Caching object {object.__class__.__name__} to {pickle_path}")
         if not pickle_path.parent.exists():
             pickle_path.parent.mkdir(parents=True, exist_ok=False)
         with open(pickle_path, "wb") as binary_file:

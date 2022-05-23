@@ -12,10 +12,7 @@ import pytorch_lightning as pl
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
-from interfaces import ILoggerFactory, ITensorAudioDataset
-from tracking.loggerfactory import LoggerFactory
-from tracking.logger import BasicLogger
-
+from interfaces import ITensorAudioDataset
 from datasets.initdata import create_tensorset
 
 class SubsetDataset(torch.utils.data.Dataset):
@@ -39,7 +36,6 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         hop_length: int,
         clip_duration_seconds: float,
         clip_overlap_seconds: float,
-        logger_factory: Optional[ILoggerFactory] = None,
         num_workers: Optional[int] = 0,
         train_transforms=None, 
         val_transforms=None, 
@@ -53,11 +49,9 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.hop_length = hop_length
         self.clip_duration_seconds = clip_duration_seconds
         self.clip_overlap_seconds = clip_overlap_seconds
-        self.logger_factory = logger_factory if logger_factory is not None else LoggerFactory(logger_type=BasicLogger)
         self.num_workers = num_workers
 
         tensorset, balancer = create_tensorset(
-            logger_factory=self.logger_factory,
             nfft=self.nfft,
             nmels=self.nmels,
             hop_length=self.hop_length,
