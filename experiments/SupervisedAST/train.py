@@ -3,14 +3,11 @@ import argparse
 import os
 import sys
 import pathlib
-from typing import Dict, Any
 
 import git
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import Callback
-import wandb
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -22,16 +19,6 @@ from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
 from datasets.datamodule import ClippedGliderDataModule
 from tracking.datasettracker import track_dataset
 
-class WanbdCheckpointCallback(Callback):
-    def __init__(self) -> None:
-        super().__init__()
-    
-    def on_save_checkpoint(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", checkpoint: Dict[str, Any]) -> dict:
-        return super().on_save_checkpoint(trainer, pl_module, checkpoint)
-
-    def on_load_checkpoint(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", callback_state: Dict[str, Any]) -> None:
-        return super().on_load_checkpoint(trainer, pl_module, callback_state)
-
 def main(hyperparams):
     # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
     pl.seed_everything(hyperparams.seed_value)
@@ -42,8 +29,7 @@ def main(hyperparams):
     logger_factory = LoggerFactory(logger_type=SlurmLogger)
     mylogger = logger_factory.create_logger()
     mylogger.log("Received hyperparams:", vars(hyperparams))
-    # import wandb.util
-    # run_id = os.environ.get("WANDB_RUN_ID", default=None)
+
     logger = WandbLogger(
         save_dir=str(config.HOME_PROJECT_DIR.absolute()),
         offline=False,
@@ -52,9 +38,7 @@ def main(hyperparams):
         config=vars(hyperparams), # These are added to wandb.init call as part of the config,
         tags=hyperparams.tracking_tags,
         notes=hyperparams.tracking_notes,
-        name=hyperparams.tracking_name,
-        # resume="allow",
-        # id=run
+        name=hyperparams.tracking_name
     )
 
     dataset = ClippedGliderDataModule(
@@ -90,7 +74,7 @@ def main(hyperparams):
 
     trainer = pl.Trainer(
         accelerator=hyperparams.accelerator, 
-        devices=hyperparams.num_gpus, 
+        devices=hyperparams.num_gpus,
         num_nodes=hyperparams.num_nodes,
         strategy=hyperparams.strategy,
         max_epochs=hyperparams.epochs,
@@ -102,12 +86,8 @@ def main(hyperparams):
         limit_val_batches=hyperparams.limit_val_batches,
         default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
         log_every_n_steps=hyperparams.log_every_n_steps
-        # auto_scale_batch_size=True # Not supported for DDP per. vXXX: https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html#batch-size-finder
     )
-    
-    logger.watch(model)
-
-    # trainer.tune(model, datamodule=dataset)
+    logger.watch(model)    
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
 

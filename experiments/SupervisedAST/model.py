@@ -123,9 +123,6 @@ class AstLightningWrapper(pl.LightningModule):
         self.log_metrics("test")
 
     def configure_optimizers(self):
-        print(self.parameters())
-        print(self._ast.parameters())
-        exit()
         optimizer = torch.optim.Adam(params=self._ast.parameters(), lr=self._learning_rate, betas=self._betas, weight_decay=self._weight_decay)
         return dict(optimizer=optimizer)
 
