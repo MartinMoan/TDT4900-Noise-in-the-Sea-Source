@@ -1,11 +1,12 @@
 #!/bin/bash -l
 #SBATCH --account=ie-idi
 #SBATCH --partition=GPUQ
-#SBATCH --nodes=2
-#SBATCH --gres=gpu:2
-#SBATCH --ntasks-per-node=2
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:4
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=24
 #SBATCH --mem=42000
-#SBATCH --job-name="AST Training"
+#SBATCH --job-name="AST Training V1"
 #SBATCH --time=00-48:00:00
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/ast.slurm-%j.out"
 # Checkpoint and requeue this job @N seconds before hitting wall time (https://pytorch-lightning.readthedocs.io/en/stable/clouds/cluster.html#wall-time-auto-resubmit)
