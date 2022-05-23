@@ -29,7 +29,7 @@ if __name__ == "__main__":
     print(f"SLURM_PROCID: {proc}")
 
     logger_factory = LoggerFactory(logger_type=SlurmLogger)
-
+    
     tensorset, balancer = create_tensorset(
         logger_factory=logger_factory,
         nfft=args.nfft,
