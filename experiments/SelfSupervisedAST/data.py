@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+from copy import copy
 import pathlib
 import sys
-from typing import Mapping, Optional, Tuple
+from typing import Mapping, Optional, Tuple, Iterable, Any
 
 import git
 import pytorch_lightning as pl
@@ -15,6 +16,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 from experiments.SelfSupervisedAST.model import TrainingStage
 from datasets.datamodule import SubsetDataset
 from datasets.initdata import create_tensorset
+from datasets.tensordataset import TensorAudioDataset
 
 class SelfSupervisedDataModule(pl.LightningDataModule):
     def __init__(
@@ -28,16 +30,15 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         pretext_part: float = 0.8,
         stage: Optional[str] = TrainingStage.pretrain.value, 
         num_workers: Optional[int] = 0,
-        train_test_part: Tuple[float, float] = (0.8, 0.2),
-        val_part: float = 0.2,
+        train_part: Optional[float] = 0.8,
+        val_part: Optional[float] = 0.2,
         train_transforms=None, 
         val_transforms=None, 
         test_transforms=None, 
         dims=None):
 
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
-        assert len(train_test_part) == 2
-        assert np.sum(train_test_part) <= 1.0
+        assert train_part <= 1.0 and train_part > 0.0
         assert val_part <= 1.0 and val_part > 0.0
 
         self.stage = stage
@@ -49,7 +50,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         self.clip_overlap_seconds = clip_overlap_seconds
         self.num_workers = num_workers
         self.pretext_part = pretext_part
-        self.train_test_part = train_test_part
+        self.train_part = train_part
         self.val_part = val_part
 
         tensorset, balancer = create_tensorset(
@@ -66,6 +67,10 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
     @property
     def is_pretrain_stage(self) -> bool:
         return (self.stage == TrainingStage.pretrain.value)
+
+    def setstaging(self, stage: str):
+        assert stage in [TrainingStage.finetune.value, TrainingStage.pretrain.value]
+        self.stage = stage
     
     def pretrain(self) -> None:
         self.stage = TrainingStage.pretrain.value
@@ -78,8 +83,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         balanced_indeces = np.concatenate([np.random.choice(indeces, size=min_size, replace=False) for indeces in distributions.values()])
         remaining_indeces = np.concatenate([indeces[np.where(~np.isin(indeces, balanced_indeces))[0]] for indeces in distributions.values()])
         
-        train_val_percentage, test_percentage = self.train_test_part
-        n_for_training = int(len(balanced_indeces) * train_val_percentage)
+        n_for_training = int(len(balanced_indeces) * self.train_part)
 
         # Indeces used for training and validation
         train_and_val_part = np.random.choice(balanced_indeces, n_for_training, replace=False)
@@ -117,22 +121,22 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
 
         self.pretraining_subsets = {}
         self.finetuning_subsets = {}
-        import math
+
         for key, indeces in raw_distributions.items():
-            print(indeces)
-            for_pretraining = np.random.choice(indeces, size=math.floor(len(indeces) * self.pretext_part), replace=False)
-            for_finetuning = [indeces[np.where(~np.isin(indeces, for_pretraining))]]
+            size = round(len(indeces) * self.pretext_part)
+            for_pretraining = np.random.choice(indeces, size=size, replace=False)
+            for_finetuning = indeces[np.where(~np.isin(indeces, for_pretraining))]
 
             self.pretraining_subsets[key] = for_pretraining
             self.finetuning_subsets[key] = for_finetuning
 
         self.fsubsets = self.subset_distributions(self.finetuning_subsets)
         assert np.sum([len(dataset) for dataset in self.fsubsets]) == np.sum([len(indeces) for indeces in self.finetuning_subsets.values()])
-        assert np.sum([len(dataset) for dataset in self.fsubsets]) == np.floor(len(self.tensorset) * (1 - self.pretext_part))
+        assert np.sum([len(dataset) for dataset in self.fsubsets]) == round(len(self.tensorset) * (1 - self.pretext_part))
         
         self.psubsets = self.subset_distributions(self.pretraining_subsets)
         assert np.sum([len(dataset) for dataset in self.psubsets]) == np.sum([len(indeces) for indeces in self.pretraining_subsets.values()])
-        assert np.sum([len(dataset) for dataset in self.psubsets]) == np.floor(len(self.tensorset) * self.pretext_part)
+        assert np.sum([len(dataset) for dataset in self.psubsets]) == round(len(self.tensorset) * self.pretext_part)
 
         self._setup_done = True
 
@@ -155,6 +159,50 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         subset = self.get_subset("test")
         return torch.utils.data.DataLoader(dataset=subset, batch_size=self.batch_size, num_workers=self.num_workers)
 
+    def loggables(self) -> Mapping[str, Any]:
+        if not self._setup_done:
+            self.setup()
+
+        distributions = self.balancer.label_distributions()
+        n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
+
+        original_staging = copy(self.stage)
+
+        self.pretrain()
+        ptrain, pval, ptest = self.train_dataloader(), self.val_dataloader(), self.test_dataloader()
+        self.finetune()
+        ftrain, fval, ftest = self.train_dataloader(), self.val_dataloader(), self.test_dataloader()
+
+        to_log = {
+            "loader_sizes": {
+                "pretrain": {
+                    "train_loader_size": len(ptrain),
+                    "val_loader_size": len(pval),
+                    "test_loader_size": len(ptest)
+                },
+                "finetune": {
+                    "train_loader_size": len(ftrain),
+                    "val_loader_size": len(fval),
+                    "test_loader_size": len(ftest)
+                },
+            },
+            "pretrain_distributions": {key: len(indeces) for key, indeces in self.pretraining_subsets.items()},
+            "finetune_distributions": {key: len(indeces) for key, indeces in self.finetuning_subsets.items()},
+            "label_distributions": n_per_label,
+            "tensorset_size": len(self.tensorset)
+        }
+        self.setstaging(original_staging)
+        return to_log
+
+    def get_tensor_audio_dataset(self) -> TensorAudioDataset:
+        return self.tensorset
+
+    def class_names(self) -> Iterable[str]:
+        classes = self.tensorset.classes()
+        output = np.array(list(classes.keys()))
+        order = list(classes.values())
+        return output[order]
+
 if __name__ == "__main__":
     dataset = SelfSupervisedDataModule(
         batch_size=8, 
@@ -167,5 +215,11 @@ if __name__ == "__main__":
     dataset.setup()
     print(dataset)
 
-    print(dataset.stage)
-    print(dataset.train_dataloader())
+    print(len(dataset.train_dataloader()))
+
+    dataset.finetune()
+    
+    print(len(dataset.train_dataloader()))
+
+    dataset.pretrain()
+    print(len(dataset.train_dataloader()))
