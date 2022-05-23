@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-import abc
-from ast import arg
-import enum
-import os
-import hashlib
 import sys
 import pathlib
-from tabnanny import verbose
 from typing import Iterable, Mapping, Type, Tuple
-import pickle
 
 import sklearn
 import multiprocessing
-from multiprocessing import Pool
-import math
 import numpy as np
 from rich import print
 import sklearn
@@ -21,9 +12,8 @@ import sklearn.model_selection
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker, IFolder, ILoggerFactory
-from tracking.logger import Logger
+
+from interfaces import ICustomDataset, IDatasetBalancer, IFolder
 from glider.audiodata import LabeledAudioData
 from glider.clipping import CachedClippedDataset
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
@@ -31,20 +21,17 @@ from cacher import Cacher
 from datasets.binjob import progress
 
 class CachedDatasetBalancer(IDatasetBalancer):
-    def __new__(cls, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, force_recache=False, **kwargs) -> IDatasetBalancer:
-        cacher = Cacher(logger_factory=logger_factory)
-        init_args = (dataset, logger_factory, worker)
+    def __new__(cls, dataset: ICustomDataset, force_recache=False, **kwargs) -> IDatasetBalancer:
+        cacher = Cacher()
+        init_args = (dataset)
         hashable_arguments = {"dataset": dataset}
         balancer = cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
-        balancer._logger = logger_factory.create_logger()
-        balancer.worker = worker
         return balancer
 
 class DatasetBalancer(IDatasetBalancer):
-    def __init__(self, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, verbose=True) -> None:
+    def __init__(self, dataset: ICustomDataset, verbose=True) -> None:
         super().__init__()
-        self.logger = logger_factory.create_logger()
-        self.worker = worker
+        self.worker = Binworker()
 
         self._dataset = dataset
         self._label_distributions: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
@@ -102,7 +89,7 @@ class DatasetBalancer(IDatasetBalancer):
         for i in range(start, min(len(dataset), stop)):
             should_log, percentage = progress(i, start, stop)
             if should_log:
-                self.logger.log(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
+                print(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
 
             audiodata: LabeledAudioData = dataset[i]
             class_presence = audiodata.labels.source_class.unique()
