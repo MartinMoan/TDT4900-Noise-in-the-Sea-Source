@@ -2,7 +2,7 @@
 #SBATCH --account=ie-idi
 #SBATCH --partition=GPUQ
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=42000
