@@ -14,54 +14,48 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, IAsyncWorker, ILoggerFactory, IAudioFileInfoProvider
+from interfaces import ICustomDataset, IAsyncWorker, IAudioFileInfoProvider
 from cacher import Cacher
 from audiodata import LabeledAudioData
 from datasets.binjob import progress
 from datasets.glider.wavfileinspector import WaveFileHeader, WaveFileInspector
 from datasets.glider.fileinfo import AudioFileInfoProvider
 from datasets.glider.filelist import AudioFileListProvider
-from tracking.loggerfactory import LoggerFactory
-from tracking.logger import Logger, LogFormatter
 
 class CachedClippedDataset(ICustomDataset):
     def __new__(
         cls, 
         worker: IAsyncWorker, 
-        logger_factory: ILoggerFactory, 
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
         overlap_nsamples: int = None,
         force_recache=False) -> ICustomDataset:
 
-        cacher = Cacher(logger_factory=logger_factory)
+        cacher = Cacher()
         hashable_arguments = dict(
             clip_duration_seconds=clip_duration_seconds,
             clip_overlap_seconds=clip_overlap_seconds,
             clip_nsamples=clip_nsamples,
             overlap_nsamples=overlap_nsamples,
         )
-        init_kwargs = {"logger_factory": logger_factory, "worker": worker, **hashable_arguments}
+        init_kwargs = {"worker": worker, **hashable_arguments}
         return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
 
 class ClippedDataset(ICustomDataset):
-    def __init__(self, 
-        logger_factory: ILoggerFactory,
-        worker: IAsyncWorker,
+    def __init__(
+        self,
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
-        overlap_nsamples: int = None
-        ) -> None:
+        overlap_nsamples: int = None) -> None:
 
-        self.worker = worker
-        self.logger = logger_factory.create_logger()
+        self.worker = Binworker()
 
         # self.filelistprovider = AudioFileListProvider()
         # files = self.filelistprovider.list()
         
-        # fileinfoprovider = AudioFileInfoProvider(filelist=files, logger_factory=logger_factory, worker=worker)
+        # fileinfoprovider = AudioFileInfoProvider(filelist=files, worker=worker)
         # self._audiofiles = fileinfoprovider.files()
         self._audiofiles = pd.read_csv(config.AUDIO_FILE_CSV_PATH)
 
@@ -112,7 +106,7 @@ class ClippedDataset(ICustomDataset):
         for i in range(start, min(len(virtual_indeces), stop)):
             should_log, percentage = progress(i, start, stop)
             if should_log:
-                self.logger.log(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
+                print(f"ClippingWorker PID {proc.pid} - {percentage:.2f}%")
             try:
                 # file_index = math.floor(i / self._num_clips_per_file)
                 audiodata = self._load(i)
@@ -121,7 +115,7 @@ class ClippedDataset(ICustomDataset):
                 else:
                     valid_indeces.append(i)
             except Exception as ex:
-                self.logger.log(i, ex)
+                print(i, ex)
                 invalid_indeces.append(i)
         return valid_indeces, invalid_indeces
 
@@ -151,7 +145,9 @@ class ClippedDataset(ICustomDataset):
         # Remove any files from self._audilfiles that cannot be found in local dataset directory
         # and ensure that all filename values in the self._audiofiles dataframe are PosixPath objects. 
         # local_audiofiles = self.filelistprovider.list()
-        local_audiofiles = config.list_local_audiofiles()
+        local_audiofiles = list(config.DATASET_DIRECTORY.glob("**/*.wav"))
+        if len(local_audiofiles) == 0:
+            raise Exception(f"No audiofiles could be found in dataset directory: {config.DATASET_DIRECTORY}")
         if len(local_audiofiles) != len(self._audiofiles):
             if len(local_audiofiles) > len(self._audiofiles):
                 warnings.warn(f"There are local files that do not exist among the described in the csv at {config.PARSED_LABELS_PATH}")
@@ -225,16 +221,7 @@ class ClippedDataset(ICustomDataset):
 if __name__ == "__main__":
     from datasets.binjob import Binworker
 
-    logger_factory = LoggerFactory(
-        logger_type=Logger,
-        logger_args=(LogFormatter(),)
-    )
-
-    worker = Binworker()
-
     dataset = CachedClippedDataset(
-        logger_factory=logger_factory,
-        worker=worker,
         clip_duration_seconds=10.0, 
         clip_overlap_seconds=4.0
     )

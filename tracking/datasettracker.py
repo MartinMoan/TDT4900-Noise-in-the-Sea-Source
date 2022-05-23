@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import os
 
 import numpy as np
 from rich import print
 import git
 import wandb
+from pytorch_lightning.loggers import WandbLogger
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from datasets.tensordataset import TensorAudioDataset
+from datasets.datamodule import ClippedGliderDataModule
 
-def track_dataset(dataset: TensorAudioDataset, n_examples: int = 50):
+def track_dataset(logger: WandbLogger, datamodule: ClippedGliderDataModule, n_examples: int = 50):
+    dataset = datamodule.get_tensor_audio_dataset()
+
+    slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
+    if slurm_procid != 0 and slurm_procid != -1:
+        return
+
     if n_examples <= 0 or len(dataset) < n_examples:
         return
     
@@ -64,9 +71,11 @@ def track_dataset(dataset: TensorAudioDataset, n_examples: int = 50):
             i
         )
         print(f"Logging dataset example {index} / {len(indeces)}")
-
-    wandb.log({"examples": table})
-    wandb.config.update(dict(
+    
+    logger.experiment.log({"examples": table})
+    logger.experiment.config.update(dict(
         example_shape=dataset.example_shape(),
-        label_shape=dataset.label_shape()
+        label_shape=dataset.label_shape(),
+        **datamodule.loggables(),
+        slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}
     ))

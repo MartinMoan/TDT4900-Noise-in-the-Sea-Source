@@ -143,6 +143,10 @@ def init():
     return parser.parse_args()
 
 if __name__ == "__main__":
+    from pprint import pprint
+    for key, value in os.environ.items():
+        if "SLURM" in key:
+            print(key, value)
     hyperparams = init()
     main(hyperparams)
 '''

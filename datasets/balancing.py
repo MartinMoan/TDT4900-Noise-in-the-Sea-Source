@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-import abc
-from ast import arg
-import enum
-import os
-import hashlib
 import sys
 import pathlib
-from tabnanny import verbose
 from typing import Iterable, Mapping, Type, Tuple
-import pickle
 
 import sklearn
 import multiprocessing
-from multiprocessing import Pool
-import math
 import numpy as np
 from rich import print
 import sklearn
@@ -21,9 +12,8 @@ import sklearn.model_selection
 import git
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from interfaces import ICustomDataset, IDatasetBalancer, ILogger, IAsyncWorker, IFolder, ILoggerFactory
-from tracking.logger import Logger
+
+from interfaces import ICustomDataset, IDatasetBalancer, IFolder
 from glider.audiodata import LabeledAudioData
 from glider.clipping import CachedClippedDataset
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
@@ -31,29 +21,23 @@ from cacher import Cacher
 from datasets.binjob import progress
 
 class CachedDatasetBalancer(IDatasetBalancer):
-    def __new__(cls, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, force_recache=False, **kwargs) -> IDatasetBalancer:
-        cacher = Cacher(logger_factory=logger_factory)
-        init_args = (dataset, logger_factory, worker)
+    def __new__(cls, dataset: ICustomDataset, force_recache=False, **kwargs) -> IDatasetBalancer:
+        cacher = Cacher()
+        init_args = (dataset)
         hashable_arguments = {"dataset": dataset}
         balancer = cacher.cache(DatasetBalancer, init_args=init_args, init_kwargs=kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
-        balancer._logger = logger_factory.create_logger()
-        balancer.worker = worker
         return balancer
 
 class DatasetBalancer(IDatasetBalancer):
-    def __init__(self, dataset: ICustomDataset, logger_factory: ILoggerFactory, worker: IAsyncWorker, verbose=True) -> None:
+    def __init__(self, dataset: ICustomDataset, verbose=True) -> None:
         super().__init__()
-        self.logger = logger_factory.create_logger()
-        self.worker = worker
+        self.worker = Binworker()
 
         self._dataset = dataset
         self._label_distributions: Mapping[str, Iterable[int]] = self._split_by_labels(dataset)
     
         if self._min_size == 0:
             raise Exception(f"Unable to balance dataset, because there is a label presence pair that has no values: {str({key: len(self._label_distributions[key]) for key in self._label_distributions.keys()})}")
-
-        if verbose:
-            self.log_balanced_stats()
 
     @property
     def _min_size(self):
@@ -95,29 +79,6 @@ class DatasetBalancer(IDatasetBalancer):
             eval_part = indeces[self._min_size:]
             out[key] = eval_part
         return out
-    
-    def log_balanced_stats(self):
-        self.logger.log(f"{self.__class__.__name__} class/label-presence distribution:")
-        self.logger.log(f"Size of dataset: {len(self._dataset)}")
-        self.logger.log("The instances under for training and eval will be split according to the current fold train/test split. And the eval only instances will be added to the test part of the split for every fold.")
-        self.logger.log("---- FOR TRAINING AND EVAL ---- ")
-        for key in self._indeces_for_training.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_training[key])}")
-        
-        self.logger.log("---- FOR EVAL ONLY ---- ")
-        for key in self._indeces_for_eval.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._indeces_for_eval[key])}")
-        self.logger.log("---- ORIGINAL DISTRIBUTION BEFORE BALANCING ----")
-        for key in self._label_distributions.keys():
-            self.logger.log(f"Number of instances with label '{key}': {len(self._label_distributions[key])}")
-
-        num_for_training = np.sum([len(self._indeces_for_training[key]) for key in self._indeces_for_training.keys()])
-        num_for_eval = np.sum([len(self._indeces_for_eval[key]) for key in self._indeces_for_eval.keys()])
-        self.logger.log(f"Total number of instances for training: {num_for_training}")
-        self.logger.log(f"Total number of instances for eval: {num_for_eval}")
-        self.logger.log(f"Total number of instances for both training and eval: {(num_for_training + num_for_eval)}")
-        self.logger.log(f"Input dataset length: {len(self._dataset)}")
-        self.logger.log(f"The number of instances is as expected?: {(num_for_training + num_for_eval) == len(self._dataset)}")
 
     def _func(self, dataset: ICustomDataset, start: int, stop: int):
         proc = multiprocessing.current_process()
@@ -128,7 +89,7 @@ class DatasetBalancer(IDatasetBalancer):
         for i in range(start, min(len(dataset), stop)):
             should_log, percentage = progress(i, start, stop)
             if should_log:
-                self.logger.log(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
+                print(f"BalancingWorker PID {proc.pid} - {percentage:.2f}%")
 
             audiodata: LabeledAudioData = dataset[i]
             class_presence = audiodata.labels.source_class.unique()

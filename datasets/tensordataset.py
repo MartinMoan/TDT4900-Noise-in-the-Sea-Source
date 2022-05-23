@@ -2,7 +2,7 @@
 import sys
 import pathlib
 import warnings
-from typing import Mapping, Iterable, Union
+from typing import Mapping, Union
 import git
 import torch
 import numpy as np
@@ -10,9 +10,8 @@ import librosa
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from interfaces import ICustomDataset, ITensorAudioDataset, IFeatureAccessor, ILabelAccessor, ILoggerFactory
+from interfaces import ICustomDataset, ITensorAudioDataset, IFeatureAccessor, ILabelAccessor
 from glider.audiodata import LabeledAudioData 
-from datasets.glider.audiodata import AudioData
 
 def _to_tensor(nparray: np.ndarray) -> torch.Tensor:
     return torch.tensor(np.array(nparray), dtype=torch.float32, requires_grad=False)
@@ -29,7 +28,6 @@ class BinaryLabelAccessor(ILabelAccessor):
 class MelSpectrogramFeatureAccessor(IFeatureAccessor):
     def __init__(
         self, 
-        logger_factory: ILoggerFactory,
         n_mels: int = 128, 
         n_fft: int = 2048, 
         hop_length: int = 512, 
@@ -39,7 +37,6 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         self._n_fft = n_fft
         self._hop_length = hop_length
         self._scale_melbands = scale_melbands
-        self.logger = logger_factory.create_logger()
         self.verbose = verbose
 
     def __call__(self, audio_data: LabeledAudioData) -> torch.Tensor:    
@@ -59,7 +56,7 @@ class MelSpectrogramFeatureAccessor(IFeatureAccessor):
         # Normalize across frequency bands (give every frequency band/bin 0 mean and unit variance)
         if self._scale_melbands:
             if self.verbose:
-                self.logger.log(f"Scaling Mel-spectrogram across frequency bands to zero mean and unit variance")
+                print(f"Scaling Mel-spectrogram across frequency bands to zero mean and unit variance")
             mean = np.mean(S_db, axis=1).reshape((-1, 1))
             numerator = (S_db - mean)
             denominator = np.std(S_db, axis=1).reshape((-1, 1))
@@ -73,8 +70,7 @@ class TensorAudioDataset(ITensorAudioDataset):
         self, 
         dataset: ICustomDataset, 
         label_accessor: ILabelAccessor, 
-        feature_accessor: IFeatureAccessor,
-        logger_factory: ILoggerFactory) -> None:
+        feature_accessor: IFeatureAccessor) -> None:
 
         if not isinstance(dataset, ICustomDataset):
             raise TypeError(f"Argument dataset has invalid type. Expected {ICustomDataset} but received {type(dataset)}")
@@ -86,7 +82,6 @@ class TensorAudioDataset(ITensorAudioDataset):
         self._dataset = dataset
         self._label_accessor = label_accessor
         self._feature_accessor = feature_accessor
-        self.logger = logger_factory.create_logger()
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         audio_data = self._dataset[index]
@@ -98,7 +93,7 @@ class TensorAudioDataset(ITensorAudioDataset):
                 nextclip = index + 1
             else:
                 nextclip = index - 1
-            self.logger.log(f"An exception occurred when computing the features for clip {index}:", audio_data, ex, f"Returning clip {nextclip} instead")
+            print(f"An exception occurred when computing the features for clip {index}:", audio_data, ex, f"Returning clip {nextclip} instead")
             return self.__getitem__(nextclip)
         labels = self._label_accessor(audio_data, features)
         return features, labels
