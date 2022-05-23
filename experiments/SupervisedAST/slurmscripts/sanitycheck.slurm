@@ -40,7 +40,7 @@ WEIGHT_DECAY=5e-7
 BETAS="0.95 0.999"
 
 BATCH_SIZE=8
-MAX_EPOCHS=50
+MAX_EPOCHS=3
 
 # initialize the dataset (on a single compute node), and cache it such that is is available for all compute nodes during training
 python ../initdata.py -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP
