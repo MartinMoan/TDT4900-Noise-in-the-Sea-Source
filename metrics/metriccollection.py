@@ -1,28 +1,17 @@
 #!/usr/bin/env python3
 import ast
 from copy import copy
-from pydoc import classname
 import sys
 import pathlib
-from turtle import forward
-from typing import Iterable, NewType, Optional, Dict, Any, List, Union, Mapping
-from enum import Enum
+from typing import Iterable, Optional, Dict, Any, List, Union, Mapping
 
 import git
 import torch
 import torch.utils.data
 import torchmetrics
 import numpy as np
-import pytorch_lightning as pl
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-
-from interfaces import ILoggerFactory
-from models.AST.ASTWrapper import ASTWrapper
-from metrics import customwandbplots, multilabelmap
-from experiments.DistributedTrainingTest.metricstest import RandomDummyModel
-
-import hashlib
 
 class Support(torchmetrics.Metric):
     def __init__(self, num_classes: int, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
@@ -63,9 +52,8 @@ class GliderMetrics(torchmetrics.MetricCollection):
         if len(class_names) != num_classes:
             raise ValueError(f"Argument 'class_names' has incorrect number of elements, must have lenght equal to 'num_classes' argument")
             
-        # averaging_techniques = ["micro", "macro", "weighted", None]
-
-        averaging_techniques = ["weighted"]
+        averaging_techniques = ["micro", "macro", "weighted", None]
+        # averaging_techniques = ["weighted"]
         classes = [torchmetrics.Accuracy, torchmetrics.AUROC, torchmetrics.Precision, torchmetrics.Recall, torchmetrics.AveragePrecision, torchmetrics.F1Score]
         metrics = {}
         for average in averaging_techniques:
@@ -165,7 +153,7 @@ if __name__ == "__main__":
     
     target = torch.randint(0, 2, (size, num_classes)).int()
     preds = torch.rand((size, num_classes)).float()
-    
+
     print(g)
     g.update(preds, target)
     print(g.compute(step="val"))
