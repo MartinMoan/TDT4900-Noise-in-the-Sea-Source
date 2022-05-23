@@ -113,7 +113,7 @@ class GliderMetrics(torchmetrics.MetricCollection):
                     metric_value = value[cls]
                     attrs = copy(attributes)
                     attrs["classname"] = self.class_names[cls]
-                    output.append(dict(value=torch.Tensor(metric_value), attributes=attrs))
+                    output.append(dict(value=metric_value, attributes=attrs))
         return output
 
     def _rename(self, step: Optional[str] = None, name: str = "NamelessMetric", average: Optional[str] = None, classname: Optional[str] = None) -> str:
