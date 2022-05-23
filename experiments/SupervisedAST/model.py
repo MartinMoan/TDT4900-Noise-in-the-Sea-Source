@@ -50,7 +50,7 @@ class AstLightningWrapper(pl.LightningModule):
         super().__init__()
         self._ast = ASTWrapper(
             logger_factory=logger_factory,
-            activation_func=torch.nn.Sigmoid(),
+            activation_func=None, # Because we use BCEWithLogitsLoss
             label_dim=n_model_outputs, 
             fstride=fstride, 
             tstride=tstride, 
