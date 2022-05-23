@@ -3,8 +3,7 @@
 #SBATCH --partition=GPUQ
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
-#SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=24
+#SBATCH --ntasks=24
 #SBATCH --mem=42000
 #SBATCH --job-name="AST Pre-Training Sanity Check"
 #SBATCH --time=00-00:10:00
