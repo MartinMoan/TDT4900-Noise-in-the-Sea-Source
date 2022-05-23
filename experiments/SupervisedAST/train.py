@@ -130,10 +130,11 @@ def init():
     default_strategy = "ddp" if os.environ.get("SLURM_JOBID", default=None) is not None else None
     parser.add_argument("--strategy", type=str, default=default_strategy, help="The strategy name passed to the PytorchLightning.Trainer instantiation")
     parser.add_argument("--accelerator", type=str, default="gpu", help="The accelerator name passed to the PytorchLightning.Trainer instantiation")
-    
+
     # Tracking params
     parser.add_argument("--tracking_name", type=str, required=False, help="The WandB run name to use during the run. If not provided a WandB will generate a name automatically.")
-    parser.add_argument("--tracking_notes", type=str, required=False, help="Any notes to use for the WandB run.")
+    tracking_notes = os.environ.get("SLURM_JOB_NAME", default=None)
+    parser.add_argument("--tracking_notes", type=str, default=tracking_notes, help="Any notes to use for the WandB run. Will by default use the 'SLURM_JOB_NAME' environment variable if available")
     parser.add_argument("--tracking_tags", type=str, nargs="+", required=False, help="Any WandB tags to use during the run in addition to the default tags ['AST', 'Prod' (if script is run in SLURM managed environment), model size value, 'AudioSet'/'No-AudioSet', 'ImageNet'/'No-ImageNet']")
     parser.add_argument("--track_n_examples", type=int, default=50)
     # Other params
