@@ -13,6 +13,18 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
+class Average(torchmetrics.Metric):
+    def __init__(self, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
+        super().__init__(compute_on_step, **kwargs)
+        self.add_state("sum", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("num_examples", default=torch.tensor(1), dist_reduce_fx="sum") # default 1 to avoid divide by 0 exception
+
+    def update(self, batch_accuracy: torch.Tensor) -> None:
+        self.sum += batch_accuracy
+
+    def compute(self) -> torch.Tensor:
+        return torch.div(self.sum, self.num_examples)
+
 class Support(torchmetrics.Metric):
     def __init__(self, num_classes: int, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
         super().__init__(compute_on_step, **kwargs)
