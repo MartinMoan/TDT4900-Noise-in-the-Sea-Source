@@ -64,6 +64,10 @@ def main(hparams: argparse.Namespace) -> None:
         class_names=dataset.class_names()
     )
 
+    checkpoints_dir = config.LIGHTNING_CHECKPOINT_PATH.joinpath("ssast").absolute() # Must separate ast and ssast checkpoints, because they are stored with the same filenames by pytorch_lightning...
+    if not checkpoints_dir.exists():
+        checkpoints_dir.mkdir(parents=False, exist_ok=False)
+
     trainer = pl.Trainer(
         accelerator=hparams.accelerator, 
         devices=hparams.num_gpus,
@@ -71,13 +75,14 @@ def main(hparams: argparse.Namespace) -> None:
         strategy=hparams.strategy,
         max_epochs=hparams.epochs,
         logger=logger,
+        weights_save_path=str(checkpoints_dir),
         fast_dev_run=hparams.dev_run,
         overfit_batches=hparams.overfit_batches,
         limit_train_batches=hparams.limit_train_batches,
         limit_test_batches=hparams.limit_test_batches,
         limit_val_batches=hparams.limit_val_batches,
         default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
-        log_every_n_steps=hparams.log_every_n_steps
+        log_every_n_steps=hparams.log_every_n_steps,
     )
     
     logger.watch(model)
@@ -143,7 +148,7 @@ def init() -> argparse.Namespace:
 
     num_gpus_default = int(os.environ.get("SLURM_GPUS_ON_NODE", default=-1))
     if num_gpus_default == -1:
-        num_gpus_default = torch.cuda.device_count()
+        num_gpus_default = torch.cuda.device_count() # TODO: Maybe an error?
         
     parser.add_argument("--num_gpus", type=int, default=num_gpus_default, help="The number of GPUs to use during training. Defaults to the environment variable 'SLURM_GPUS_ON_NODE' if present, if not set and the environment variable is not found defaults to 'torch.cuda.device_count()'.")
 

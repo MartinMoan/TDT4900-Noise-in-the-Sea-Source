@@ -64,6 +64,10 @@ def main(hyperparams):
         verbose=hyperparams.verbose
     )
 
+    checkpoints_dir = config.LIGHTNING_CHECKPOINT_PATH.joinpath("ast").absolute() # Must separate ast and ssast checkpoints, because they are stored with the same filenames by pytorch_lightning...
+    if not checkpoints_dir.exists():
+        checkpoints_dir.mkdir(parents=False, exist_ok=False)
+
     trainer = pl.Trainer(
         accelerator=hyperparams.accelerator, 
         devices=hyperparams.num_gpus,
@@ -71,6 +75,7 @@ def main(hyperparams):
         strategy=hyperparams.strategy,
         max_epochs=hyperparams.epochs,
         logger=logger,
+        weights_save_path=str(checkpoints_dir),
         fast_dev_run=hyperparams.dev_run,
         overfit_batches=hyperparams.overfit_batches,
         limit_train_batches=hyperparams.limit_train_batches,

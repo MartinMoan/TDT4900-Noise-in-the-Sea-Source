@@ -96,7 +96,7 @@ class SSASTLightningWrapper(pl.LightningModule):
                 raise TypeError(f"argument model_path has incorrect type, expected str or pathlib.Path but received object with type {type(model_path)}") 
             path = model_path.absolute() if isinstance(model_path, pathlib.Path) else model_path
            
-        return ASTModel(
+        ast = ASTModel(
             label_dim=self.n_model_outputs,
             fshape=self.fshape,
             tshape=self.tshape,
@@ -108,6 +108,7 @@ class SSASTLightningWrapper(pl.LightningModule):
             pretrain_stage=self.is_pretrain_stage,
             load_pretrained_mdl_path=path
         )
+        return torch.nn.DataParallel(ast)
 
     def pretrain(self) -> None:
         """Sets model internal state to train for pretext tasks"""
