@@ -60,7 +60,7 @@ def main(hparams: argparse.Namespace) -> None:
         n_model_outputs=2,
         model_size=hparams.model_size,
         pretext_masked_patches=hparams.num_masked_patches,
-        generative_loss_weight=10.0,
+        generative_loss_weight=10.0, # Same as for original SSAST implementation/paper: https://github.com/YuanGongND/ssast
         class_names=dataset.class_names()
     )
 
@@ -114,10 +114,6 @@ def init() -> argparse.Namespace:
     parser.add_argument("-weight_decay", type=float, required=True, help="The weight decay to pass to the PyTorch optimizer")
     parser.add_argument("-learning_rate", type=float, required=True, help="The learning rate to pass to the PyTorch optimizer")
     parser.add_argument("-betas", type=float, nargs="+", required=True, help="The betas to pass to the PyTorch optimizer")
-    parser.add_argument("-fstride", type=int, default=10, help="The frequency-dimension stride of the AST patches in 'mel-bands'. Patches have size (16x16), so an fstride of 10 results in patch overlap of 6 frames along the frequency dimension of the input spectrograms. Conversly an fstride of 16 results in no overlap between mel-bands.")
-    parser.add_argument("-tstride", type=int, default=10, help="The time-dimension stride of the AST patches in 'time-frames'. Patches have size (16x16), so a tstride of 10 results in patch overlap of 6 frames along the time dimension of the input spectrograms. Conversly a tstride of 16 results in no overlap between time-frames.")
-    parser.add_argument("--audioset_pretrain", action=argparse.BooleanOptionalAction, help=f"Wheter to instantiate the AST using weights pretrained on AudioSet (which themselves are pretrained on ImageNet). Will cause an exception if '--no-imagenet_pretrain' argument is also provided, as no model pretrained solely on audioset is currently supported. If set, the '--model_size' must be '{SSASTModelSize.base.value}'")
-    parser.add_argument("--imagenet_pretrain", action=argparse.BooleanOptionalAction, help="Wheter to instantiate the AST using weights pretrained on ImageNet")
     parser.add_argument("--num_masked_patches", type=int, default=400, help="The number of spectrogram pathes to mask in a single batch during pretraining")
     parser.add_argument("-model_size", type=str, default=SSASTModelSize.base.value, choices=[SSASTModelSize.tiny.value, SSASTModelSize.small.value, SSASTModelSize.base.value, SSASTModelSize.base_nokd.value], help=f"Which pre-trained parameters/model size to instantiate the AST from. If '--no-audioset_pretrain' is also provided the only valid option is '{SSASTModelSize.base.value}'")
 
@@ -168,10 +164,8 @@ def init() -> argparse.Namespace:
     args = parser.parse_args()
     args.betas = tuple(args.betas)
     default_tags = [
-        'AST',
+        'SSAST',
         'Prod' if len([key for key, value in os.environ.items() if "SLURM" in key]) > 0 and "idun" in os.uname().nodename else 'Dev', # if running on cluster, and in SLURM managed environment, the environment tag should be Prod
-        'ImageNet' if args.imagenet_pretrain else 'No-ImageNet',
-        'Audioset' if args.audioset_pretrain else 'No-Audioset',
         args.model_size
     ]
     if args.tracking_tags is None:
