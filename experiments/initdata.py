@@ -10,8 +10,6 @@ from rich import print
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
-from tracking.logger import SlurmLogger
-from tracking.loggerfactory import LoggerFactory
 from datasets.initdata import create_tensorset
 
 def getargs():
@@ -27,11 +25,8 @@ if __name__ == "__main__":
     args = getargs()
     proc = os.environ.get("SLURM_PROCID")
     print(f"SLURM_PROCID: {proc}")
-
-    logger_factory = LoggerFactory(logger_type=SlurmLogger)
     
     tensorset, balancer = create_tensorset(
-        logger_factory=logger_factory,
         nfft=args.nfft,
         nmels=args.nmels,
         hop_length=args.hop_length,
