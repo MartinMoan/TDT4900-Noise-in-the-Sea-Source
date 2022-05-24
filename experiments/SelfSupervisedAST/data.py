@@ -134,28 +134,38 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
             self.pretraining_subsets[key] = for_pretraining
             self.finetuning_subsets[key] = for_finetuning
 
-        self.psubsets = self.subset_distributions(self.pretraining_subsets)
-        self.fsubsets = self.subset_distributions(self.finetuning_subsets)
-        n_in_ft_ttv = [len(subset) for subset in self.fsubsets]
-        n_in_pt_ttf = [len(subset) for subset in self.psubsets]
+        self.pretraining_dataloaders = self.subset_distributions(self.pretraining_subsets)
+        self.finetuning_dataloaders = self.subset_distributions(self.finetuning_subsets)
+
+        n_in_ft_ttv = [len(subset) for subset in self.finetuning_dataloaders]
+        n_in_pt_ttf = [len(subset) for subset in self.pretraining_dataloaders]
+
         total_for_ft = [len(indeces) for indeces in self.finetuning_subsets.values()]
         total_for_pt = [len(indeces) for indeces in self.pretraining_subsets.values()]
         exp_ft_part_of_tensorset = round(len(self.tensorset) * (1 - self.pretext_part))
         exp_pt_part_of_tensorset = round(len(self.tensorset) * self.pretext_part)
         
-        assert np.sum(n_in_ft_ttv) == np.sum(total_for_ft)
-        assert np.sum(n_in_pt_ttf) == np.sum(total_for_pt)
-        assert np.sum(total_for_ft) == exp_ft_part_of_tensorset
-        assert np.sum(total_for_pt) == exp_pt_part_of_tensorset
+        # pytorch lightning will suplicate some samples to ensure dataloader have a whole number of batches to provide. 
+        # The loader will duplicate R number of samples equal to: len(loader) % batch_size
+        # With P=3 loaders for pretraining, and F=3 loaders for fine-tuning, the maximum number of duplicated samples are:
+        # (self.batch_size - 1) * (F + P) = T
+        # So we should not require that the total number of samples in all the dataloaders equal the length of the original dataset.
+        # But that the total number of samples in all dataloaders be within a tolerance of T samples from the number of samples in the original dataset
+        TOLERANCE = (self.batch_size - 1) * (len(self.pretraining_dataloaders) + len(self.finetuning_dataloaders))
+
+        assert np.abs(np.sum(n_in_ft_ttv) - np.sum(total_for_ft)) <= TOLERANCE
+        assert np.abs(np.sum(n_in_pt_ttf) - np.sum(total_for_pt)) <= TOLERANCE
+        assert np.abs(np.sum(total_for_ft) - exp_ft_part_of_tensorset) <= TOLERANCE
+        assert np.abs(np.sum(total_for_pt) == exp_pt_part_of_tensorset) <= TOLERANCE
 
         self._setup_done = True
 
     def get_subset(self, stage: str) -> None:
         keys = {"train": 0, "val": 1, "test": 2}
         if self.is_pretrain_stage:
-            return self.psubsets[keys[stage]]
+            return self.pretraining_dataloaders[keys[stage]]
         else:
-            return self.fsubsets[keys[stage]]
+            return self.finetuning_dataloaders[keys[stage]]
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         subset = self.get_subset("train")
