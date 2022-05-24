@@ -21,6 +21,7 @@ from datasets.binjob import progress
 from datasets.glider.wavfileinspector import WaveFileHeader, WaveFileInspector
 from datasets.glider.fileinfo import AudioFileInfoProvider
 from datasets.glider.filelist import AudioFileListProvider
+from datasets.binjob import Binworker
 
 class CachedClippedDataset(ICustomDataset):
     def __new__(

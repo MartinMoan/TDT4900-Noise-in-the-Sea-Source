@@ -118,6 +118,10 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         raw_distributions = self.balancer.label_distributions()
         for key in raw_distributions.keys():
             raw_distributions[key] = np.array(raw_distributions[key])
+        
+        expected_total_samples = np.sum([len(indeces) for indeces in raw_distributions.values()])
+        dists = {key: len(indeces) for key, indeces in raw_distributions.items()}
+        assert expected_total_samples == len(self.tensorset), f"The total number of samples after balancing does not equal the number of classes in tensorset, expected total {expected_total_samples} balanced samples (raw class distributions: {dists}) but tensorset has length {len(self.tensorset)}"
 
         self.pretraining_subsets = {}
         self.finetuning_subsets = {}
@@ -130,13 +134,19 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
             self.pretraining_subsets[key] = for_pretraining
             self.finetuning_subsets[key] = for_finetuning
 
-        self.fsubsets = self.subset_distributions(self.finetuning_subsets)
-        assert np.sum([len(dataset) for dataset in self.fsubsets]) == np.sum([len(indeces) for indeces in self.finetuning_subsets.values()])
-        assert np.sum([len(dataset) for dataset in self.fsubsets]) == round(len(self.tensorset) * (1 - self.pretext_part))
-        
         self.psubsets = self.subset_distributions(self.pretraining_subsets)
-        assert np.sum([len(dataset) for dataset in self.psubsets]) == np.sum([len(indeces) for indeces in self.pretraining_subsets.values()])
-        assert np.sum([len(dataset) for dataset in self.psubsets]) == round(len(self.tensorset) * self.pretext_part)
+        self.fsubsets = self.subset_distributions(self.finetuning_subsets)
+        n_in_ft_ttv = [len(subset) for subset in self.fsubsets]
+        n_in_pt_ttf = [len(subset) for subset in self.psubsets]
+        total_for_ft = [len(indeces) for indeces in self.finetuning_subsets.values()]
+        total_for_pt = [len(indeces) for indeces in self.pretraining_subsets.values()]
+        exp_ft_part_of_tensorset = round(len(self.tensorset) * (1 - self.pretext_part))
+        exp_pt_part_of_tensorset = round(len(self.tensorset) * self.pretext_part)
+        
+        assert np.sum(n_in_ft_ttv) == np.sum(total_for_ft)
+        assert np.sum(n_in_pt_ttf) == np.sum(total_for_pt)
+        assert np.sum(total_for_ft) == exp_ft_part_of_tensorset
+        assert np.sum(total_for_pt) == exp_pt_part_of_tensorset
 
         self._setup_done = True
 

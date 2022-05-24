@@ -17,6 +17,7 @@ from interfaces import ICustomDataset, IDatasetBalancer, IFolder
 from glider.audiodata import LabeledAudioData
 from glider.clipping import CachedClippedDataset
 from datasets.tensordataset import TensorAudioDataset, BinaryLabelAccessor, MelSpectrogramFeatureAccessor
+from datasets.binjob import Binworker
 from cacher import Cacher
 from datasets.binjob import progress
 
