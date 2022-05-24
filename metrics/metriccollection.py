@@ -16,10 +16,10 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 class Average(torchmetrics.Metric):
     def __init__(self, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
         super().__init__(compute_on_step, **kwargs)
-        self.add_state("sum", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("num_examples", default=torch.tensor(1), dist_reduce_fx="sum") # default 1 to avoid divide by 0 exception
+        self.add_state("sum", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("num_examples", default=torch.tensor(1.0), dist_reduce_fx="sum") # default 1 to avoid divide by 0 exception
 
-    def update(self, batch_accuracy: torch.Tensor) -> None:
+    def update(self, batch_accuracy: torch.Tensor, *args, **kwargs) -> None:
         self.sum += batch_accuracy
 
     def compute(self) -> torch.Tensor:
@@ -29,9 +29,9 @@ class Support(torchmetrics.Metric):
     def __init__(self, num_classes: int, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
         super().__init__(compute_on_step, **kwargs)
         self.num_classes = num_classes
-        self.add_state("num_examples", default=torch.tensor(1), dist_reduce_fx="sum") # default 1 to avoid divide by 0 error
+        self.add_state("num_examples", default=torch.tensor(1.0), dist_reduce_fx="sum") # default 1 to avoid divide by 0 error
         for c in range(self.num_classes):
-            self.add_state(f"num_target_class{c}", default=torch.tensor(0), dist_reduce_fx="sum")
+            self.add_state(f"num_target_class{c}", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
         assert preds.shape == target.shape, f"preds and target have different shapes preds: {preds.shape} target: {target.shape}"
