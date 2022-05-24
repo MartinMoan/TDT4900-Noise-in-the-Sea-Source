@@ -183,5 +183,5 @@ if __name__ == "__main__":
     main(hparams)
 
     """
-    python train.py -batch_size 2 -epochs 2 -learning_rate 0.0001 -weight_decay 0.0005 -betas 0.98 0.99 -nmels 128 -hop_length 512 -nfft 2048 -fstride 16 -tstride 16 -model_size base -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0 --imagenet_pretrain --no-audioset_pretrain --accelerator cpu --track_n_examples 2 --limit_train_batches 2 --limit_val_batches 2 --limit_test_batches 2 --num_workers 8
+    python train.py -batch_size 2 -epochs 2 -learning_rate 0.0001 -weight_decay 0.0005 -betas 0.98 0.99 -nmels 128 -hop_length 512 -nfft 2048 -model_size base -clip_duration_seconds 10.0 -clip_overlap_seconds 4.0 --accelerator cpu --track_n_examples 2 --limit_train_batches 2 --limit_val_batches 2 --limit_test_batches 2 --num_workers 8
     """
