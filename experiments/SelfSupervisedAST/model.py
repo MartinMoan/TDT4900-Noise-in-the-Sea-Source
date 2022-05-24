@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import warnings
+from datetime import datetime
 import pathlib
 import sys
 from enum import Enum
@@ -12,10 +12,15 @@ import torch.utils.data
 import torchmetrics
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
+import config
 
 from experiments.SelfSupervisedAST.ssast.src.models import ASTModel
 from metrics import customwandbplots
 from metrics.metriccollection import Average, GliderMetrics
+
+MODEL_SAVE_PATH = config.DEFAULT_PARAMETERS_PATH.joinpath("SSAST")
+if not MODEL_SAVE_PATH.exists():
+    MODEL_SAVE_PATH.mkdir(parents=False, exist_ok=False)
 
 class SSASTModelSize(Enum):
     tiny = "tiny"
@@ -50,6 +55,7 @@ class SSASTLightningWrapper(pl.LightningModule):
         generative_loss_weight: Optional[Union[float, int]] = 10.0,
         clip_representation: Optional[str] = ClipRepresentationMethod.average_tokens.value,
         class_names: Optional[Iterable[str]] = None, 
+        pretrained_model_path: Optional[Union[pathlib.Path, str]] = None,
         *args: Any, **kwargs: Any) -> None:
 
         super().__init__(*args, **kwargs)
@@ -71,7 +77,26 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.clip_representation = clip_representation
         self.class_names = class_names
 
-        self.model = ASTModel(
+        self.model = self._instantiate_model(model_path=pretrained_model_path)
+        # During fine-tuning stage, we are preforming multi-label classification
+        # Therefore we need each output of the MPL head to yield values in the range [0,1], that do not (necessarily) sum to 1. 
+        self.pretext_batch_accuracy = Average() # will use this to compute arithmetic mean of ASTModel (SSAST version) output batch accuracy during pretraining
+        self.finetune_loss = torch.nn.BCEWithLogitsLoss()
+        self.finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
+        self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_model_outputs, multilabel=True, threshold=0.5)
+        self.save_hyperparameters()
+        now = datetime.now().strftime(config.DATETIME_FORMAT)
+        self.pretrained_model_filename = f"ssast-pretrained-{now}.pth"
+        self.pretrain_complete = False
+
+    def _instantiate_model(self, model_path: Optional[Union[pathlib.Path, str]] = None) -> None:
+        path = None
+        if model_path is not None:
+            if not isinstance(model_path, (str, pathlib.Path)):
+                raise TypeError(f"argument model_path has incorrect type, expected str or pathlib.Path but received object with type {type(model_path)}") 
+            path = model_path.absolute() if isinstance(model_path, pathlib.Path) else model_path
+           
+        return ASTModel(
             label_dim=self.n_model_outputs,
             fshape=self.fshape,
             tshape=self.tshape,
@@ -81,31 +106,32 @@ class SSASTLightningWrapper(pl.LightningModule):
             input_tdim=self.input_tdim,
             model_size=self.ast_size,
             pretrain_stage=self.is_pretrain_stage,
-            load_pretrained_mdl_path=None
+            load_pretrained_mdl_path=path
         )
-
-        # During fine-tuning stage, we are preforming multi-label classification
-        # Therefore we need each output of the MPL head to yield values in the range [0,1], that do not (necessarily) sum to 1. 
-        self.pretex_metrics = Average() # will use this to compute arithmetic mean of ASTModel (SSAST version) output batch accuracy during pretraining
-        self.finetune_loss = torch.nn.BCEWithLogitsLoss()
-        self.finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
-        self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_model_outputs, multilabel=True, threshold=0.5)
-        self.save_hyperparameters()
 
     def pretrain(self) -> None:
         """Sets model internal state to train for pretext tasks"""
         self.stage = TrainingStage.pretrain.value
+        self.model = self._instantiate_model(model_path=None)
 
-    def finetune(self) -> None:
+    def finetune(self) -> pathlib.Path:
         """Sets model internal state to train for fine-tuning task"""
-        self.stage = TrainingStage.finetune.value
+        # (Mostly) following guide for SSAST usage here: https://github.com/YuanGongND/ssast
+        model_path = MODEL_SAVE_PATH.joinpath(self.pretrained_model_filename)
+        torch.save(self.model.state_dict(), model_path)
+        self.stage = TrainingStage.finetune.value # set staging before re-instantiating model, as staging determines how model is initialized
+        self.model = self._instantiate_model(model_path=model_path)
+        return model_path
 
     @property
     def is_pretrain_stage(self) -> bool:
         return (self.stage == TrainingStage.pretrain.value)
 
     def forward_batch(self, step: str, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
-        X, Y = batch
+        X, Y = batch # X.shape: (batch_size, 1, nmels, time_frames)
+        # self.model requires input shape (batch_size, time_frames, nmels)
+        X = X.permute(0, 1, 3, 2) # X.shape: (batch_size, 1, time_frames, nmels)
+        X = X.squeeze(dim=1) # X.shape: (batch_size, time_frames, nmels)
         if self.is_pretrain_stage:
             # Perform joint discriminative and generative pretraining
             cluster = (self.input_fdim != self.fshape) # Same as original implementation in the SSAST paper/repo by (Gong et. al)
@@ -117,7 +143,7 @@ class SSASTLightningWrapper(pl.LightningModule):
 
             loss = discriminative_loss + self.generative_loss_weight * generative_loss
             self.log("pretext_loss", loss)
-            self.pretex_metrics.update(batch_accuracy=batch_accuracy)
+            self.pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
             return dict(loss=loss)
         else:
             # Train for multi-label classification task
@@ -145,7 +171,6 @@ class SSASTLightningWrapper(pl.LightningModule):
 
     def log_metrics(self, step: str) -> None:
         if self.is_pretrain_stage:
-            warnings.warn(f"{self.__class__.__name__}.log_metrics was called while stage was set to '{TrainingStage.pretrain.value}' with step value '{step}'. In which case no default GliderMetrics should logged by default. This warning indicates that a log_metrics call is made incorrectly.")
             return
 
         metrics = self.finetune_metrics.compute(step)
