@@ -43,7 +43,9 @@ if _DATASET_REMOTE_PREFIX is None:
 DATASET_URL=f"{_DATASET_REMOTE_URL}/{_DATASET_CONTAINER_NAME}?{_DATASET_SAS}"
 
 for directory in [d for d in REPO_DIR.glob("**/*") if d.is_dir()]:
-    sys.path.insert(0, str(directory))
+    # Only add directory to path if it is part of this git repo, if not it is likely a submodule and should not be added
+    if pathlib.Path(git.Repo(directory, search_parent_directories=True).working_dir).absolute() == REPO_DIR:
+        sys.path.insert(0, str(directory))
 
 _GLIDER_DATASET_LABELS_DIRECTORY = REPO_DIR.joinpath("datasets", "glider")
 
