@@ -64,8 +64,8 @@ class GliderMetrics(torchmetrics.MetricCollection):
         if len(class_names) != num_classes:
             raise ValueError(f"Argument 'class_names' has incorrect number of elements, must have lenght equal to 'num_classes' argument")
             
-        averaging_techniques = ["micro", "macro", "weighted", None]
-        # averaging_techniques = ["weighted"]
+        # averaging_techniques = ["micro", "macro", "weighted", None]
+        averaging_techniques = ["weighted"]
         classes = [torchmetrics.Accuracy, torchmetrics.AUROC, torchmetrics.Precision, torchmetrics.Recall, torchmetrics.AveragePrecision, torchmetrics.F1Score]
         metrics = {}
         for average in averaging_techniques:
