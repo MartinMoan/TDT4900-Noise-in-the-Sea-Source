@@ -151,7 +151,7 @@ class SSASTLightningWrapper(pl.LightningModule):
             loss = self.finetune_loss(Yhat, Y)
             self.log("loss", loss)
             if step != "train":
-                self.update_metrics(Yhat, Y)
+                self.update_metrics(step, Yhat, Y)
             return dict(loss=loss)
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
