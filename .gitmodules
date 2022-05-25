@@ -1,3 +1,0 @@
-[submodule "experiments/SelfSupervisedAST/ssast"]
-	path = experiments/SelfSupervisedAST/ssast
-	url = https://github.com/YuanGongND/ssast
