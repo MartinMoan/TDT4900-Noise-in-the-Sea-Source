@@ -127,7 +127,7 @@ class AstLightningWrapper(pl.LightningModule):
 
     def test_epoch_end(self, *args, **kwargs) -> None:
         metrics = self.test_metrics.compute("test")
-        confusion = self.test_confusion_matrix.compute("test")
+        confusion = self.test_confusion_matrix.compute()
         self.log_metrics("test", metrics, confusion)
         self.test_metrics.reset()
         self.test_confusion_matrix.reset()
