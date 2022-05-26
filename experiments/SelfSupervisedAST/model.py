@@ -3,7 +3,7 @@ from datetime import datetime
 import pathlib
 import sys
 from enum import Enum
-from typing import Any, Iterable, Mapping, Optional, Tuple, Union
+from typing import Any, Iterable, Mapping, Optional, Tuple, Union, Dict
 
 import git
 import pytorch_lightning as pl
@@ -80,10 +80,17 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.model = self._instantiate_model(model_path=pretrained_model_path)
         # During fine-tuning stage, we are preforming multi-label classification
         # Therefore we need each output of the MPL head to yield values in the range [0,1], that do not (necessarily) sum to 1. 
-        self.pretext_batch_accuracy = Average() # will use this to compute arithmetic mean of ASTModel (SSAST version) output batch accuracy during pretraining
+        self.val_pretext_batch_accuracy = Average()
+        self.test_pretext_batch_accuracy = Average()
+
         self.finetune_loss = torch.nn.BCEWithLogitsLoss()
-        self.finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
-        self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_model_outputs, multilabel=True, threshold=0.5)
+
+        self.val_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
+        self.test_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
+        
+        self.val_confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_model_outputs, multilabel=True, threshold=0.5)
+        self.test_confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_model_outputs, multilabel=True, threshold=0.5)
+
         self.save_hyperparameters()
         now = datetime.now().strftime(config.DATETIME_FORMAT)
         self.pretrained_model_filename = f"ssast-pretrained-{now}.pth"
@@ -127,71 +134,105 @@ class SSASTLightningWrapper(pl.LightningModule):
     def is_pretrain_stage(self) -> bool:
         return (self.stage == TrainingStage.pretrain.value)
 
-    def forward_batch(self, step: str, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
+    def pretrain_forward(self, X: torch.Tensor) -> Tuple[str, torch.Tensor, torch.Tensor]:
+        cluster = (self.input_fdim != self.fshape) # Same as original implementation in the SSAST paper/repo by (Gong et. al)
+        batch_accuracy, discriminative_loss = self.model(X, 'pretrain_mpc', mask_patch=self.pretext_masked_patches, cluster=cluster)
+        generative_loss = self.model(X, 'pretrain_mpg', mask_patch=self.pretext_masked_patches, cluster=cluster)
+
+        discriminative_loss = discriminative_loss.mean() # InfoNCE loss (Info Noise-Contrasting Estimation) 
+        generative_loss = generative_loss.mean() # MSE loss
+
+        loss = discriminative_loss + self.generative_loss_weight * generative_loss
+        return loss, batch_accuracy
+        
+    def reshape(self, batch: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         X, Y = batch # X.shape: (batch_size, 1, nmels, time_frames)
         # self.model requires input shape (batch_size, time_frames, nmels)
         X = X.permute(0, 1, 3, 2) # X.shape: (batch_size, 1, time_frames, nmels)
         X = X.squeeze(dim=1) # X.shape: (batch_size, time_frames, nmels)
-        if self.is_pretrain_stage:
-            # Perform joint discriminative and generative pretraining
-            cluster = (self.input_fdim != self.fshape) # Same as original implementation in the SSAST paper/repo by (Gong et. al)
-            batch_accuracy, discriminative_loss = self.model(X, 'pretrain_mpc', mask_patch=self.pretext_masked_patches, cluster=cluster)
-            generative_loss = self.model(X, 'pretrain_mpg', mask_patch=self.pretext_masked_patches, cluster=cluster)
-
-            discriminative_loss = discriminative_loss.mean() # InfoNCE loss (Info Noise-Contrasting Estimation) 
-            generative_loss = generative_loss.mean() # MSE loss
-
-            loss = discriminative_loss + self.generative_loss_weight * generative_loss
-            self.log("pretext_loss", loss)
-            self.pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
-            return dict(loss=loss)
-        else:
-            # Train for multi-label classification task
-            Yhat = self.model(X, task=self.clip_representation)
-            loss = self.finetune_loss(Yhat, Y)
-            self.log("loss", loss)
-            if step != "train":
-                self.update_metrics(step, Yhat, Y)
-            return dict(loss=loss)
+        return X, Y
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
-        return self.forward_batch("train", batch=batch, batch_idx=batch_idx)
+        X, Y = self.reshape(batch)
+        if self.is_pretrain_stage:
+            loss, batch_accuracy = self.pretrain_forward(X)
+            self.log("train_pretext_loss", loss)
+            return dict(loss=loss)
+        else:
+            Yhat = self.model(X, task=self.clip_representation)
+            loss = self.finetune_loss(Yhat, Y)
+            self.log("train_loss", loss)
+            return dict(loss=loss)
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
-        return self.forward_batch("val", batch=batch, batch_idx=batch_idx)
+        X, Y = self.reshape(batch)
+        if self.is_pretrain_stage:
+            loss, batch_accuracy = self.pretrain_forward(X)
+            self.log("val_pretext_loss", loss)
+            self.val_pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
+            return dict(loss=loss)
+        else:
+            Yhat = self.model(X, task=self.clip_representation)
+            loss = self.finetune_loss(Yhat, Y)
+            self.log("val_loss", loss)
+            self.val_finetune_metrics.update(Yhat.float(), Y.int())
+            self.val_confusion_matrix.update(Yhat.float(), Y.int())
+            return dict(loss=loss)
 
     def validation_epoch_end(self, outputs: Any) -> None:
-        self.log_metrics("val")
+        if self.is_pretrain_stage:
+            accs = self.val_pretext_batch_accuracy.compute()
+            self.log("val_pretext_acc", accs)
+            self.val_pretext_batch_accuracy.reset()
+        else:
+            metrics = self.val_finetune_metrics.compute(step="val")
+            confusion = self.val_confusion_matrix.compute()
+            
+            self.log_metrics("val", metrics, confusion)
+            
+            self.val_finetune_metrics.reset()
+            self.val_confusion_matrix.reset()
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Mapping[str, torch.Tensor]:
-        return self.forward_batch("test", batch=batch, batch_idx=batch_idx)
+        X, Y = self.reshape(batch)
+        if self.is_pretrain_stage:
+            loss, batch_accuracy = self.pretrain_forward(X)
+            self.log("test_pretext_loss", loss)
+            self.test_pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
+            return dict(loss=loss)
+        else:
+            Yhat = self.model(X, task=self.clip_representation)
+            loss = self.finetune_loss(Yhat, Y)
+            self.log("test_loss", loss)
+            self.test_finetune_metrics.update(Yhat.float(), Y.int())
+            self.test_confusion_matrix.update(Yhat.float(), Y.int())
+            return dict(loss=loss)
 
     def test_epoch_end(self, outputs: Any) -> None:
-        self.log_metrics("test")
-
-    def log_metrics(self, step: str) -> None:
         if self.is_pretrain_stage:
-            return
+            accs = self.test_pretext_batch_accuracy.compute()
+            self.log("test_pretext_acc", accs)
+            self.test_pretext_batch_accuracy.reset()
+        else:
+            metrics = self.test_finetune_metrics.compute(step="test")
+            confusion = self.test_confusion_matrix.compute()
+            
+            self.log_metrics("test", metrics, confusion)
+            
+            self.test_finetune_metrics.reset()
+            self.test_confusion_matrix.reset()
 
-        metrics = self.finetune_metrics.compute(step)
-        for metric, value in metrics.items():
-            self.log(metric, value)
-        
-        confusion = self.confusion_matrix.compute()
+    def log_metrics(self, step: str, metrics: Mapping[str, torch.Tensor], confusion: torch.Tensor) -> None:
+        for name, metric in metrics.items():
+            self.log(name, metric)
+
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
         self.logger.experiment.log({f"{step}_bio_confusion_matrix": customwandbplots.confusion_matrix(self.logger, biophonic_confusion, class_names=["not bio", "bio"], title=f"{step} confusion matrix (biophonic)")})
         self.logger.experiment.log({f"{step}_anth_confusion_matrix": customwandbplots.confusion_matrix(self.logger, anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{step} confusion matrix (anthropogenic)")})
 
-    def update_metrics(self, step: str, preds: torch.Tensor, target: torch.Tensor) -> None:
-        if self.is_pretrain_stage:
-            return
-
-        self.finetune_metrics.update(preds.float(), target.int())
-        self.confusion_matrix.update(preds.float(), target.int())
-
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Dict[str, torch.optim.Optimizer]:
         optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.learning_rate,

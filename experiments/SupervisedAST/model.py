@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import pathlib
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple, Dict, Mapping
 from enum import Enum
 
 import git
@@ -12,7 +12,6 @@ import pytorch_lightning as pl
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
-from interfaces import ILoggerFactory
 from models.AST.ASTWrapper import ASTWrapper
 from metrics import customwandbplots
 from metrics.metriccollection import GliderMetrics
@@ -66,66 +65,74 @@ class AstLightningWrapper(pl.LightningModule):
         self._betas = betas
         self._batch_size = batch_size
 
-        self.metrics = GliderMetrics(num_classes=n_model_outputs, class_names=class_names)
+        self.val_metrics = GliderMetrics(num_classes=n_model_outputs, class_names=class_names)
+        self.test_metrics = GliderMetrics(num_classes=n_model_outputs, class_names=class_names)
         # keep this separate for custom logging implementation for confusion matrix
-        self._confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5) # Dont normalize here, send raw values to wandb and normalize in GUI
+        self.val_confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5) # Dont normalize here, send raw values to wandb and normalize in GUI
+        self.test_confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2, multilabel=True, threshold=0.5)
+
         self._verbose = verbose
         self.save_hyperparameters()
 
-    def update_metrics(self, stepname, Yhat, Y):
-        self.metrics.update(Yhat.float(), Y.int())
-        self._confusion_matrix.update(Yhat.float(), Y.int())
-
-    def log_metrics(self, step):
-        # Log general metrics
-        metrics = self.metrics.compute(step)
+    def log_metrics(self, step: str, metrics: Mapping[str, torch.Tensor], confusion: torch.Tensor) -> None:
         for metric, values in metrics.items():
             self.log(metric, values)
         
         # Compute and log confusion matrix
-        confusion = self._confusion_matrix.compute() # has shape (2, 2, 2)
         biophonic_confusion = confusion[0]
         anthropogenic_confusion = confusion[1]
         
         self.logger.experiment.log({f"{step}_bio_confusion_matrix": customwandbplots.confusion_matrix(self.logger, biophonic_confusion, class_names=["not bio", "bio"], title=f"{step} confusion matrix (biophonic)")})
         self.logger.experiment.log({f"{step}_anth_confusion_matrix": customwandbplots.confusion_matrix(self.logger, anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{step} confusion matrix (anthropogenic)")})
 
-    def reset_metrics(self):
-        self.metrics.reset()
-        self._confusion_matrix.reset()
-
-    def forward(self, X):
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
         # AST.py expects input to have shape (batch_size, n_time_fames, n_mel_bans), swap third and fourth axis of X and squeeze second axis
         return self._ast(X)
 
-    def forward_batch(self, step, batch, batch_idx):
+    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
         self.log("loss", loss)
-        if step != "train":
-            self.update_metrics(step, Yhat, Y)
         return dict(loss=loss)
 
-    def training_step(self, batch, batch_idx):
-        return self.forward_batch("train", batch, batch_idx)
+    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
+        X, Y = batch
+        Yhat = self.forward(X)
+        loss = self._lossfunc(Yhat, Y)
+        self.log("loss", loss)
+        self.val_metrics.update(Yhat.float(), Y.int())
+        self.val_confusion_matrix.update(Yhat.float(), Y.int())
+        return dict(loss=loss)
 
-    def validation_step(self, batch, batch_idx):
-        return self.forward_batch("val", batch, batch_idx)
+    def validation_epoch_end(self, *args, **kwargs) -> None:
+        metrics = self.val_metrics.compute(step="val")
+        confusion = self.val_confusion_matrix.compute()
+        
+        self.log_metrics("val", metrics, confusion)
+        
+        self.val_metrics.reset()
+        self.val_confusion_matrix.reset()
 
-    def validation_epoch_end(self, outputs) -> None:
-        self.log_metrics("val")
-        self.reset_metrics()
+    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
+        X, Y = batch
+        Yhat = self.forward(X)
+        loss = self._lossfunc(Yhat, Y)
+        self.log("loss", loss)
 
-    def test_step(self, batch, batch_idx):
-        return self.forward_batch("test", batch, batch_idx)
+        self.test_metrics.update(Yhat, Y)
+        self.test_confusion_matrix.update(Yhat, Y)
+        return dict(loss=loss)
 
-    def test_epoch_end(self, outputs) -> None:
-        self.log_metrics("test")
-        self.reset_metrics()
+    def test_epoch_end(self, *args, **kwargs) -> None:
+        metrics = self.test_metrics.compute("test")
+        confusion = self.test_confusion_matrix.compute("test")
+        self.log_metrics("test", metrics, confusion)
+        self.test_metrics.reset()
+        self.test_confusion_matrix.reset()
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Dict[str, torch.optim.Optimizer]:
         optimizer = torch.optim.Adam(params=self._ast.parameters(), lr=self._learning_rate, betas=self._betas, weight_decay=self._weight_decay)
         return dict(optimizer=optimizer)
 

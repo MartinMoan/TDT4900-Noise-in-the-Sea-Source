@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import warnings
 import ast
 from copy import copy
 import sys
@@ -24,6 +25,17 @@ class Average(torchmetrics.Metric):
 
     def compute(self) -> torch.Tensor:
         return torch.div(self.sum, self.num_examples)
+
+class ExampleCounter(torchmetrics.Metric):
+    def __init__(self, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
+        super().__init__(compute_on_step, **kwargs)
+        self.add_state("sum", default=torch.tensor(0.0),  dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor, *args, **kwargs) -> None:
+        self.sum += preds.shape[0]
+
+    def compute(self) -> torch.Tensor:
+        return self.sum
 
 class Support(torchmetrics.Metric):
     def __init__(self, num_classes: int, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:
@@ -54,17 +66,19 @@ class Support(torchmetrics.Metric):
         return torch.tensor([getattr(self, f"num_target_class{c}") for c in range(self.num_classes)]).float().to(self.device)
 
 class GliderMetrics(torchmetrics.MetricCollection):
-    def __init__(self, num_classes: int, *args, class_names: Optional[Iterable[str]] = None,  **kwargs):
+    def __init__(self, num_classes: int, *args, missing_reset: str = "warn", class_names: Optional[Iterable[str]] = None,  **kwargs):
         if class_names is None:
             class_names = [f"class{i}" for i in range(num_classes)]
         
+        if missing_reset not in ["warn", "fail", None]:
+            raise ValueError(f"Argument 'missing_reset' has incorrect value, expected string with value 'warn', 'fail' or None but received {type(missing_reset)} with value {missing_reset}")
+
         if not isinstance(class_names, (list, np.ndarray)):
             raise TypeError(f"Argument 'class_names' has incorrect type, expected 'list' or 'np.ndarray' but received object with type {type(class_names)}")
 
         if len(class_names) != num_classes:
             raise ValueError(f"Argument 'class_names' has incorrect number of elements, must have lenght equal to 'num_classes' argument")
             
-        # averaging_techniques = ["micro", "macro", "weighted", None]
         averaging_techniques = ["weighted"]
         classes = [torchmetrics.Accuracy, torchmetrics.AUROC, torchmetrics.Precision, torchmetrics.Recall, torchmetrics.AveragePrecision, torchmetrics.F1Score]
         metrics = {}
@@ -79,9 +93,15 @@ class GliderMetrics(torchmetrics.MetricCollection):
 
         supportname = dict(name=Support.__name__, average=None)
         metrics[str(supportname)] = Support(num_classes=num_classes) # The percentage of class instances per class (e.g. [90% class0, 80% class1, 10% class2, ...])
-        super().__init__(metrics, *args, **kwargs)
+
+        examplesname = dict(name=ExampleCounter.__name__, average=None)
+        metrics[str(examplesname)] = ExampleCounter()
+
+        super().__init__(metrics, *args, compute_groups=False, **kwargs) # Need compute groups False because grouping causes metric.update() not to be called internally for some metrics when wrapped in this GliderMetric object
         self.num_classes = num_classes
         self.class_names = class_names
+        self._compute_called_since_last_reset = False
+        self.missing_reset_action = missing_reset
 
     def _cast_metrics_to_tensor(self, metrics: Mapping[str, Union[torch.Tensor, List[torch.Tensor]]]) -> Mapping[str, torch.Tensor]:
         output = {}
@@ -92,7 +112,7 @@ class GliderMetrics(torchmetrics.MetricCollection):
                 output[name] = value
         return output
 
-    def _expand_metrics_per_class(self, metrics: Mapping[str, torch.Tensor]) -> Iterable[Mapping[str, Union[Mapping[str, Any], torch.Tensor]]]:
+    def _expand_metrics_per_class(self, metrics: Mapping[str, torch.Tensor]) -> List[Mapping[str, Union[Mapping[str, Any], torch.Tensor]]]:
         """
         Returns:
             Iterable[Mapping[str, Union[Mapping[str, Any], torch.Tensor]]]: f.ex.:
@@ -135,7 +155,7 @@ class GliderMetrics(torchmetrics.MetricCollection):
         averagestr = f" (average={average})" if average is not None else ""
         return f"{stepstr}{namestr}{classnamestr}{averagestr}"
 
-    def _rename_metrics(self, metrics: Iterable[Mapping], step: Optional[str] = None) -> Mapping[str, torch.Tensor]:
+    def _rename_metrics(self, metrics: Iterable[Mapping], step: Optional[str] = None) -> Dict[str, torch.Tensor]:
         output = {}
         for metric in metrics:
             value = metric.get("value") or -1
@@ -149,23 +169,51 @@ class GliderMetrics(torchmetrics.MetricCollection):
         metrics = self._rename_metrics(metrics, step=step)
         return metrics
 
-    def __call__(self, *args, **kwargs):
-        metrics = super().__call__(*args, **kwargs)
-        return self._clean_metric_output(metrics, step=kwargs.get("step") or None)
+    def __call__(self, step: str, preds: torch.Tensor, target: torch.Tensor) -> Dict[str, torch.Tensor]:
+        cn = self.__class__.__name__
+        warnings.wand(f"{cn}.__call__() was called. This will likely cause incorrect results. In stead of calling {cn} directly, make individual calls to {cn}.update(), {cn}.compute() and {cn}.reset(), as this will ensure state is maintained correctly and metrics are correctly computed.")
+        self.reset()
+        self.update(preds, target)
+        return self.compute(step)
 
     def compute(self, step: str = None) -> Dict[str, Any]:
         metrics = super().compute()
+        self._compute_called_since_last_reset = True
         return self._clean_metric_output(metrics, step=step)
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        if self._compute_called_since_last_reset:
+            cn = self.__class__.__name__
+            msg = f"{cn}.update() was called after {cn}.compute(), but metrics was not reset since last compute call. This will cause previously computed metrics to accumulate with new data, and likely yield incorrect results."
+            if self.missing_reset_action == "warn":
+                warnings.warn(msg)
+            elif self.missing_reset_action == "fail":
+                raise Exception(msg)
+                
+        return super().update(preds, target)
+    
+    def reset(self) -> None:
+        super().reset()
+        self._compute_called_since_last_reset = False
 
 if __name__ == "__main__":
     from rich import print
     num_classes = 2
-    size = 1000
-    g = GliderMetrics(num_classes=num_classes, class_names=["Anthropogenic", "Biophonic"])
+    size = 10
+
+    g = GliderMetrics(num_classes=num_classes, class_names=["Anthropogenic", "Biophonic"], missing_reset="warn")
     
     target = torch.randint(0, 2, (size, num_classes)).int()
     preds = torch.rand((size, num_classes)).float()
 
-    print(g)
+    g.update(preds, target)
+    print(g.compute(step="val"))
+
+    target = torch.randint(0, 2, (size, num_classes)).int()
+    preds = torch.rand((size, num_classes)).float()
+    g.update(preds, target)
+    print(g.compute(step="test"))
+
+    g.reset()
     g.update(preds, target)
     print(g.compute(step="val"))
