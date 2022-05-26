@@ -81,17 +81,22 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
     def subset_distributions(self, distributions: Mapping[str, np.ndarray]) -> Mapping[str, SubsetDataset]:
         min_size = np.min([len(class_indeces) for class_indeces in distributions.values()], axis=0)
         balanced_indeces = np.concatenate([np.random.choice(indeces, size=min_size, replace=False) for indeces in distributions.values()])
+        np.random.shuffle(balanced_indeces)
         remaining_indeces = np.concatenate([indeces[np.where(~np.isin(indeces, balanced_indeces))[0]] for indeces in distributions.values()])
-        
+        np.random.shuffle(remaining_indeces)
         n_for_training = int(len(balanced_indeces) * self.train_part)
 
         # Indeces used for training and validation
         train_and_val_part = np.random.choice(balanced_indeces, n_for_training, replace=False)
         train_indeces, val_indeces = train_test_split(train_and_val_part, test_size=self.val_part)
+        
+        np.random.shuffle(train_indeces)
+        np.random.shuffle(val_indeces)
 
         # Indeces for testing
         test_part = balanced_indeces[np.where(~np.isin(balanced_indeces, train_and_val_part))[0]] # The indeces from "balanced" that was not used for the train nor val sets
         test_indeces = np.concatenate([test_part, remaining_indeces]) # This way label distribution is maintained for testset
+        np.random.shuffle(test_indeces)
         # Train-, val- and testsets as subset datasets
         train = SubsetDataset(dataset=self.tensorset, subset=train_indeces) # These are balanced
         val = SubsetDataset(dataset=self.tensorset, subset=val_indeces) # These are balanced
@@ -135,7 +140,6 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
             self.finetuning_subsets[key] = for_finetuning
 
         all_indeces = np.concatenate([indeces for indeces in self.pretraining_subsets.values()] + [indeces for indeces in self.finetuning_subsets.values()])
-
         unique, counts = np.unique(all_indeces, return_counts=True)
         dup = unique[counts > 1]
         assert len(dup) == 0, f"There are samples that are duplicated across the pretrain/finetune train, val, test subsets: {dup}"

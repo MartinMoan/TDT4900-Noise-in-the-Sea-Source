@@ -127,11 +127,12 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         distributions = self.balancer.label_distributions()
         for key in distributions.keys():
             distributions[key] = np.array(distributions[key])
-
+        
         min_size = np.min([len(class_indeces) for class_indeces in distributions.values()], axis=0)
         self.balanced_indeces = np.concatenate([np.random.choice(indeces, size=min_size, replace=False) for indeces in distributions.values()])
+        np.random.shuffle(self.balanced_indeces)
         self.remaining_indeces = np.concatenate([indeces[np.where(~np.isin(indeces, self.balanced_indeces))[0]] for indeces in distributions.values()])
-        
+        np.random.shuffle(self.remaining_indeces)
         train_val_percentage = 0.8
         n_for_training = int(len(self.balanced_indeces) * train_val_percentage)
 
@@ -139,9 +140,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.train_and_val_part = np.random.choice(self.balanced_indeces, n_for_training, replace=False)
         self.train_indeces, self.val_indeces = train_test_split(self.train_and_val_part, test_size=0.2)
 
+        np.random.shuffle(self.train_indeces)
+        np.random.shuffle(self.val_indeces)
+
         # Indeces for testing
         test_part = self.balanced_indeces[np.where(~np.isin(self.balanced_indeces, self.train_and_val_part))[0]] # The indeces from "balanced" that was not used for the train nor val sets
         self.test_indeces = np.concatenate([test_part, self.remaining_indeces]) # This way label distribution is maintained for testset
+        np.random.shuffle(self.test_indeces)
         # Train-, val- and testsets as subset datasets
         self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces) # These are balanced
         self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces) # These are balanced
@@ -152,6 +157,11 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         assert np.sum(dataloader_sizes) == np.sum(class_group_sizes)
         assert np.sum(dataloader_sizes) == len(self.tensorset)
 
+        all_indeces = np.concatenate([self.train_indeces, self.val_indeces, self.test_indeces], axis=0)
+        unique, counts = np.unique(all_indeces, return_counts=True)
+        dup = unique[counts > 1]
+        assert len(dup) == 0, f"There are samples that are duplicated across the train, val, test subsets: {dup}"
+        assert np.min(all_indeces) == 0 and np.max(all_indeces) == len(self.tensorset) - 1, f"There are some examples that are not part of any of the train, val or test subsets"
         self._setup_done = True
 
     def train_dataloader(self):
