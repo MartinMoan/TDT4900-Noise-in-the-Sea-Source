@@ -88,7 +88,11 @@ class AstLightningWrapper(pl.LightningModule):
         anthropogenic_confusion = confusion[1]
         
         self.logger.experiment.log({f"{step}_bio_confusion_matrix": customwandbplots.confusion_matrix(self.logger, biophonic_confusion, class_names=["not bio", "bio"], title=f"{step} confusion matrix (biophonic)")})
-        self.logger.experiment.log({f"{step}_anth_confusion_matrix": customwandbplots.confusion_matrix(self.logger, anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{step} confusion matrix (anthropogenic)")})        
+        self.logger.experiment.log({f"{step}_anth_confusion_matrix": customwandbplots.confusion_matrix(self.logger, anthropogenic_confusion, class_names=["not anth", "anth"], title=f"{step} confusion matrix (anthropogenic)")})
+
+    def reset_metrics(self):
+        self.metrics.reset()
+        self._confusion_matrix.reset()
 
     def forward(self, X):
         """Expect batch to have shape (batch_size, 1, n_mel_bands, n_time_frames)"""
@@ -112,12 +116,14 @@ class AstLightningWrapper(pl.LightningModule):
 
     def validation_epoch_end(self, outputs) -> None:
         self.log_metrics("val")
+        self.reset_metrics()
 
     def test_step(self, batch, batch_idx):
         return self.forward_batch("test", batch, batch_idx)
 
     def test_epoch_end(self, outputs) -> None:
         self.log_metrics("test")
+        self.reset_metrics()
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(params=self._ast.parameters(), lr=self._learning_rate, betas=self._betas, weight_decay=self._weight_decay)
