@@ -83,7 +83,8 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.val_pretext_batch_accuracy = Average()
         self.test_pretext_batch_accuracy = Average()
 
-        self.finetune_loss = torch.nn.BCEWithLogitsLoss()
+        self.finetune_loss = torch.nn.BCELoss()
+        self.finetune_activation = torch.nn.Sigmoid()
 
         self.val_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
         self.test_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
@@ -159,7 +160,7 @@ class SSASTLightningWrapper(pl.LightningModule):
             self.log("train_pretext_loss", loss)
             return dict(loss=loss)
         else:
-            Yhat = self.model(X, task=self.clip_representation)
+            Yhat = self.finetune_activation(self.model(X, task=self.clip_representation))
             loss = self.finetune_loss(Yhat, Y)
             self.log("train_loss", loss)
             return dict(loss=loss)
@@ -172,7 +173,7 @@ class SSASTLightningWrapper(pl.LightningModule):
             self.val_pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
             return dict(loss=loss)
         else:
-            Yhat = self.model(X, task=self.clip_representation)
+            Yhat = self.finetune_activation(self.model(X, task=self.clip_representation))
             loss = self.finetune_loss(Yhat, Y)
             self.log("val_loss", loss)
             self.val_finetune_metrics.update(Yhat.float(), Y.int())
@@ -201,7 +202,7 @@ class SSASTLightningWrapper(pl.LightningModule):
             self.test_pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
             return dict(loss=loss)
         else:
-            Yhat = self.model(X, task=self.clip_representation)
+            Yhat = self.finetune_activation(self.model(X, task=self.clip_representation))
             loss = self.finetune_loss(Yhat, Y)
             self.log("test_loss", loss)
             self.test_finetune_metrics.update(Yhat.float(), Y.int())

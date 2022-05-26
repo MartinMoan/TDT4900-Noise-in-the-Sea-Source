@@ -33,7 +33,6 @@ class AstLightningWrapper(pl.LightningModule):
         weight_decay: float,
         betas: Iterable[float],
         batch_size: int,
-        activation_func: torch.nn.Module = None, 
         n_model_outputs=2, 
         fstride: int=10, 
         tstride: int=10, 
@@ -46,8 +45,11 @@ class AstLightningWrapper(pl.LightningModule):
         verbose=True) -> None:
 
         super().__init__()
+        self._activation = torch.nn.Sigmoid()
+        self._lossfunc = torch.nn.BCELoss()
+
         self._ast = ASTWrapper(
-            activation_func=None, # Because we use BCEWithLogitsLoss
+            activation_func=self._activation,
             label_dim=n_model_outputs, 
             fstride=fstride, 
             tstride=tstride, 
@@ -58,8 +60,6 @@ class AstLightningWrapper(pl.LightningModule):
             model_size=model_size, 
             verbose=verbose
         )
-        self._activation = activation_func
-        self._lossfunc = torch.nn.BCEWithLogitsLoss()
         self._learning_rate = learning_rate
         self._weight_decay = weight_decay
         self._betas = betas

@@ -51,7 +51,6 @@ def main(hyperparams):
         weight_decay=hyperparams.weight_decay,
         betas=hyperparams.betas,
         batch_size=hyperparams.batch_size, # Only required for auto_scaling of batch_size
-        activation_func=None,
         n_model_outputs=2,
         fstride=hyperparams.fstride,
         tstride=hyperparams.tstride,
