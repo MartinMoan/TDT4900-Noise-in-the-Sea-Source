@@ -38,9 +38,9 @@ WEIGHT_DECAY=5e-7
 BETAS="0.95 0.999"
 
 BATCH_SIZE=8
-MAX_EPOCHS=3
+MAX_EPOCHS=1000
 
 # initialize the dataset (on a single compute node), and cache it such that is is available for all compute nodes during training
 python ../../initdata.py -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP
 
-srun python ../train.py -batch_size $BATCH_SIZE -epochs $MAX_EPOCHS -learning_rate $LEARNING_RATE -weight_decay $WEIGHT_DECAY -betas $BETAS -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -model_size $MODEL_SIZE -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP --limit_train_batches 10 --limit_val_batches 10 --limit_test_batches 10 --track_n_examples 10 --tracking_tags "SanityCheck"
+srun python ../train.py -batch_size $BATCH_SIZE -epochs $MAX_EPOCHS -learning_rate $LEARNING_RATE -weight_decay $WEIGHT_DECAY -betas $BETAS -nmels $NMELS -hop_length $HOPLENGTH -nfft $NFFT -model_size $MODEL_SIZE -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP --track_n_examples 10 --tracking_tags "SanityCheck" --overfit_batches 0.01

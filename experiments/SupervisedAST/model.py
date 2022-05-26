@@ -45,8 +45,8 @@ class AstLightningWrapper(pl.LightningModule):
         verbose=True) -> None:
 
         super().__init__()
-        self._activation = torch.nn.Sigmoid()
-        self._lossfunc = torch.nn.BCELoss()
+        self._activation = lambda X: X # torch.nn.Sigmoid()
+        self._lossfunc = torch.nn.BCEWithLogitsLoss()
 
         self._ast = ASTWrapper(
             activation_func=self._activation,
