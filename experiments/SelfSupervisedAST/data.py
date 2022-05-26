@@ -78,7 +78,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
     def finetune(self) -> None:
         self.stage = TrainingStage.finetune.value
 
-    def subset_distributions(self, distributions: Mapping[str, np.ndarray]) -> Tuple[SubsetDataset, SubsetDataset, SubsetDataset]:
+    def subset_distributions(self, distributions: Mapping[str, np.ndarray]) -> Mapping[str, SubsetDataset]:
         min_size = np.min([len(class_indeces) for class_indeces in distributions.values()], axis=0)
         balanced_indeces = np.concatenate([np.random.choice(indeces, size=min_size, replace=False) for indeces in distributions.values()])
         remaining_indeces = np.concatenate([indeces[np.where(~np.isin(indeces, balanced_indeces))[0]] for indeces in distributions.values()])
@@ -96,7 +96,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         train = SubsetDataset(dataset=self.tensorset, subset=train_indeces) # These are balanced
         val = SubsetDataset(dataset=self.tensorset, subset=val_indeces) # These are balanced
         test = SubsetDataset(dataset=self.tensorset, subset=test_indeces) # These are unbalanced
-        return train, test, val
+        return dict(train=train, test=test, val=val)
 
     def setup(self, stage: Optional[str] = None) -> None:
         """Create train, val and test subsets for both pretraining and finetuning
@@ -134,11 +134,17 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
             self.pretraining_subsets[key] = for_pretraining
             self.finetuning_subsets[key] = for_finetuning
 
+        all_indeces = np.concatenate([indeces for indeces in self.pretraining_subsets.values()] + [indeces for indeces in self.finetuning_subsets.values()])
+
+        unique, counts = np.unique(all_indeces, return_counts=True)
+        dup = unique[counts > 1]
+        assert len(dup) == 0, f"There are samples that are duplicated across the pretrain/finetune train, val, test subsets: {dup}"
+
         self.pretraining_dataloaders = self.subset_distributions(self.pretraining_subsets)
         self.finetuning_dataloaders = self.subset_distributions(self.finetuning_subsets)
 
-        n_in_ft_ttv = [len(subset) for subset in self.finetuning_dataloaders]
-        n_in_pt_ttf = [len(subset) for subset in self.pretraining_dataloaders]
+        n_in_ft_ttv = [len(subset) for subset in self.finetuning_dataloaders.values()]
+        n_in_pt_ttf = [len(subset) for subset in self.pretraining_dataloaders.values()]
 
         total_for_ft = [len(indeces) for indeces in self.finetuning_subsets.values()]
         total_for_pt = [len(indeces) for indeces in self.pretraining_subsets.values()]
@@ -151,7 +157,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         # (self.batch_size - 1) * (F + P) = T
         # So we should not require that the total number of samples in all the dataloaders equal the length of the original dataset.
         # But that the total number of samples in all dataloaders be within a tolerance of T samples from the number of samples in the original dataset
-        TOLERANCE = (self.batch_size - 1) * (len(self.pretraining_dataloaders) + len(self.finetuning_dataloaders))
+        TOLERANCE = (self.batch_size - 1) * (len(self.pretraining_dataloaders.values()) + len(self.finetuning_dataloaders.values()))
 
         assert np.abs(np.sum(n_in_ft_ttv) - np.sum(total_for_ft)) <= TOLERANCE
         assert np.abs(np.sum(n_in_pt_ttf) - np.sum(total_for_pt)) <= TOLERANCE
@@ -161,11 +167,10 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         self._setup_done = True
 
     def get_subset(self, stage: str) -> None:
-        keys = {"train": 0, "val": 1, "test": 2}
         if self.is_pretrain_stage:
-            return self.pretraining_dataloaders[keys[stage]]
+            return self.pretraining_dataloaders[stage]
         else:
-            return self.finetuning_dataloaders[keys[stage]]
+            return self.finetuning_dataloaders[stage]
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         subset = self.get_subset("train")
