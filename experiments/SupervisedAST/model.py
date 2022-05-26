@@ -121,8 +121,8 @@ class AstLightningWrapper(pl.LightningModule):
         loss = self._lossfunc(Yhat, Y)
         self.log("loss", loss)
 
-        self.test_metrics.update(Yhat, Y)
-        self.test_confusion_matrix.update(Yhat, Y)
+        self.test_metrics.update(Yhat.float(), Y.int())
+        self.test_confusion_matrix.update(Yhat.float(), Y.int())
         return dict(loss=loss)
 
     def test_epoch_end(self, *args, **kwargs) -> None:
