@@ -78,7 +78,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
     def finetune(self) -> None:
         self.stage = TrainingStage.finetune.value
 
-    def subset_distributions(self, distributions: Mapping[str, np.ndarray]) -> Mapping[str, SubsetDataset]:
+    def subset_distributions(self, distributions: Mapping[str, np.ndarray]) -> Tuple[Mapping[str, SubsetDataset], Mapping[str, Any]]:
         min_size = np.min([len(class_indeces) for class_indeces in distributions.values()], axis=0)
         balanced_indeces = np.concatenate([np.random.choice(indeces, size=min_size, replace=False) for indeces in distributions.values()])
         np.random.shuffle(balanced_indeces)
@@ -101,7 +101,9 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         train = SubsetDataset(dataset=self.tensorset, subset=train_indeces) # These are balanced
         val = SubsetDataset(dataset=self.tensorset, subset=val_indeces) # These are balanced
         test = SubsetDataset(dataset=self.tensorset, subset=test_indeces) # These are unbalanced
-        return dict(train=train, test=test, val=val)
+        s = {"test": test_indeces, "train": train_indeces, "val": val_indeces}
+        dists = {subsetname: {key: len(np.where(np.isin(subset_indeces, indeces))[0]) for key, indeces in distributions.items()} for subsetname, subset_indeces in s.items()}
+        return dict(train=train, test=test, val=val), dists
 
     def setup(self, stage: Optional[str] = None) -> None:
         """Create train, val and test subsets for both pretraining and finetuning
@@ -136,16 +138,24 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
             for_pretraining = np.random.choice(indeces, size=size, replace=False)
             for_finetuning = indeces[np.where(~np.isin(indeces, for_pretraining))]
 
+            assert len(for_pretraining) + len(for_finetuning) == len(indeces)
             self.pretraining_subsets[key] = for_pretraining
             self.finetuning_subsets[key] = for_finetuning
-
+        
+        pslen = np.sum([len(l) for l in self.pretraining_subsets.values()]) 
+        fslen = np.sum([len(l) for l in self.finetuning_subsets.values()])
+        assert pslen + fslen == len(self.tensorset)
+        
         all_indeces = np.concatenate([indeces for indeces in self.pretraining_subsets.values()] + [indeces for indeces in self.finetuning_subsets.values()])
         unique, counts = np.unique(all_indeces, return_counts=True)
         dup = unique[counts > 1]
         assert len(dup) == 0, f"There are samples that are duplicated across the pretrain/finetune train, val, test subsets: {dup}"
 
-        self.pretraining_dataloaders = self.subset_distributions(self.pretraining_subsets)
-        self.finetuning_dataloaders = self.subset_distributions(self.finetuning_subsets)
+        self.pretraining_dataloaders, pdists = self.subset_distributions(self.pretraining_subsets)
+        self.finetuning_dataloaders, fdists = self.subset_distributions(self.finetuning_subsets)
+
+        self.pretraining_distributions = pdists
+        self.finetuning_distributions = fdists
 
         n_in_ft_ttv = [len(subset) for subset in self.finetuning_dataloaders.values()]
         n_in_pt_ttf = [len(subset) for subset in self.pretraining_dataloaders.values()]
@@ -205,18 +215,18 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         to_log = {
             "loader_sizes": {
                 "pretrain": {
-                    "train_loader_size": len(ptrain),
-                    "val_loader_size": len(pval),
-                    "test_loader_size": len(ptest)
+                    "train_loader_batches": len(ptrain),
+                    "val_loader_batches": len(pval),
+                    "test_loader_batches": len(ptest)
                 },
                 "finetune": {
-                    "train_loader_size": len(ftrain),
-                    "val_loader_size": len(fval),
-                    "test_loader_size": len(ftest)
+                    "train_loader_batches": len(ftrain),
+                    "val_loader_batches": len(fval),
+                    "test_loader_batches": len(ftest)
                 },
             },
-            "pretrain_distributions": {key: len(indeces) for key, indeces in self.pretraining_subsets.items()},
-            "finetune_distributions": {key: len(indeces) for key, indeces in self.finetuning_subsets.items()},
+            "pretrain_distributions": self.pretraining_distributions,
+            "finetune_distributions": self.finetuning_distributions,
             "label_distributions": n_per_label,
             "tensorset_size": len(self.tensorset)
         }
@@ -233,6 +243,8 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         return output[order]
 
 if __name__ == "__main__":
+    pl.seed_everything(666)
+    from rich import print
     dataset = SelfSupervisedDataModule(
         batch_size=8, 
         nfft=2048, 
@@ -252,3 +264,4 @@ if __name__ == "__main__":
 
     dataset.pretrain()
     print(len(dataset.train_dataloader()))
+    print(dataset.loggables())
