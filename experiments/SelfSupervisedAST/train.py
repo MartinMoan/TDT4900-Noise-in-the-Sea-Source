@@ -13,7 +13,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 
 from experiments.SelfSupervisedAST.data import SelfSupervisedDataModule
-from experiments.SelfSupervisedAST.model import SSASTLightningWrapper, TrainingStage, SSASTModelSize
+from experiments.SelfSupervisedAST.model import SSASTLightningWrapper, TrainingStage, SSASTModelSize, MODEL_SAVE_PATH
 from tracking.datasettracker import track_dataset
 
 def main(hparams: argparse.Namespace) -> None:
@@ -88,18 +88,35 @@ def main(hparams: argparse.Namespace) -> None:
     logger.watch(model)
     
     # Perform unsupervised pre-training
-    dataset.pretrain()
-    model.pretrain()
+    jobid = os.environ.get("SLURM_JOBID", default=None)
+    if jobid is None:
+        if "idun" in os.uname().nodename:
+            raise Exception("Script started on HPC cluster, but no SLURM_JOBID could be found in environment variables. Cannot save/load model from path.")
+        else:
+            jobid = "MISSING_JOBID"
+    
+    jobdir = MODEL_SAVE_PATH.joinpath(str(jobid))
+    if not jobdir.exists():
+        jobdir.mkdir(parents=False, exist_ok=False)
+        
+    filename = f"ssast_pretrained.pth"
+    pretrained_model_path = jobdir.joinpath(filename)
+
+    if hparams.stage == "pretrain":
+        dataset.pretrain()
+        model.pretrain()
+    else:
+        dataset.finetune()
+        model.finetune(pretrained_model_path=pretrained_model_path)
 
     trainer.fit(model, datamodule=dataset)
     trainer.test(model, datamodule=dataset)
 
-    # Fine-tune pre-trained model to multi-label classification task
-    dataset.finetune()
-    model.finetune()
-
-    trainer.fit(model, datamodule=dataset)
-    trainer.test(model, datamodule=dataset)
+    if hparams.stage == "pretrain":
+        model.save_model(pretrained_model_path)
+    else:
+        finetuned_model_path = jobdir.joinpath("ssast_finetuned.pth")
+        model.save(finetuned_model_path)
 
 def float_or_int_argtype(value):
     try:
@@ -165,6 +182,7 @@ def init() -> argparse.Namespace:
     parser.add_argument("--overfit_batches", type=float_or_int_argtype, default=0.0, required=False, help="The PytorchLightning.Trainer(overfit_batches) argument value. If and integer is provided will use that number of batches to overfit on, if a float value is provided will use that fraction of the training set to overfit on. Usefull for debugging. Defaults to 0.0")
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
     parser.add_argument("--log_every_n_steps", type=int, default=50, help="The log interval in number of training steps. Will be passed to Trainer instantiation as PytorchLightning.Trainer(log_every_n_steps=args.log_every_n_steps)")
+    parser.add_argument("--stage", type=str, required=True, choices=["pretrain", "finetune"], help="Wheter to perform pretraining or finetuning")
 
     args = parser.parse_args()
     args.betas = tuple(args.betas)

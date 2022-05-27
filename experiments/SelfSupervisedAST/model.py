@@ -83,8 +83,8 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.val_pretext_batch_accuracy = Average()
         self.test_pretext_batch_accuracy = Average()
 
-        self.finetune_loss = torch.nn.BCELoss()
-        self.finetune_activation = torch.nn.Sigmoid()
+        self.finetune_loss = torch.nn.BCEWithLogitsLoss()
+        self.finetune_activation = lambda X: X # torch.nn.Sigmoid()
 
         self.val_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
         self.test_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
@@ -122,14 +122,15 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.stage = TrainingStage.pretrain.value
         self.model = self._instantiate_model(model_path=None)
 
-    def finetune(self) -> pathlib.Path:
+    def save_model(self, model_path: pathlib.Path) -> None:
+        torch.save(self.model.state_dict(), model_path)
+
+    def finetune(self, pretrained_model_path: Union[pathlib.Path, str] = None) -> None:
         """Sets model internal state to train for fine-tuning task"""
         # (Mostly) following guide for SSAST usage here: https://github.com/YuanGongND/ssast
-        model_path = MODEL_SAVE_PATH.joinpath(self.pretrained_model_filename)
-        torch.save(self.model.state_dict(), model_path)
+        self.save_model(pretrained_model_path)
         self.stage = TrainingStage.finetune.value # set staging before re-instantiating model, as staging determines how model is initialized
-        self.model = self._instantiate_model(model_path=model_path)
-        return model_path
+        self.model = self._instantiate_model(model_path=pretrained_model_path)
 
     @property
     def is_pretrain_stage(self) -> bool:
