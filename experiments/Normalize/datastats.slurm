@@ -17,4 +17,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-python datastats.py ./datastats.json -nfft 3200 -nmels 128 -hop_length 1280 -clip_overlap_seconds 4.0 -clip_duration_seconds 10.0
+python datastats.py -nfft 3200 -nmels 128 -hop_length 1280 -clip_overlap_seconds 4.0 -clip_duration_seconds 10.0
