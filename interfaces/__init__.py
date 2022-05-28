@@ -1,5 +1,6 @@
 from .IAsyncWorker import IAsyncWorker
 from .IAudioFileInfoProvider import IAudioFileInfoProvider
+from .IAugment import IAugment
 from .IFileListProvider import IFileListProvider
 from .ICachable import ICachable
 from .ICrossEvaluator import ICrossEvaluator
