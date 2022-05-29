@@ -1,16 +1,60 @@
 #!/usr/bin/env python3
 import sys
 import pathlib
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple, Iterable
 import git
 import torch
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
+
+import torch
+import torch.linalg
 import torchaudio.transforms as transforms
 from interfaces import IAugment
 from datasets.initdata import create_tensorset
+import matplotlib.pyplot as plt
+from sparse_image_warp import time_warp
+
+def show_spect(spects: Iterable[torch.Tensor]):
+    N = len(spects)
+    for n, spect in enumerate(spects):
+        plt.subplot(N, 1, n + 1)
+        plt.imshow(spect.squeeze(), aspect="auto", cmap="magma_r")
+    plt.show()
+
+class CombinedAugment(IAugment):
+    def __init__(self, *augments) -> None:
+        super().__init__()
+        self.augments = augments
+        self._branching = np.prod([augment.branching() for augment in augments]) if len(augments) > 0 else 0
+
+    def forward(self, spectrogram: torch.Tensor, label: torch.Tensor) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        queue = [(spectrogram, label)]
+        buffer = []
+        for i, augment in enumerate(self.augments):
+            while len(queue) > 0:
+                spect, label = queue.pop(0)
+                buffer += augment(spect, label)
+            queue = buffer
+            buffer = []
+        return queue
+        
+    def branching(self) -> int:
+        return self._branching
+
+class GaussianAugment(IAugment):
+    def __init__(self, mean: Optional[Union[float, int]] = 0.0, std: Optional[Union[float, int]] = 1.0) -> None:
+        super().__init__()
+        self.mean = mean
+        self.std = std
+
+    def forward(self, data: torch.Tensor, label: torch.Tensor) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        r = torch.normal(self.mean, self.std, size=data.size())
+        return [((data + r), label)]
+
+    def branching(self) -> int:
+        return 1
 
 class SpecAugment(IAugment):
     def __init__(
@@ -21,7 +65,9 @@ class SpecAugment(IAugment):
         max_time_mask_index: int = None,
         max_time_mask_seconds: float = None,
         max_mel_masks: int = None,
-        sr: Union[float, int] = None
+        sr: Union[float, int] = None,
+        time_warp_w_parameter: Optional[int] = 80, # 80 as per original SpecAugment paper.
+        # output_originals: Optional[bool] = False
         ) -> None:
         super().__init__()
         if max_time_mask_seconds is not None and sr is None:
@@ -29,7 +75,7 @@ class SpecAugment(IAugment):
         
         time_mask_param = None
         if max_time_mask_seconds is not None:
-            time_mask_param = int(max_time_mask_seconds * sr)
+            time_mask_param = int((max_time_mask_seconds * sr / hop_length) + 1)
         else:
             if max_time_mask_index is None:
                 raise ValueError(f"Neither max_time_mask_seconds nor max_time_mask_index was provided, cannot perform TimeMasking.")
@@ -39,31 +85,42 @@ class SpecAugment(IAugment):
         if max_mel_masks <= 0.0 or max_mel_masks > nmels:
             raise ValueError(f"max_mel_masks has invalid value, must be in range (0, nmels]")
 
-        self.stretch = transforms.TimeStretch(hop_length=hop_length, n_freq=nmels, fixed_rate=0.8)
+        self.time_warp_w_parameter = time_warp_w_parameter
         self.timemask = transforms.TimeMasking(time_mask_param=time_mask_param)
         self.freqmask = transforms.FrequencyMasking(freq_mask_param=max_mel_masks)
         self._branching = branching
+        # self.output_originals = output_originals
         
     def _augment(self, spectrogram: torch.Tensor) -> torch.Tensor:
-        print(spectrogram.dtype)
-        stretched = self.stretch(spectrogram)
-        
-        print(stretched.dtype)
+        stretched = time_warp(spectrogram, W=self.time_warp_w_parameter)
         timemasked = self.timemask(stretched)
         freqmasked = self.freqmask(timemasked)
+        assert freqmasked.shape == spectrogram.shape
         return freqmasked
 
-    def forward(self, spectrogram: torch.Tensor, label: torch.Tensor) -> List[torch.Tensor]:
-        if spectrogram.dim() == 3:
-            # (batch or 1, nmels, time_frames)
-            copies = [(self._augment(torch.clone(spectrogram)), torch.clone(label)) for i in range(self._branching)]
-        elif spectrogram.dim() == 2:
-            # (nmels, time_frames)
-            pass
+    def forward(self, normalized_spectrogram: torch.Tensor, label: torch.Tensor) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        """Input a single normalized, spectrogram corresponding and label, and outputs a list of N "virtual" examples. Where N == self.branching. The target is replicated equally (e.g. unchanged for all of the new samples)
+
+        Args:
+            normalized_spectrogram (torch.Tensor): A spectrogram normalized to have zero mean and unit deviation computed in relation to the training set. 
+            label (torch.Tensor): The target label(s) for the spectrogram.
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            List[torch.Tensor]: _description_
+        """
+        if normalized_spectrogram.dim() == 3:
+            # (batch, nmels, time_frames)
+            copies = [(self._augment(torch.clone(normalized_spectrogram)), torch.clone(label)) for i in range(self._branching)]
+            # return [(normalized_spectrogram, label), *copies] if self.output_originals else copies
+            return copies
         else: 
-            raise ValueError(f"Spectrogram has incorrect dimensions {spectrogram.shape}")
+            raise ValueError(f"Spectrogram has incorrect dimensions {normalized_spectrogram.shape}")
 
     def branching(self) -> int:
+        # return self._branching + 1 if self.output_originals else self._branching
         return self._branching
 
 if __name__ == "__main__":
@@ -72,6 +129,7 @@ if __name__ == "__main__":
     hop_length = 512
     clip_duration_seconds = 10.0
     clip_overlap_seconds = 4.0
+    branching = 3
 
     tensorset, balancer = create_tensorset(
         nfft = nfft,
@@ -82,15 +140,18 @@ if __name__ == "__main__":
     )
 
     s = SpecAugment(
-        branching=3,
+        branching=branching,
         nmels=nmels,
         hop_length=hop_length,
         max_time_mask_seconds=2.0,
-        max_mel_masks=nmels,
+        max_mel_masks=nmels // 8,
         sr=128000
     )
 
-    spect, label = torch.rand((1, 128, 2048)).float(), torch.randint(0, 2, (1, 2))
-    print(spect.dtype)
-    augmented = s(spect, label)
-    print(augmented)
+    augments = CombinedAugment(s, GaussianAugment())
+
+    for i in range(5):
+        spect, label = tensorset[i]
+        augmented = augments(spect, label)
+        spects = [spect for spect, _ in augmented]
+        show_spect([spect, *spects])

@@ -1,1 +1,15 @@
-{"min_x_value": -81.18595123291016, "max_x_value": 44.00306701660156, "min_y_value": 0.0, "max_y_value": 1.0, "mean_x": -47.55454635620117, "stddev_x": 13.585318565368652, "mean_y": 0.1501930207014084, "stddev_y": 0.03919844329357147, "tensorset_size": 469113, "computed_at": "2022.05.28T04:10:38.489495", "commit": "daa29b37ddbbb3d90a59426fe70a048240b6f560", "branch": "main", "node": "idun-02-02"}
+{
+    "min_x_value": -81.18595123291016,
+    "max_x_value": 44.00306701660156,
+    "min_y_value": 0.0,
+    "max_y_value": 1.0,
+    "mean_x": -47.55454635620117,
+    "stddev_x": 13.585318565368652,
+    "mean_y": 0.1501930207014084,
+    "stddev_y": 0.03919844329357147,
+    "tensorset_size": 469113,
+    "computed_at": "2022.05.28T04:10:38.489495",
+    "commit": "daa29b37ddbbb3d90a59426fe70a048240b6f560",
+    "branch": "main",
+    "node": "idun-02-02"
+}

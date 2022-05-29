@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import pathlib
-from typing import Mapping, Iterable, Optional
+from typing import Mapping, Iterable, Optional, Tuple, Union
 
 import git
 import torch
@@ -9,23 +9,55 @@ import torch.utils.data
 from sklearn.model_selection import train_test_split
 import numpy as np
 import pytorch_lightning as pl
+from torchvision.transforms import Normalize
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
-from interfaces import ITensorAudioDataset
+from interfaces import ITensorAudioDataset, IAugment
 from datasets.initdata import create_tensorset
+from datasets.augments.augment import CombinedAugment, SpecAugment
+import matplotlib.pyplot as plt
+
+
+def show_spect(spect: torch.Tensor):
+    plt.imshow(spect.squeeze(), aspect="auto", cmap="magma_r")
+    plt.show()    
+
+class AugmentedDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset: torch.utils.data.Dataset, augment: Optional[IAugment] = None) -> None:
+        super().__init__()
+        self.dataset = dataset
+        self.augment = augment
+
+    def __len__(self) -> int:
+        return len(self.dataset) * self.augment.branching() + len(self.dataset)
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        real_idx = index // (self.augment.branching() + 1)
+        ai = int(index % (self.augment.branching()))
+        if index % (self.augment.branching() + 1) == 0:
+            return self.dataset[real_idx]
+        else:
+            data, label = self.dataset[real_idx]
+            augmented = self.augment(data, label)
+            return augmented[ai]
 
 class SubsetDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int]) -> None:
+    def __init__(self, dataset: ITensorAudioDataset, subset: Iterable[int], transform: Optional[torch.nn.Module] = None) -> None:
         super().__init__()
         self.dataset = dataset
         self.subset = subset
+        self.transform = transform
 
     def __len__(self) -> int:
         return len(self.subset)
     
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.dataset[self.subset[index]]
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        data = self.dataset[self.subset[index]]
+        if self.transform is not None:
+            X, Y = data
+            return self.transform(X), Y
+        return data
 
 class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(
@@ -40,7 +72,12 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         train_transforms=None, 
         val_transforms=None, 
         test_transforms=None, 
-        dims=None):
+        dims=None,
+        specaugment: bool = True,
+        augment_branching: Optional[int] = 3,
+        max_time_mask_seconds: Optional[Union[float, int]] = 1.0,
+        sr: Optional[Union[float, int]] = 128000,
+        max_mel_masks: Optional[int] = None):
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
         
         self.batch_size = batch_size
@@ -61,6 +98,16 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.tensorset = tensorset
         self.balancer = balancer
         self._setup_done = False
+
+        self.specaugment_branching = augment_branching
+        self.max_time_mask_seconds = max_time_mask_seconds
+        self.max_mel_masks = max_mel_masks if max_mel_masks is not None else nmels // 8
+        self.sr = sr
+        self.use_specaugment = specaugment
+
+        # Computed using /code/experiments/Normalise/datastats.py
+        self.mean_db = -47.5545
+        self.std_db = 13.5853
 
     def setup(self, stage: Optional[str] = None) -> None:
         """
@@ -148,14 +195,38 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self.test_indeces = np.concatenate([test_part, self.remaining_indeces]) # This way label distribution is maintained for testset
         np.random.shuffle(self.test_indeces)
         # Train-, val- and testsets as subset datasets
-        self.train = SubsetDataset(dataset=self.tensorset, subset=self.train_indeces) # These are balanced
-        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces) # These are balanced
-        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces) # These are unbalanced
+
+        normalizer = Normalize(mean=self.mean_db, std=self.std_db, inplace=False)
+        # Normalization will be performed before SpecAugment
+        self._train_real_part = SubsetDataset(
+            dataset=self.tensorset, 
+            subset=self.train_indeces, 
+            transform=normalizer) # These are balanced
+
+        if self.use_specaugment:
+            # Only use specaugment for training dataset
+            self.train = AugmentedDataset(
+                self._train_real_part,
+                augment=SpecAugment(
+                    branching=self.specaugment_branching,
+                    nmels=self.nmels,
+                    hop_length=self.hop_length,
+                    max_time_mask_seconds=self.max_time_mask_seconds,
+                    sr=self.sr,
+                    max_mel_masks=self.max_mel_masks
+                )
+            )
+        else:
+            self.train = self._train_real_part
+
+        self.val = SubsetDataset(dataset=self.tensorset, subset=self.val_indeces, transform=normalizer) # These are balanced
+        self.test = SubsetDataset(dataset=self.tensorset, subset=self.test_indeces, transform=normalizer) # These are unbalanced
         dataloader_sizes = [len(self.train), len(self.val), len(self.test)]
         class_group_sizes = [len(indeces) for indeces in distributions.values()]
 
-        assert np.sum(dataloader_sizes) == np.sum(class_group_sizes)
-        assert np.sum(dataloader_sizes) == len(self.tensorset)
+        if not self.use_specaugment:
+            assert np.sum(dataloader_sizes) == np.sum(class_group_sizes)
+            assert np.sum(dataloader_sizes) == len(self.tensorset)
 
         all_indeces = np.concatenate([self.train_indeces, self.val_indeces, self.test_indeces], axis=0)
         unique, counts = np.unique(all_indeces, return_counts=True)
@@ -189,6 +260,8 @@ class ClippedGliderDataModule(pl.LightningDataModule):
             "label_distributions": n_per_label,
             "tensorset_size": len(self.tensorset)
         }
+        if self.use_specaugment:
+            to_log["specaugment_branching"] = self.specaugment_branching
         return to_log
 
     def get_tensor_audio_dataset(self):
@@ -201,11 +274,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         return output[order]
         
 if __name__ == "__main__":
+    nmels = 128
+    hop_length = 512
     dataset = ClippedGliderDataModule(
         batch_size=8,
-        nfft=1024,
-        nmels=128,
-        hop_length=512,
+        nfft=3200,
+        nmels=nmels,
+        hop_length=hop_length,
         clip_duration_seconds=10.0,
         clip_overlap_seconds=4.0
     )
@@ -214,3 +289,12 @@ if __name__ == "__main__":
     from rich import print
     print(dataset.loggables())
     print(dataset.class_names())
+
+    for i in range(8):
+        X, Y = dataset.train[i]
+        show_spect(X)
+
+    for i in range(8):
+        X, Y = dataset.test[i]
+        show_spect(X)
+        

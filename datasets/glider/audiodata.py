@@ -26,6 +26,8 @@ class AudioData:
     def samples(self) -> Iterable[float]:
         if not hasattr(self, "_samples"):
             samples, sr = librosa.load(self.filepath, sr=None, offset=self.clip_offset, duration=self.clip_duration)
+            # mean, std = (samples - np.mean(samples)), np.std(samples)
+            # self._samples = np.divide(mean, std, out=np.zeros_like(samples), where=(std!=0)) # Normalize waveform
             self._samples = samples
             self._sr = sr
         return self._samples
