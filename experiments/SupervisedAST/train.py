@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from gc import callbacks
 import os
 import sys
 import pathlib
@@ -8,6 +9,7 @@ import git
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -81,7 +83,8 @@ def main(hyperparams):
         limit_test_batches=hyperparams.limit_test_batches,
         limit_val_batches=hyperparams.limit_val_batches,
         default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
-        log_every_n_steps=hyperparams.log_every_n_steps
+        log_every_n_steps=hyperparams.log_every_n_steps,
+        callbacks=[EarlyStopping(monitor="val_loss", mode="min")]
     )
     logger.watch(model)    
     trainer.fit(model, datamodule=dataset)

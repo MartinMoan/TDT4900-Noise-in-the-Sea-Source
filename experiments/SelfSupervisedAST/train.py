@@ -8,6 +8,7 @@ import git
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
@@ -83,6 +84,7 @@ def main(hparams: argparse.Namespace) -> None:
         limit_val_batches=hparams.limit_val_batches,
         default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
         log_every_n_steps=hparams.log_every_n_steps,
+        callbacks=[EarlyStopping(monitor="val_loss", mode="min")]
     )
     
     logger.watch(model)
