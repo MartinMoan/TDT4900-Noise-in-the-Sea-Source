@@ -94,14 +94,14 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch # [batch_size, 1, n_mels, n_time_frames], [batch_size, 2]
         Yhat = self.forward(X) # [batch_size, 2]
         loss = self._lossfunc(Yhat, Y)
-        self.log("loss", loss)
+        self.log("train_loss", loss)
         return dict(loss=loss)
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        self.log("loss", loss)
+        self.log("val_loss", loss)
         self.val_metrics.update(Yhat.float(), Y.int())
         self.val_confusion_matrix.update(Yhat.float(), Y.int())
         return dict(loss=loss)
@@ -119,7 +119,7 @@ class AstLightningWrapper(pl.LightningModule):
         X, Y = batch
         Yhat = self.forward(X)
         loss = self._lossfunc(Yhat, Y)
-        self.log("loss", loss)
+        self.log("test_loss", loss)
 
         self.test_metrics.update(Yhat.float(), Y.int())
         self.test_confusion_matrix.update(Yhat.float(), Y.int())
