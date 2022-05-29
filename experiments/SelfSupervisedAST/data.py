@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from sklearn.model_selection import train_test_split
+from torchvision.transforms import Normalize
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 
@@ -63,6 +64,10 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         self.tensorset = tensorset
         self.balancer = balancer
         self._setup_done = False
+
+        # Computed using /code/experiments/Normalise/datastats.py
+        self.mean_db = -47.5545
+        self.std_db = 13.5853
         
     @property
     def is_pretrain_stage(self) -> bool:
@@ -97,10 +102,13 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         test_part = balanced_indeces[np.where(~np.isin(balanced_indeces, train_and_val_part))[0]] # The indeces from "balanced" that was not used for the train nor val sets
         test_indeces = np.concatenate([test_part, remaining_indeces]) # This way label distribution is maintained for testset
         np.random.shuffle(test_indeces)
+        
+        normalizer = Normalize(mean=self.mean_db, std=self.std_db, inplace=False)
+
         # Train-, val- and testsets as subset datasets
-        train = SubsetDataset(dataset=self.tensorset, subset=train_indeces) # These are balanced
-        val = SubsetDataset(dataset=self.tensorset, subset=val_indeces) # These are balanced
-        test = SubsetDataset(dataset=self.tensorset, subset=test_indeces) # These are unbalanced
+        train = SubsetDataset(dataset=self.tensorset, subset=train_indeces, transform=normalizer) # These are balanced
+        val = SubsetDataset(dataset=self.tensorset, subset=val_indeces, transform=normalizer) # These are balanced
+        test = SubsetDataset(dataset=self.tensorset, subset=test_indeces, transform=normalizer) # These are unbalanced
         s = {"test": test_indeces, "train": train_indeces, "val": val_indeces}
         dists = {subsetname: {key: len(np.where(np.isin(subset_indeces, indeces))[0]) for key, indeces in distributions.items()} for subsetname, subset_indeces in s.items()}
         return dict(train=train, test=test, val=val), dists
@@ -172,7 +180,7 @@ class SelfSupervisedDataModule(pl.LightningDataModule):
         # So we should not require that the total number of samples in all the dataloaders equal the length of the original dataset.
         # But that the total number of samples in all dataloaders be within a tolerance of T samples from the number of samples in the original dataset
         TOLERANCE = (self.batch_size - 1) * (len(self.pretraining_dataloaders.values()) + len(self.finetuning_dataloaders.values()))
-
+        
         assert np.abs(np.sum(n_in_ft_ttv) - np.sum(total_for_ft)) <= TOLERANCE
         assert np.abs(np.sum(n_in_pt_ttf) - np.sum(total_for_pt)) <= TOLERANCE
         assert np.abs(np.sum(total_for_ft) - exp_ft_part_of_tensorset) <= TOLERANCE
