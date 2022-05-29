@@ -213,7 +213,10 @@ class ClippedGliderDataModule(pl.LightningDataModule):
                     hop_length=self.hop_length,
                     max_time_mask_seconds=self.max_time_mask_seconds,
                     sr=self.sr,
-                    max_mel_masks=self.max_mel_masks
+                    max_mel_masks=self.max_mel_masks,
+                    max_fails=int(len(self._train_real_part) * 0.01) # if in total 1% of the augmentations fail, raise an exception.
+                    # torch.linalg.solve used in sparse_image_warp.py sometimes fail due to non-invertible singular matrix input.
+                    # Don't know why the input sometimes is singular. But a simple solution is to just perform time- and frequency masking without time-warping. This implementation will allow 1% of the time warp calls to fail before raising an exception
                 )
             )
         else:

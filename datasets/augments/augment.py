@@ -67,6 +67,7 @@ class SpecAugment(IAugment):
         max_mel_masks: int = None,
         sr: Union[float, int] = None,
         time_warp_w_parameter: Optional[int] = 80, # 80 as per original SpecAugment paper.
+        max_fails: Optional[int] = 80,
         # output_originals: Optional[bool] = False
         ) -> None:
         super().__init__()
@@ -89,14 +90,27 @@ class SpecAugment(IAugment):
         self.timemask = transforms.TimeMasking(time_mask_param=time_mask_param)
         self.freqmask = transforms.FrequencyMasking(freq_mask_param=max_mel_masks)
         self._branching = branching
+        self._max_atempts = max_fails
+        self._n_fails = 0
+        self._caught_exceptions = []
         # self.output_originals = output_originals
         
     def _augment(self, spectrogram: torch.Tensor) -> torch.Tensor:
-        stretched = time_warp(spectrogram, W=self.time_warp_w_parameter)
-        timemasked = self.timemask(stretched)
-        freqmasked = self.freqmask(timemasked)
-        assert freqmasked.shape == spectrogram.shape
-        return freqmasked
+        output = spectrogram
+        try:
+            # time_warp sometimes fails due to non-invertible input in internals
+            # dont know why, but will allow N number of time_warp tries to fail and in those cases just perform time- and frequency masking without time_warping
+            output = time_warp(spectrogram, W=self.time_warp_w_parameter)
+        except Exception as ex:
+            self._n_fails += 1
+            self._caught_exceptions.append(ex)
+            if self._n_fails >= self._max_atempts:
+                raise Exception(f"Too many exceptions has occured when performing specaugment: {str(self._caught_exceptions)}")
+            
+        output = self.timemask(output)
+        output = self.freqmask(output)
+        assert output.shape == spectrogram.shape
+        return output
 
     def forward(self, normalized_spectrogram: torch.Tensor, label: torch.Tensor) -> List[Tuple[torch.Tensor, torch.Tensor]]:
         """Input a single normalized, spectrogram corresponding and label, and outputs a list of N "virtual" examples. Where N == self.branching. The target is replicated equally (e.g. unchanged for all of the new samples)
