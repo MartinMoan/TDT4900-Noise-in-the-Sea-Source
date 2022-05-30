@@ -22,10 +22,14 @@ class Average(torchmetrics.Metric):
 
     def update(self, batch_accuracy: torch.Tensor, *args, **kwargs) -> None:
         self.sum += batch_accuracy
-        self.num_examples += batch_accuracy.shape[0]
+        self.num_examples += torch.tensor(1.0).type_as(batch_accuracy)
 
     def compute(self) -> torch.Tensor:
-        return torch.div(self.sum, self.num_examples)
+        MIN = torch.tensor(1.0).type_as(self.num_examples)
+        if self.num_examples > MIN:
+            return torch.div(self.sum, self.num_examples - MIN)
+        else:
+            return torch.div(self.sum, self.num_examples)
 
 class ExampleCounter(torchmetrics.Metric):
     def __init__(self, compute_on_step: Optional[bool] = None, **kwargs: Dict[str, Any]) -> None:

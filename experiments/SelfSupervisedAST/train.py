@@ -51,7 +51,8 @@ def main(hparams: argparse.Namespace) -> None:
         stage=TrainingStage.pretrain.value,
         num_workers=hparams.num_workers
     )
-    track_dataset(logger, dataset, n_examples=hparams.track_n_examples)
+    if hparams.stage == "pretrain":
+        track_dataset(logger, dataset, n_examples=hparams.track_n_examples)
 
     model = SSASTLightningWrapper(
         learning_rate=hparams.learning_rate,
@@ -115,6 +116,7 @@ def main(hparams: argparse.Namespace) -> None:
         dataset.pretrain()
         model.pretrain()
     else:
+        print(f"Starting finetuning using pretrained model loaded from: {pretrained_model_path}")
         dataset.finetune()
         model.finetune(pretrained_model_path=pretrained_model_path)
 
@@ -122,10 +124,14 @@ def main(hparams: argparse.Namespace) -> None:
     trainer.test(model, datamodule=dataset)
 
     if hparams.stage == "pretrain":
+        print("Completed pretraining.")
+        print(f"Saving pretrained model to: {pretrained_model_path}")
         model.save_model(pretrained_model_path)
     else:
         finetuned_model_path = jobdir.joinpath("ssast_finetuned.pth")
-        model.save(finetuned_model_path)
+        print(f"Completed finetuning.")
+        print(f"Saving finetuned model to: {finetuned_model_path}")
+        model.save_model(finetuned_model_path)
 
 def float_or_int_argtype(value):
     try:
