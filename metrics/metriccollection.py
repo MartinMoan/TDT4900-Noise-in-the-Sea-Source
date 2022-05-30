@@ -22,6 +22,7 @@ class Average(torchmetrics.Metric):
 
     def update(self, batch_accuracy: torch.Tensor, *args, **kwargs) -> None:
         self.sum += batch_accuracy
+        self.num_examples += batch_accuracy.shape[0]
 
     def compute(self) -> torch.Tensor:
         return torch.div(self.sum, self.num_examples)

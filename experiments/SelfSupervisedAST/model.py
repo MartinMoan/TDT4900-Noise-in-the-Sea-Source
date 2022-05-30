@@ -170,7 +170,7 @@ class SSASTLightningWrapper(pl.LightningModule):
         X, Y = self.reshape(batch)
         if self.is_pretrain_stage:
             loss, batch_accuracy = self.pretrain_forward(X)
-            self.log("val_loss", loss)
+            self.log("val_pretext_loss", loss)
             self.val_pretext_batch_accuracy.update(batch_accuracy=batch_accuracy)
             return dict(loss=loss)
         else:

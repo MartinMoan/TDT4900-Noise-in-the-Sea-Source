@@ -37,7 +37,8 @@ def main(hparams: argparse.Namespace) -> None:
         config=vars(hparams), # These are added to wandb.init call as part of the config,
         tags=hparams.tracking_tags,
         notes=hparams.tracking_notes,
-        name=hparams.tracking_name
+        name=hparams.tracking_name,
+        id=hparams.run_id
     )
 
     dataset = SelfSupervisedDataModule(
@@ -74,6 +75,7 @@ def main(hparams: argparse.Namespace) -> None:
     if not checkpoints_dir.exists():
         checkpoints_dir.mkdir(parents=False, exist_ok=False)
 
+    stopping_metric = "val_loss" if hparams.stage == "finetune" else "val_pretext_loss"
     trainer = pl.Trainer(
         accelerator=hparams.accelerator, 
         devices=hparams.num_gpus,
@@ -89,7 +91,7 @@ def main(hparams: argparse.Namespace) -> None:
         limit_val_batches=hparams.limit_val_batches,
         default_root_dir=str(config.LIGHTNING_CHECKPOINT_PATH.absolute()),
         log_every_n_steps=hparams.log_every_n_steps,
-        callbacks=[EarlyStopping(monitor="val_loss", mode="min")]
+        callbacks=[EarlyStopping(monitor=stopping_metric, mode="min")]
     )
     
     logger.watch(model)
@@ -189,7 +191,9 @@ def init() -> argparse.Namespace:
     parser.add_argument("--overfit_batches", type=float_or_int_argtype, default=0.0, required=False, help="The PytorchLightning.Trainer(overfit_batches) argument value. If and integer is provided will use that number of batches to overfit on, if a float value is provided will use that fraction of the training set to overfit on. Usefull for debugging. Defaults to 0.0")
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
     parser.add_argument("--log_every_n_steps", type=int, default=50, help="The log interval in number of training steps. Will be passed to Trainer instantiation as PytorchLightning.Trainer(log_every_n_steps=args.log_every_n_steps)")
-    parser.add_argument("--stage", type=str, required=True, choices=["pretrain", "finetune"], help="Wheter to perform pretraining or finetuning")
+    parser.add_argument("--stage", type=str, required=True, choices=[TrainingStage.pretrain.value, TrainingStage.finetune.value], help="Wheter to perform pretraining or finetuning")
+
+    parser.add_argument("--run_id", type=str, required=True, help="The wandb run id to use. This is needed to ensure pretraining and finetuning metrics are logged to the same wandb run.")
 
     args = parser.parse_args()
     args.betas = tuple(args.betas)
