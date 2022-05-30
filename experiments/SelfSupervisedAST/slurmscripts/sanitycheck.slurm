@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=42000
 #SBATCH --job-name="SSAST Sanity Check"
-#SBATCH --time=00-00:10:00
+#SBATCH --time=00-01:00:00
 #SBATCH --output="/cluster/home/martimoa/.nits/slurm/sanity.slurm-%j.out"
 
 module purge
