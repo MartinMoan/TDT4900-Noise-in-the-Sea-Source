@@ -18,6 +18,11 @@ from experiments.SelfSupervisedAST.model import SSASTLightningWrapper, TrainingS
 from tracking.datasettracker import track_dataset
 
 def main(hparams: argparse.Namespace) -> None:
+    print("--------------------------------")
+    print()
+    print(f"\t\t Starting {hparams.stage} stage of SSAST \t\t")
+    print()
+    print("--------------------------------")
     pl.seed_everything(hparams.seed_value)
     sr = 128000
     fdim = hparams.nmels
