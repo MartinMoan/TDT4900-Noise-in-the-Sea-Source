@@ -139,3 +139,30 @@ def create_tensorset(
     )
 
     return tensorset, balancer
+
+if __name__ == "__main__":
+    tensorset, balancer = create_tensorset(nfft=3200, nmels=128, hop_length=512, clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
+    
+    import numpy as np
+    import torch
+    indeces = np.random.choice(np.arange(len(tensorset)), size=10, replace=False)
+    values = []
+    for i in indeces:
+        print(i)
+        X, Y = tensorset[i]
+        values = np.concatenate([values, X.flatten().numpy()])
+    
+    import matplotlib.pyplot as plt
+
+    plt.hist(values, bins=100)
+    plt.show()
+
+
+    vals, mean, std = np.array(values), np.mean(values), np.std(values)
+    normalized_values = np.divide((vals - mean), std, out=np.zeros_like(vals), where=(std!=0))
+
+    print(np.mean(normalized_values), np.std(normalized_values))
+    plt.hist(normalized_values, bins=100)
+    plt.show()
+
+
