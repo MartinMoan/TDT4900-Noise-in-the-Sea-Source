@@ -77,7 +77,7 @@ class CustomDataLoader(torch.utils.data.DataLoader):
     def audiodata(self, index: int) -> AudioData:
         start = index * self._batch_size_hidden
         end = (index + 1) * self._batch_size_hidden
-        return [self.subset.audiodata[i] for i in range(start, end) if i < len(self.subset)]
+        return [self.subset.audiodata(i) for i in range(start, end) if i < len(self.subset)]
 
 class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(
