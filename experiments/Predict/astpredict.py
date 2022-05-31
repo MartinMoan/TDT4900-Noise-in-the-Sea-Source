@@ -34,6 +34,7 @@ def main(hyperparams):
     for i, (X, Y) in enumerate(test):
         Yhat = model.forward(X)
         print(i, Y, Yhat, test.audiodata(i))
+        
         if i > 10:
             exit()
 
