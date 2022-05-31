@@ -29,10 +29,11 @@ def main(hyperparams):
     dataset.setup()
     model = AstLightningWrapper.load_from_checkpoint(checkpoint_path=str(hyperparams.checkpoint.absolute()))
 
-    test = dataset.test_dataloader()
+    test = dataset.test
+
     for i, (X, Y) in enumerate(test):
         Yhat = model.forward(X)
-        print(i)
+        print(i, Y, Yhat, test.audiodata(i))
         if i > 10:
             exit()
 
