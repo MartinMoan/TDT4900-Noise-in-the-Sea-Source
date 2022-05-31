@@ -41,7 +41,6 @@ def main(hyperparams):
         Yhat = model.forward(X)
         data.append(
             dict(
-                spectrograms=X,
                 targets=Y,
                 preds=Yhat,
                 audiodata=test.audiodata(i)
@@ -53,8 +52,7 @@ def main(hyperparams):
         metadata=dict(
             started_at=started,
             **vars(hyperparams),
-            **{key: value for key, value in os.environ.items() if "SLURM" in key},
-            commit=GIT_REPO.head.commit
+            **{key: value for key, value in os.environ.items() if "SLURM" in key}
         ),
         data=data
     )
