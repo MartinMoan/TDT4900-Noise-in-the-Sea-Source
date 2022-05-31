@@ -46,7 +46,7 @@ def main(hyperparams):
                 audiodata=test.audiodata(i)
             )
         )
-        if i > 10:
+        if i > hyperparams.max_batches:
             break
     to_store = dict(
         metadata=dict(
@@ -77,6 +77,7 @@ def init():
     parser.add_argument("--seed_value", type=int, default=42, help="The value to pass to PytorchLightning.seed_everything() call")
     num_workers_default = int(os.environ.get("SLURM_CPUS_ON_NODE", default=1))
     parser.add_argument("--num_workers", type=int, default=num_workers_default, help="Number of dataloader workers to use")
+    parser.add_argument("--max_batches", type=int, default=1000, help="Maximum number of batches to predict for")
     args = parser.parse_args()
     args.checkpoint = pathlib.Path(args.checkpoint).resolve()
     args.output_dir = pathlib.Path(args.output_dir).resolve()

@@ -28,7 +28,7 @@ HOPLENGTH=1280
 NFFT=3200
 
 BATCH_SIZE=8
-
+MAX_BATCHES=1000
 CHECKPOINT=/cluster/home/martimoa/.nits/lightning/checkpoints/ast/noise-in-the-sea/17zzcovp/checkpoints/epoch=2-step=29.ckpt
 
-srun python astpredict.py $CHECKPOINT -batch_size $BATCH_SIZE -nmels $NMELS -nfft $NFFT -hop_length $HOPLENGTH -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP
+srun python astpredict.py $CHECKPOINT -batch_size $BATCH_SIZE -nmels $NMELS -nfft $NFFT -hop_length $HOPLENGTH -clip_duration_seconds $CLIP_DURATION -clip_overlap_seconds $CLIP_OVERLAP --max_batches $MAX_BATCHES
