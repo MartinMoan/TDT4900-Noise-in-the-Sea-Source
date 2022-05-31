@@ -4,6 +4,7 @@ import os
 import sys
 import pathlib
 
+from rich import print
 import git
 import torch
 import pytorch_lightning as pl
@@ -29,12 +30,11 @@ def main(hyperparams):
     dataset.setup()
     model = AstLightningWrapper.load_from_checkpoint(checkpoint_path=str(hyperparams.checkpoint.absolute()))
 
-    test = dataset.test
+    test = dataset.test_dataloader()
 
     for i, (X, Y) in enumerate(test):
         Yhat = model.forward(X)
         print(i, Y, Yhat, test.audiodata(i))
-
         if i > 10:
             exit()
 
