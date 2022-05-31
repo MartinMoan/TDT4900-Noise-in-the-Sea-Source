@@ -3,18 +3,22 @@ import argparse
 import os
 import sys
 import pathlib
+from datetime import datetime
+import pickle
 
 from rich import print
 import git
-import torch
 import pytorch_lightning as pl
 
-sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-
-from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
+GIT_REPO = git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True)
+sys.path.insert(0, str(pathlib.Path(GIT_REPO.working_dir)))
+import config
+from experiments.SupervisedAST.model import AstLightningWrapper
 from datasets.datamodule import ClippedGliderDataModule
 
 def main(hyperparams):
+    started = datetime.now()
+
     pl.seed_everything(hyperparams.seed_value)
     print("Received hyperparams:", vars(hyperparams))
 
@@ -31,18 +35,41 @@ def main(hyperparams):
     model = AstLightningWrapper.load_from_checkpoint(checkpoint_path=str(hyperparams.checkpoint.absolute()))
 
     test = dataset.test_dataloader()
-
+    data = []
     for i, (X, Y) in enumerate(test):
+        print(i, len(test))
         Yhat = model.forward(X)
-        print(i, Y, Yhat, test.audiodata(i))
+        data.append(
+            dict(
+                spectrograms=X,
+                targets=Y,
+                preds=Yhat,
+                audiodata=test.audiodata(i)
+            )
+        )
         if i > 10:
-            exit()
+            break
+    to_store = dict(
+        metadata=dict(
+            started_at=started,
+            **vars(hyperparams),
+            **{key: value for key, value in os.environ if "SLURM" in key},
+            commit=GIT_REPO.head.commit
+        ),
+        data=data
+    )
+    output_filename = f"predictions_{started.strftime(config.DATETIME_FORMAT)}"
+    output = hyperparams.output_dir.joinpath(output_filename)
+    print(f"Pickling predictions and audiofile information to: {output.absolute()}")
+    with open(output, "wb") as file:
+        pickle.dump(to_store, file)
 
 def init():
     parser = argparse.ArgumentParser(
         description="Training script to perform supervised training of Audio Spectrogram Transformer (AST) on the GLIDER dataset."
     )
     parser.add_argument("checkpoint", type=pathlib.Path, help="Path to a pytorch lightning .ckpt file")
+    parser.add_argument("--output_dir", type=pathlib.Path, default=pathlib.Path.cwd(), help="Directory of output predictions binary file")
     parser.add_argument("-batch_size", type=int, required=True, help="The batch size to use during training, testing and evaluation")
     parser.add_argument("-nmels", type=int, required=True, help="The number of Mel-bands/filters to use when computing the Mel-spectrogram from the raw audio data. This argument determines the 'vertical' dimensions of the spectrograms.")
     parser.add_argument("-nfft", type=int, required=True, help="The size of window in number of samples to compute the FFT over during the Short-Time Fourier Transform algorithm. A larger window yields better frequency determination, but degrades time determination, and vice-versa.")
@@ -54,6 +81,7 @@ def init():
     parser.add_argument("--num_workers", type=int, default=num_workers_default, help="Number of dataloader workers to use")
     args = parser.parse_args()
     args.checkpoint = pathlib.Path(args.checkpoint).resolve()
+    args.output_dir = pathlib.Path(args.output_dir).resolve()
     return args
 
 if __name__ == "__main__":
