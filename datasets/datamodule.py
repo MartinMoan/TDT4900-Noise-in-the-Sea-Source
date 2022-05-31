@@ -15,6 +15,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 
 from interfaces import ITensorAudioDataset, IAugment
 from datasets.initdata import create_tensorset
+from datasets.glider.audiodata import AudioData
 from datasets.augments.augment import CombinedAugment, SpecAugment
 import matplotlib.pyplot as plt
 
@@ -58,6 +59,20 @@ class SubsetDataset(torch.utils.data.Dataset):
             X, Y = data
             return self.transform(X), Y
         return data
+
+    def audiodata(self, index: int) -> AudioData:
+        return self.dataset.audiodata(self.subset[index])
+
+class CustomDataLoader(torch.utils.data.DataLoader):
+    def __init__(
+        self, 
+        dataset: SubsetDataset, 
+        *args, **kwargs):
+        super().__init__(dataset, *args, **kwargs)
+        self.subset = dataset
+
+    def audiodata(self, index: int) -> AudioData:
+        return self.subset.audiodata[index]
 
 class ClippedGliderDataModule(pl.LightningDataModule):
     def __init__(
@@ -239,13 +254,13 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         self._setup_done = True
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=self.num_workers)
+        return CustomDataLoader(dataset=self.train, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=self.num_workers)
+        return CustomDataLoader(dataset=self.val, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=self.num_workers)
+        return CustomDataLoader(dataset=self.test, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def loggables(self) -> Mapping[str, any]:
         if not self._setup_done:
@@ -278,14 +293,15 @@ class ClippedGliderDataModule(pl.LightningDataModule):
         
 if __name__ == "__main__":
     nmels = 128
-    hop_length = 512
+    hop_length = 1280
     dataset = ClippedGliderDataModule(
         batch_size=8,
         nfft=3200,
         nmels=nmels,
         hop_length=hop_length,
-        clip_duration_seconds=10.0,
-        clip_overlap_seconds=4.0
+        clip_duration_seconds=30.0,
+        clip_overlap_seconds=5.0,
+        specaugment=True
     )
     print(dataset)
     dataset.setup()
@@ -293,11 +309,5 @@ if __name__ == "__main__":
     print(dataset.loggables())
     print(dataset.class_names())
 
-    for i in range(8):
-        X, Y = dataset.train[i]
-        show_spect(X)
-
-    for i in range(8):
-        X, Y = dataset.test[i]
-        show_spect(X)
-        
+    for i, batch in enumerate(dataset.train):
+        print(i, len(dataset.train))
