@@ -83,8 +83,8 @@ class SSASTLightningWrapper(pl.LightningModule):
         self.val_pretext_batch_accuracy = Average()
         self.test_pretext_batch_accuracy = Average()
 
-        self.finetune_loss = torch.nn.BCEWithLogitsLoss()
-        self.finetune_activation = lambda X: X # torch.nn.Sigmoid()
+        self.finetune_loss = torch.nn.BCELoss()
+        self.finetune_activation = torch.nn.Sigmoid()
 
         self.val_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
         self.test_finetune_metrics = GliderMetrics(num_classes=self.n_model_outputs, class_names=self.class_names)
