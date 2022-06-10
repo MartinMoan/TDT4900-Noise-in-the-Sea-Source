@@ -26,7 +26,6 @@ from datasets.binjob import Binworker
 class CachedClippedDataset(ICustomDataset):
     def __new__(
         cls, 
-        worker: IAsyncWorker, 
         clip_duration_seconds: float = None, 
         clip_overlap_seconds: float = None, 
         clip_nsamples: int = None, 
@@ -40,7 +39,7 @@ class CachedClippedDataset(ICustomDataset):
             clip_nsamples=clip_nsamples,
             overlap_nsamples=overlap_nsamples,
         )
-        init_kwargs = {"worker": worker, **hashable_arguments}
+        init_kwargs = {**hashable_arguments}
         return cacher.cache(ClippedDataset, init_args=(), init_kwargs=init_kwargs, hashable_arguments=hashable_arguments, force_recache=force_recache)
 
 class ClippedDataset(ICustomDataset):
@@ -64,22 +63,6 @@ class ClippedDataset(ICustomDataset):
 
         self._preprocess_tabular_data()
 
-        if config.VIRTUAL_DATASET_LOADING:
-            warnings.warn("The environment variable VIRTUAL_DATASET_LOADING is set to True, meaning that the GLIDER dataset loading class will only simulate loading datasets from disk. Ensure that this variable is not set during training or inference, as it is only intended to be used during local development.")
-            import socket
-            if "idun-login" in socket.gethostname():
-                raise Exception(f"GLIDER detected that the current hostname ({socket.gethostname()}) seems to correspond to the NTNU Idun computing cluster, while the VIRTUAL_DATASET_LOADING environment variable was set to True. This variable is only intended for local development and can cause unexpected results. This exception is raised to ensure that logs and model parameters are not overwritten using invalid/simulated data.")
-
-            labeled_audiofiles = []
-            for labelidx in self._labels.index:
-                label = self._labels.iloc[labelidx]
-                labeled = self._audiofiles[(self._audiofiles.start_time <= label.end_time) & (self._audiofiles.end_time >= label.start_time)]
-                if len(labeled) > 0:
-                    labeled_audiofiles += labeled.index.values.tolist()
-            
-            self._audiofiles = self._audiofiles.loc[labeled_audiofiles, :]
-            self._audiofiles = self._audiofiles.iloc[:50]
-
         sampling_rate = self._audiofiles.sampling_rate.max()
         if clip_duration_seconds is None and clip_nsamples is not None:
             self._clip_duration = clip_nsamples / sampling_rate
@@ -98,6 +81,7 @@ class ClippedDataset(ICustomDataset):
         self._classes = {label_values[idx]: idx for idx in range(len(label_values))}
 
         self._verify_files()
+        print(self._audiofiles.shape, len(self._audiofiles.filename.unique()))
 
     def _verify(self, virtual_indeces: Iterable[int], start: int, stop: int) -> Tuple[Iterable[int], Iterable[int]]:
         valid_indeces = []
@@ -222,10 +206,11 @@ class ClippedDataset(ICustomDataset):
 if __name__ == "__main__":
     from datasets.binjob import Binworker
 
-    dataset = CachedClippedDataset(
+    dataset = ClippedDataset(
         clip_duration_seconds=10.0, 
         clip_overlap_seconds=4.0
     )
+    print(len(dataset))
     
         
         

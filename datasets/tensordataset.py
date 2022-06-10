@@ -2,7 +2,7 @@
 import sys
 import pathlib
 import warnings
-from typing import Mapping, Union
+from typing import Mapping, Union, Optional
 import git
 import torch
 import numpy as np
@@ -70,7 +70,8 @@ class TensorAudioDataset(ITensorAudioDataset):
         self, 
         dataset: ICustomDataset, 
         label_accessor: ILabelAccessor, 
-        feature_accessor: IFeatureAccessor) -> None:
+        feature_accessor: IFeatureAccessor,
+        max_errors: Optional[Union[float, int]] = 0.01) -> None:
 
         if not isinstance(dataset, ICustomDataset):
             raise TypeError(f"Argument dataset has invalid type. Expected {ICustomDataset} but received {type(dataset)}")
@@ -82,12 +83,17 @@ class TensorAudioDataset(ITensorAudioDataset):
         self._dataset = dataset
         self._label_accessor = label_accessor
         self._feature_accessor = feature_accessor
+        self._max_errors = max_errors if isinstance(max_errors, int) else int(max_errors * len(self._dataset))
+        self._errors = []
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         audio_data = self._dataset[index]
         try:
             features = torch.nan_to_num(self._feature_accessor(audio_data), nan=0, posinf=10, neginf=-10)
         except Exception as ex:
+            self._errors.append((index, audio_data, ex))
+            if len(self._errors) >= self._max_errors:
+                raise Exception(f"Too many exceptions! {self.__class__.__name__} will accept {self._max_errors} exceptions, but so far {len(self._errors)} has been thrown: {self._errors}")
             nextclip = -1
             if index < len(self) - 1:
                 nextclip = index + 1
@@ -131,19 +137,21 @@ class TensorAudioDataset(ITensorAudioDataset):
         return self._dataset[index]
 
 if __name__ == "__main__":
-    from datasets.glider.clipping import ClippedDataset
+    from datasets.glider.clipping import ClippedDataset, CachedClippedDataset
     from rich import print
-    clips = ClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=2.0)
+    from tqdm import tqdm
+    clips = CachedClippedDataset(clip_duration_seconds=10.0, clip_overlap_seconds=4.0)
 
-    dataset = TensorAudioDataset(dataset=clips, label_accessor = BinaryLabelAccessor(), feature_accessor = MelSpectrogramFeatureAccessor())
-    _indeces = [40414, 146869, 78997, 162159, 174450, 75375, 80172, 11896, 45205, 212519, 75177, 228142, 88527, 128200, 153709, 117738, 50659, 10586, 122117, 180314, 81489, 58191, 94471, 82012, 199068, 244187, 232152, 233318, 23947, 182991, 635, 215504, 64169, 226989, 12302, 136440, 244239, 28445, 46475, 120555, 80150, 163527, 246924, 135159, 188942, 228160, 106653, 36583, 53382, 34099, 36762, 146038, 83628, 140742, 231528, 67522, 93338, 248063, 87903, 113978, 55655, 88584, 126586, 131694]
-    indeces = [idx for idx in _indeces if idx < len(dataset)]
+    dataset = TensorAudioDataset(
+        dataset=clips, 
+        label_accessor=BinaryLabelAccessor(), 
+        feature_accessor=MelSpectrogramFeatureAccessor(
+            n_mels=128,
+            n_fft=3200,
+            hop_length=1280
+        )
+    )
     print(len(dataset))
-    for index in indeces:
-        samples = clips[index].samples
-        print(samples.shape)
-        i, X, Y = dataset[index]
-        print(X.shape)
-        _n_mels = 128
-        _hop_length = 512
+    for index in tqdm(range(len(dataset))):
+        X, Y = dataset[index]
         
