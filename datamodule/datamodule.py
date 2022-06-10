@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import argparse
+from copy import copy, deepcopy
 import pickle
 from dataclasses import dataclass
 import datetime
@@ -142,9 +144,9 @@ def get_audiofile_information(audiofiles: Iterable[pathlib.Path], processes: int
         tasks = []
         print("Initializing jobs...")
         for i in range(processes + 1):
-            limit = int(i*chunksize)
+            start = int(i*chunksize)
             stop = min(max, int((i+1)*chunksize))
-            task = pool.apply_async(chunk, args=(filename_info[limit:stop], get_info, i))
+            task = pool.apply_async(chunk, args=(filename_info[start:stop], get_info, i))
             tasks.append(task)
         
         print(f"Performing {len(tasks)} jobs...")
@@ -158,7 +160,7 @@ def get_metadata(audiofiles: Iterable[pathlib.Path], cache_dir: Optional[pathlib
         cache_dir = pathlib.Path(__file__).parent.joinpath("metadata")
         if not cache_dir.exists():
             cache_dir.mkdir(parents=True, exist_ok=False)
-    
+
     sorted_audiofiles = np.sort(audiofiles, axis=0)
     hasher = hashlib.sha256()
     hasher.update(repr(sorted_audiofiles).encode())
@@ -168,6 +170,7 @@ def get_metadata(audiofiles: Iterable[pathlib.Path], cache_dir: Optional[pathlib
     cached_metadata_filepaths = [path for path in cache_dir.glob("**/*.pickle")]
 
     if pickle_path in cached_metadata_filepaths:
+        print(f"Loading from cache {pickle_path}")
         with open(pickle_path, "rb") as binary_file:
             return pickle.load(binary_file)
     else:
@@ -176,38 +179,135 @@ def get_metadata(audiofiles: Iterable[pathlib.Path], cache_dir: Optional[pathlib
             pickle.dump(output, binary_file)
             return output
 
-def clip()
-
 class GLIDERDatamodule(pl.LightningDataModule):
     def __init__(
         self, 
-        audiofile_directory: Union[Iterable[Union[pathlib.Path, str]], Union[pathlib.Path, str]],
+        recordings: pd.DataFrame,
         labels: pd.DataFrame,
         clip_duration: Optional[Union[float, int]] = None,
-        clip_overlap: Optional[Union[float, int]] = None,
+        clip_overlap: Optional[Union[float, int]] = 0.0,
         verbose: bool = False,
         train_transforms=None, 
         val_transforms=None, 
         test_transforms=None, 
         dims=None):
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
-
-        self.audiofile_directories = ensure_dirs_exists(typecheck_audiofile_directory(audiofile_directory))
+        self.recordings = recordings # TODO: Ensure correct columns and types
         self.labels, self.class_values = ensure_dataframe_columns(labels)
-        self.filepaths = get_audiofiles(self.audiofile_directories, verbose=verbose)
-        self.recordings = get_metadata(self.filepaths)
+        print(len(self.recordings))
+        if len(self.recordings.sample_rate.unique()) != 1:
+            raise Exception(f"There are differing sampling rates used among the recordings. Found sampling rates: {self.recordings.sample_rate.unique()}")
+        self.sample_rate = self.recordings.sample_rate.max()
         self.clip_duration = clip_duration
         self.clip_overlap = clip_overlap
+        if self.clipping_enabled:
+            self.clips = self.get_clips()
+            self.apply_labels(self.clips)
 
-    def clips():
+    @property
+    def clipping_enabled(self) -> bool:
+        return self.clip_duration is not None
 
+    def apply_labels(self, audio_df: pd.DataFrame) -> pd.DataFrame:
+        print(audio_df.shape)
+        for i in range(len(self.labels)):
+            label = self.labels.iloc[i]
+            audio = audio_df[(audio_df.start_time <= label.end_time) & (audio_df.end_time >= label.start_time)]
+            if len(audio) > 0:
+                audio_df.loc[audio.index, "source_class"] = label.source_class
+                audio_df.loc[audio.index, "metadata"] = label.metadata
+                audio_df.loc[audio.index, "source_class_specific"] = label.source_class_specific
+        print(audio_df.shape)
+        print(audio_df.source_class.unique())
+        # s = audio_df[(~pd.isna(audio_df.source_class))]
+        # print(repr(s[['filepath', 'source_class', 'metadata', 'source_class_specific']]))
+        return audio_df
+        # for i in range(len(audio_df)):
+        #     audio = audio_df.iloc[i]
+        #     labels = self.labels[(self.labels.start_time <= audio.) & (self.labels.end_time >= audio.end_time)]
+        #     if len(labels) > 0:
+        #         print(labels, audio)
 
+    def get_clips(self):
+        samples_per_clip = int(self.clip_duration * self.sample_rate)
+        overlapping_samples = int(self.clip_overlap * self.sample_rate)
+        clip_data = []
+        for i in tqdm(range(len(self.recordings))):
+            recording = self.recordings.iloc[i]
+            num_clips_in_file = int((recording.num_samples - overlapping_samples) // (samples_per_clip - overlapping_samples))
+            for j in range(num_clips_in_file):
+                offset = (samples_per_clip - overlapping_samples) * j / self.sample_rate # offset in seconds
+                clip = {col: recording[col] for col in self.recordings.columns}
+                clip["file_start_time"] = clip["start_time"]
+                clip["file_end_time"] = clip["end_time"]
+                clip["start_time"] = recording.start_time + datetime.timedelta(seconds=offset)
+                clip["end_time"] = clip["start_time"] + datetime.timedelta(seconds=self.clip_duration)
+                clip["offset"] = offset
+                clip_data.append(clip)
+        return pd.DataFrame(data=clip_data)
+
+    def __len__(self) -> int:
+        if self.clipping_enabled:
+            return len(self.clips)
+        return len(self.recordings)
+
+    def __getitem__(self, index: int) -> AudioData:
+        if self.clipping_enabled:
+            file_index, offset_seconds = self.clips[index]
+            recording = self.recordings[file_index]
+            samples, sr = librosa.load(recording.filepath, sr=None, offset=offset_seconds, duration=self.clip_duration)
+        else:
+            recording = self.recordings[index]
+
+def init():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", action="store_true")
+    subparsers = parser.add_subparsers(dest="command")
+    find = subparsers.add_parser("find", help="Find audiodfiles recursively, get their metadata such as start_time, end_time and sampling rate, and store to csv")
+    find.add_argument("root_path", type=pathlib.Path, help="Root path to search for .wav files from")
+    find.add_argument("-o", "--output", type=pathlib.Path, help="Output path for audiofile csv", default=pathlib.Path(__file__).parent.joinpath("metadata.csv"))
+    find.add_argument("-p", "--processes", type=int, default=multiprocessing.cpu_count(), help="Number of processes to use when reading file metadata")
+    find.add_argument("-l", "--limit", type=int, help="Limit number of files to parse, usefull for debugging")
+    
+    load = subparsers.add_parser("load", help="Load AudioDataset using provided audiofile and label CSVs")
+    load.add_argument("-l", "--labels", type=pathlib.Path, help="Path to labels csv")
+    load.add_argument("-a", "--audiofiles", type=pathlib.Path, help="Path to audiofile metadata csv")
+
+    args = parser.parse_args()
+    if args.command is None:
+        raise ValueError("Missing command argument")
+    return args
+
+def preload(args):
+    path = args.root_path.resolve()
+    if not path.exists():
+        raise ValueError(f"Path {path} does not exists")
+    if not path.is_dir():
+        raise ValueError(f"Path {path} is not a directory.")
+
+    output_path = args.output.resolve()
+    if output_path.suffix != ".csv":
+        raise ValueError(f"Output path {output_path} is not .csv file")
+
+    filepaths = get_audiofiles([path], verbose=args.verbose)
+    print(f"Found {len(filepaths)} .wav files in local path: {path}")
+    recordings = get_audiofile_information(audiofiles=filepaths, processes=args.processes, limit=args.limit)
+    print(recordings)
+    print(f"Saving audiofiles metadata to: {output_path}")
+    recordings.to_csv(output_path, index=False)
 
 if __name__ == "__main__":
-    labels = pd.read_csv(config.PARSED_LABELS_PATH)
-    data = GLIDERDatamodule(
-        audiofile_directory=config.DATASET_DIRECTORY,
-        labels=labels,
-        verbose=True
-    )
+    args = init()
+    if args.command == "find":
+        preload(args)
+    elif args.command == "load":
+        labels = pd.read_csv(args.labels)
+        recordings = pd.read_csv(args.audiofiles)
+        data = GLIDERDatamodule(
+            audiofile_directory=config.DATASET_DIRECTORY,
+            labels=labels,
+            verbose=True,
+            clip_duration=10.0,
+            clip_overlap=0.0
+        )
 
