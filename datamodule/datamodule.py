@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from copy import copy, deepcopy
+from email.mime import audio
 import pickle
 from dataclasses import dataclass
 import datetime
@@ -8,11 +9,12 @@ import multiprocessing
 import sys
 import pathlib
 from tabnanny import filename_only
-from typing import Mapping, Iterable, Optional, Tuple, Union, Dict, List
+from typing import Mapping, Iterable, Optional, Tuple, Union, Dict, List, Any
 from multiprocessing.pool import ThreadPool
 import hashlib
 
 import git
+from importlib_metadata import distribution
 import torch
 import re
 import torch.utils.data
@@ -20,6 +22,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import pandas as pd
 from rich import print
+import torchaudio
 from tqdm import tqdm
 import pytorch_lightning as pl
 from torchvision.transforms import Normalize
@@ -63,7 +66,7 @@ def ensure_dirs_exists(directories: Iterable[Union[pathlib.Path, str]]) -> None:
     return directories
 
 def ensure_dataframe_columns(df: pd.DataFrame) -> None:    
-    required_columns = "source_class", "start_time", "end_time"
+    required_columns = ["source_class", "start_time", "end_time"]
     for column in required_columns:
         if column not in df.columns:
             raise Exception(f"labels DataFrame is missing required column {column}")
@@ -179,6 +182,15 @@ def get_metadata(audiofiles: Iterable[pathlib.Path], cache_dir: Optional[pathlib
             pickle.dump(output, binary_file)
             return output
 
+def ensure_recording_columns(recordings_df):
+    required_columns = ["filepath", "start_time", "end_time"]
+    for column in required_columns:
+        if column not in recordings_df.columns:
+            raise Exception(f"labels DataFrame is missing required column {column}")
+    recordings_df.start_time = pd.to_datetime(recordings_df.start_time, errors="coerce")
+    recordings_df.end_time = pd.to_datetime(recordings_df.end_time, errors="coerce")
+    return recordings_df
+
 class GLIDERDatamodule(pl.LightningDataModule):
     def __init__(
         self, 
@@ -192,41 +204,62 @@ class GLIDERDatamodule(pl.LightningDataModule):
         test_transforms=None, 
         dims=None):
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
-        self.recordings = recordings # TODO: Ensure correct columns and types
+
+        self.recordings = ensure_recording_columns(recordings)
+        duplicated = self.recordings.duplicated(subset=["filepath"])
+        print(f"Found {len(self.recordings[duplicated])} duplicate files, dropping duplicates")
+        self.recordings = self.recordings.drop_duplicates(subset=["filepath"], keep="first", inplace=False, ignore_index=True)
+        print(self.recordings["duration_seconds"].sum() / (clip_duration - clip_overlap))
+
         self.labels, self.class_values = ensure_dataframe_columns(labels)
-        print(len(self.recordings))
         if len(self.recordings.sample_rate.unique()) != 1:
             raise Exception(f"There are differing sampling rates used among the recordings. Found sampling rates: {self.recordings.sample_rate.unique()}")
         self.sample_rate = self.recordings.sample_rate.max()
         self.clip_duration = clip_duration
         self.clip_overlap = clip_overlap
+        self._positive_label_value = True
+        self._negative_label_value = False
         if self.clipping_enabled:
             self.clips = self.get_clips()
-            self.apply_labels(self.clips)
+            self.labeled_clips = self.apply_labels(self.clips)
+        else:
+            self.labeled_recordings = self.apply_labels(self.recordings, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
+        
+        self.label_distributions = self.group_by_labels(self.audio)
+        self.train_part, self.val_part, self.test_part = 0.64, 0.16, 0.2
+
+    def setup(self, stage: Optional[str] = None):
+        subsets = [distribution["subset"] for distribution in self.label_distributions]
+        d = [len(distribution["subset"]) for distribution in self.label_distributions]
+        n_in_smallest_subset = np.min(d)
+        print(n_in_smallest_subset)
+        print(d)
+        print(len(self.audio))
+        print(np.sum(d))
+        n_for_training = int(n_in_smallest_subset * len(self.class_values) * self.train_part)
+        n_for_training_per_class = int(n_in_smallest_subset * self.train_part)
+        training_clips = pd.concat([subset.iloc[:n_for_training_per_class] for subset in subsets])
+        print(training_clips)
+        
+
+    @property
+    def audio(self) -> pd.DataFrame:
+        # return self.clips if self.clipping_enabled else self.recordings
+        return self.labeled_clips if self.clipping_enabled else self.labeled_recordings
 
     @property
     def clipping_enabled(self) -> bool:
         return self.clip_duration is not None
 
-    def apply_labels(self, audio_df: pd.DataFrame) -> pd.DataFrame:
-        print(audio_df.shape)
+    def apply_labels(self, audio_df: pd.DataFrame, positive_value: Any = True, negative_value: Any = False) -> pd.DataFrame:
+        for cls in self.class_values:
+            audio_df[cls] = negative_value
         for i in range(len(self.labels)):
             label = self.labels.iloc[i]
             audio = audio_df[(audio_df.start_time <= label.end_time) & (audio_df.end_time >= label.start_time)]
             if len(audio) > 0:
-                audio_df.loc[audio.index, "source_class"] = label.source_class
-                audio_df.loc[audio.index, "metadata"] = label.metadata
-                audio_df.loc[audio.index, "source_class_specific"] = label.source_class_specific
-        print(audio_df.shape)
-        print(audio_df.source_class.unique())
-        # s = audio_df[(~pd.isna(audio_df.source_class))]
-        # print(repr(s[['filepath', 'source_class', 'metadata', 'source_class_specific']]))
+                audio_df.loc[audio.index, label.source_class] = positive_value
         return audio_df
-        # for i in range(len(audio_df)):
-        #     audio = audio_df.iloc[i]
-        #     labels = self.labels[(self.labels.start_time <= audio.) & (self.labels.end_time >= audio.end_time)]
-        #     if len(labels) > 0:
-        #         print(labels, audio)
 
     def get_clips(self):
         samples_per_clip = int(self.clip_duration * self.sample_rate)
@@ -240,8 +273,10 @@ class GLIDERDatamodule(pl.LightningDataModule):
                 clip = {col: recording[col] for col in self.recordings.columns}
                 clip["file_start_time"] = clip["start_time"]
                 clip["file_end_time"] = clip["end_time"]
+                clip["file_duration_seconds"] = clip["duration_seconds"]
                 clip["start_time"] = recording.start_time + datetime.timedelta(seconds=offset)
                 clip["end_time"] = clip["start_time"] + datetime.timedelta(seconds=self.clip_duration)
+                clip["duration_seconds"] = (clip["end_time"] - clip["start_time"]).seconds
                 clip["offset"] = offset
                 clip_data.append(clip)
         return pd.DataFrame(data=clip_data)
@@ -251,13 +286,50 @@ class GLIDERDatamodule(pl.LightningDataModule):
             return len(self.clips)
         return len(self.recordings)
 
-    def __getitem__(self, index: int) -> AudioData:
+    def _read_params(self, index: int) -> Tuple[pd.DataFrame, float]:
         if self.clipping_enabled:
             file_index, offset_seconds = self.clips[index]
             recording = self.recordings[file_index]
-            samples, sr = librosa.load(recording.filepath, sr=None, offset=offset_seconds, duration=self.clip_duration)
+            return recording, offset_seconds
         else:
+            file_index, offset_seconds = index, 0
             recording = self.recordings[index]
+            return recording, offset_seconds
+
+    def get_samples(self, index: int) -> Tuple[np.ndarray, int]:
+        recording, offset_seconds = self._read_params(index)
+        samples, sr = librosa.load(recording.filepath, sr=None, offset=offset_seconds, duration=self.clip_duration)
+        return samples, sr
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        recording, offset_seconds = self._read_params(index)
+        samples, sr = librosa.load(recording.filepath, sr=None, offset=offset_seconds, duration=self.clip_duration)
+        raise NotImplementedError
+
+    def _label_combinations(self, positive_value: Optional[Any] = True, negative_value: Optional[any] = False):
+        C = len(self.class_values)
+        N = 2**C
+        helper = np.full((N, C), fill_value=negative_value)
+        frequency = 1
+        for c in range(len(self.class_values)):
+            current = positive_value
+            for i in range(N):
+                if i % frequency == 0:
+                    current = negative_value if current == positive_value else positive_value
+                helper[i, c] = current
+            frequency *= 2
+        output = []
+        for i in range(N):
+            data = {self.class_values[c]:  helper[i, c] for c in range(len(self.class_values))}
+            output.append(data)
+        return output
+
+    def group_by_labels(self, labeled_audio: pd.DataFrame):
+        combinations = self._label_combinations(positive_value=self._positive_label_value, negative_value=self._negative_label_value)
+        for combination in combinations:
+            subset = labeled_audio[np.logical_and.reduce([(labeled_audio[k] == v) for k,v in combination.items()])]
+            combination["subset"] = subset
+        return combinations
 
 def init():
     parser = argparse.ArgumentParser()
@@ -304,10 +376,11 @@ if __name__ == "__main__":
         labels = pd.read_csv(args.labels)
         recordings = pd.read_csv(args.audiofiles)
         data = GLIDERDatamodule(
-            audiofile_directory=config.DATASET_DIRECTORY,
+            recordings=recordings,
             labels=labels,
             verbose=True,
             clip_duration=10.0,
-            clip_overlap=0.0
+            clip_overlap=4.0
         )
+        data.setup()
 

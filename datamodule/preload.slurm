@@ -17,4 +17,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-python datamodule.py find /cluster/work/martimoa/hdd_copy/GLIDER\ phase\ I\ deployment/ --output ./metadata.csv --processes 24
+python datamodule.py find /cluster/work/martimoa/hdd_copy/GLIDER\ phase\ I\ deployment/ --output ./metadata/metadata.csv --processes 24
