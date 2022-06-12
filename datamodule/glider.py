@@ -202,6 +202,8 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.label_distributions = self.group_by_labels(self.audio)
 
     def loggables(self) -> Dict[str, Any]:
+        if not self.setup_complete:
+            self.setup()
         distributions = {}
         for subset in self.label_distributions:
             keys = [key for key in subset.keys() if key != "subset"]
@@ -254,18 +256,17 @@ class GLIDERDatamodule(pl.LightningDataModule):
     def _track(self) -> None:
         if self.logger is None:
             return
+        if not self.setup_complete:
+            self.setup()
         self._track_subset("train", self.train, n_examples=self.track_n_examples)
         self._track_subset("val", self.val, n_examples=self.track_n_examples)
         self._track_subset("test", self.test, n_examples=self.track_n_examples)
 
-    def _track_subset(self, stage: str, dataset: AudioDataset, n_examples: int = 10) -> None:
-        if not self.setup_complete:
-            return
-        
         slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
-        if slurm_procid != 0 and slurm_procid != -1:
-            return
+        if slurm_procid == -1 or slurm_procid == 0:
+            self.logger.experiment.config.update(self.loggables())
 
+    def _track_subset(self, stage: str, dataset: AudioDataset, n_examples: int = 10) -> None:
         if n_examples <= 0 or len(dataset) < n_examples:
             return
         
@@ -421,8 +422,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
             negative_label_value=self._negative_label_value,
             transforms=self.normalizer
         )
-        if self.logger is not None:
-            self._track()
+        self.setup_complete = True
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
