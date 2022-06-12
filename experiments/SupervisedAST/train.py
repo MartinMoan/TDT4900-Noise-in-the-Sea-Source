@@ -59,7 +59,9 @@ def main(hyperparams):
         sigma=13.5853,
         wandblogger=logger,
     )
-    logger.experiment.config.update(dict(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}))
+    slurm_procid = int(os.environ.get("SLURM_PROCID", default=None))
+    if slurm_procid is None or slurm_procid == 0:
+        logger.experiment.config.update(dict(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}))
 
     model = AstLightningWrapper(
         learning_rate=hyperparams.learning_rate,
