@@ -12,7 +12,6 @@ import torch
 import torch.linalg
 import torchaudio.transforms as transforms
 from interfaces import IAugment
-from datasets.initdata import create_tensorset
 import matplotlib.pyplot as plt
 from sparse_image_warp import time_warp
 
@@ -138,13 +137,14 @@ class SpecAugment(IAugment):
         return self._branching
 
 if __name__ == "__main__":
+    from datasets.initdata import create_tensorset
     nfft = 3200
     nmels = 128
     hop_length = 512
     clip_duration_seconds = 10.0
     clip_overlap_seconds = 4.0
     branching = 3
-
+    
     tensorset, balancer = create_tensorset(
         nfft = nfft,
         nmels = nmels,
