@@ -201,7 +201,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
         
         self.label_distributions = self.group_by_labels(self.audio)
 
-    def loggables(self) -> Dict[str]:
+    def loggables(self) -> Dict[str, Any]:
         distributions = {}
         for subset in self.label_distributions:
             keys = [key for key in subset.keys() if key != "subset"]
