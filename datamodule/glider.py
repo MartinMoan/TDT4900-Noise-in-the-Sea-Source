@@ -192,6 +192,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.logger = wandblogger
         self.track_n_examples = track_n_examples
         self.setup_complete = False
+        self._tracking_complete = False
 
         if self.clipping_enabled:
             self.clips = self.get_clips()
@@ -257,14 +258,19 @@ class GLIDERDatamodule(pl.LightningDataModule):
         if self.logger is None:
             return
         if not self.setup_complete:
-            self.setup()
+            self.setup() 
+            return # self.setup() calls self._track(), so will already be done
+        if self._tracking_complete:
+            return
         self._track_subset("train", self.train, n_examples=self.track_n_examples)
         self._track_subset("val", self.val, n_examples=self.track_n_examples)
         self._track_subset("test", self.test, n_examples=self.track_n_examples)
 
         slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
+        print(f"Found slurm procid: {slurm_procid}")
         if slurm_procid == -1 or slurm_procid == 0:
             self.logger.experiment.config.update(self.loggables())
+        self._tracking_complete = True
 
     def _track_subset(self, stage: str, dataset: AudioDataset, n_examples: int = 10) -> None:
         if n_examples <= 0 or len(dataset) < n_examples:
