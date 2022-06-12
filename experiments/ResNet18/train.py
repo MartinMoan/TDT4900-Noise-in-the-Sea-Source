@@ -62,7 +62,10 @@ def main(hyperparams):
     )
     slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
     if slurm_procid == -1 or slurm_procid == 0:
-        logger.experiment.config.update(dict(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}))
+        logger.experiment.config.update(dict(
+            slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}
+        ))
+
 
     model = ResNet18LightningWrapper(
         learning_rate = hyperparams.learning_rate,
