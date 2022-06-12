@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 import argparse
-from gc import callbacks
 import os
-import sys
 import pathlib
+import sys
 
 import git
-import torch
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
+import torch
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.loggers import WandbLogger
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-
+from datamodule.glider import GLIDERDatamodule, labels, recordings
 from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
-from datasets.datamodule import ClippedGliderDataModule
-from tracking.datasettracker import track_dataset
+
 
 def main(hyperparams):
     # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
@@ -37,16 +35,31 @@ def main(hyperparams):
         name=hyperparams.tracking_name
     )
 
-    dataset = ClippedGliderDataModule(
-        batch_size=hyperparams.batch_size,
+    dataset = GLIDERDatamodule(
+        recordings=recordings,
+        labels=labels,
+        verbose=True,
+        clip_duration=hyperparams.clip_duration_seconds,
+        clip_overlap=hyperparams.clip_overlap_seconds,
         nfft=hyperparams.nfft,
         nmels=hyperparams.nmels,
         hop_length=hyperparams.hop_length,
-        clip_duration_seconds=hyperparams.clip_duration_seconds,
-        clip_overlap_seconds=hyperparams.clip_overlap_seconds,
-        num_workers=hyperparams.num_workers
+        batch_size=hyperparams.batch_size,
+        train_percentage=0.8,
+        val_percentage=0.1,
+        duplicate_error="raise",
+        specaugment=True,
+        max_time_mask_seconds=hyperparams.clip_duration_seconds*0.1,
+        specaugment_branching=3,
+        max_mel_masks=hyperparams.nmels//8,
+        num_workers=hyperparams.num_workers,
+        seed=hyperparams.seed_value,
+        normalize=True,
+        mu=-47.5545,
+        sigma=13.5853,
+        wandblogger=logger,
     )
-    track_dataset(logger, dataset, n_examples=hyperparams.track_n_examples)
+    logger.experiment.config.update(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key})
 
     model = AstLightningWrapper(
         learning_rate=hyperparams.learning_rate,
