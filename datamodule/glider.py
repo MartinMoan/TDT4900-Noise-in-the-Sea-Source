@@ -1,42 +1,34 @@
 #!/usr/bin/env python3
 import argparse
-from copy import copy, deepcopy
-from email.mime import audio
-import pickle
-from dataclasses import dataclass
 import datetime
 import multiprocessing
-import sys
+import os
 import pathlib
-from tabnanny import filename_only
-from typing import Mapping, Iterable, Optional, Tuple, Union, Dict, List, Any
-from multiprocessing.pool import ThreadPool
-import hashlib
+import sys
+from typing import Any, Callable, Literal, Optional, Tuple, Union
 
 import git
-from importlib_metadata import distribution
-import torch
-import re
-import torch.utils.data
-from sklearn.model_selection import train_test_split
+import librosa
 import numpy as np
 import pandas as pd
-from rich import print
-import torchaudio
-from tqdm import tqdm
 import pytorch_lightning as pl
+import torch
+import torch.utils.data
+import wandb
+from pytorch_lightning.loggers import WandbLogger
+from rich import print
 from torchvision.transforms import Normalize
-import librosa
+from tqdm import tqdm
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
-import config
-from datasets.glider.wavfileinspector import WaveFileInspector
-from interfaces import ITensorAudioDataset, IAugment
-from datasets.initdata import create_tensorset
-from datasets.glider.audiodata import AudioData
-from datasets.augments.augment import CombinedAugment, SpecAugment
-import matplotlib.pyplot as plt
+from datasets.augments.augment import SpecAugment
+from interfaces import IAugment
+
 from datamodule import utils
+
+
+def no_op_transform(*args):
+    return args
 
 class AudioDataset(torch.utils.data.Dataset):
     def __init__(
@@ -47,7 +39,8 @@ class AudioDataset(torch.utils.data.Dataset):
         nfft: int,
         hop_length: int,
         positive_label_value: Any = 1.0,
-        negative_label_value: Any = 0.0) -> None:
+        negative_label_value: Any = 0.0, 
+        transforms: Optional[Callable[[torch.Tensor], Tuple[torch.Tensor]]] = None) -> None:
         super().__init__()
         required_columns = ["filepath", "offset", "duration_seconds"]
         required_columns.extend(list(class_values))
@@ -61,20 +54,23 @@ class AudioDataset(torch.utils.data.Dataset):
         self.hop_length = hop_length
         self.positive_label_value = positive_label_value
         self.negative_label_value = negative_label_value
+        self.transforms = transforms if transforms is not None else no_op_transform
+
+    def audiodata(self, index: int):
+        return self.data.iloc[index]
         
     def __len__(self) -> int:
         return len(self.data)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         audio = self.data.iloc[index]
-        print(index, self.data.index.values[index], len(self.data), np.max(self.data.index.values), audio)
         samples, sr = librosa.load(audio.filepath, sr=None, offset=audio.offset, duration=audio.duration_seconds)
         spectrogram = librosa.power_to_db(librosa.feature.melspectrogram(y=samples, sr=sr, n_mels=self.nmels, n_fft=self.nfft, hop_length=self.hop_length))
         spectrogram = np.flip(spectrogram, axis=0)
         spectrogram = torch.tensor(np.array(spectrogram), dtype=torch.float32, requires_grad=False)
         spectrogram = spectrogram.view(1, *spectrogram.shape)
 
-        idx = self.data.index.values[index]
+        # idx = self.data.index.values[index]
         # labels = self.data.iloc[index, [*self.class_values]]
         # label = torch.tensor(labels.to_numpy(), dtype=torch.float32, requires_grad=False)
         label = torch.tensor(
@@ -82,10 +78,10 @@ class AudioDataset(torch.utils.data.Dataset):
             dtype=torch.float32, 
             requires_grad=False
         )
-        return spectrogram, label
+        return self.transforms(spectrogram), label
 
 class AugmentedDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset: torch.utils.data.Dataset, augment: Optional[IAugment] = None) -> None:
+    def __init__(self, dataset: Union[torch.utils.data.Dataset, AudioDataset], augment: Optional[IAugment] = None) -> None:
         super().__init__()
         self.dataset = dataset
         self.augment = augment
@@ -103,6 +99,13 @@ class AugmentedDataset(torch.utils.data.Dataset):
             augmented = self.augment(data, label)
             return augmented[ai]
 
+    def audiodata(self, index: int):
+        if not isinstance(self.dataset, AudioDataset):
+            raise NotImplementedError
+        
+        real_idx = index // (self.augment.branching() + 1)
+        return self.dataset.audiodata(real_idx)
+
 class GLIDERDatamodule(pl.LightningDataModule):
     def __init__(
         self, 
@@ -111,35 +114,60 @@ class GLIDERDatamodule(pl.LightningDataModule):
         nfft: int,
         nmels: int,
         hop_length: int,
+        batch_size: int,
         clip_duration: Optional[Union[float, int]] = None,
         clip_overlap: Optional[Union[float, int]] = 0.0,
         train_percentage: Optional[float] = 0.8,
         val_percentage: Optional[float] = 0.1,
+        duplicate_error: Optional[Literal['raise', 'drop']] = 'drop',
         specaugment: Optional[bool] = True,
+        max_time_mask_seconds: Optional[Union[float, int]] = None,
+        specaugment_branching: Optional[int] = 3,
+        max_mel_masks: Optional[int] = None,
+        num_workers: Optional[int] = os.cpu_count(),
         seed: Optional[Union[float, int]] = 42,
-        verbose: bool = False,
+        normalize: Optional[bool] = True,
+        mu: Optional[Union[float, int]] = None,
+        sigma: Optional[Union[float, int]] = None,
+        normalize_limit: Optional[float] = 1.0,
+        verbose: Optional[bool] = False,
+        wandblogger: Optional[WandbLogger] = None,
+        track_n_examples: Optional[int] = 10,
         train_transforms=None, 
         val_transforms=None, 
         test_transforms=None, 
         dims=None):
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
+        if max_mel_masks <= 0.0 or max_mel_masks > nmels:
+            raise ValueError(f"max_mel_masks has invalid value, must be in range [1, nmels]")
+
+        if duplicate_error not in ["raise", "drop"]:
+            raise ValueError(f"Argument duplicate_error has invalid value, expected 'raise' or 'drop' but received {type(duplicate_error)} with value {repr(duplicate_error)}")
+
+        if normalize_limit > 1.0 or normalize_limit < 0.0:
+            raise ValueError(f"Argument 'normalize_limit' has invalid value, must be float in range 0-1 but received value {normalize_limit}")
 
         self.recordings = utils.ensure_recording_columns(recordings)
         duplicated = self.recordings.duplicated(subset=["filepath"])
-        print(f"Found {len(self.recordings[duplicated])} duplicate files, dropping duplicates")
-        self.recordings = self.recordings.drop_duplicates(subset=["filepath"], keep="first", inplace=False, ignore_index=True)
+        if len(self.recordings[duplicated]) > 0:
+            if duplicate_error == 'drop':
+                print(f"Found {len(self.recordings[duplicated])} duplicate files, dropping duplicates")
+                self.recordings = self.recordings.drop_duplicates(subset=["filepath"], keep="first", inplace=False, ignore_index=True)
+            elif duplicate_error == 'raise':
+                raise Exception(f"There are {len(self.recordings[duplicated])} duplicate recordings in the provided recordings argument: {self.recordings[duplicated]}")
         
         nonexisting_recordings = self.recordings.filepath.apply(lambda filepath: not pathlib.Path(filepath).exists())
         if len(self.recordings[nonexisting_recordings]) > 0:
             print(f"There are {len(self.recordings[nonexisting_recordings])} out of {len(self.recordings)} recordings that does not exists on the local filesystem. Dropping these recordings.")
             self.recordings = self.recordings[~nonexisting_recordings]
-
-        self.labels, self._class_values = utils.ensure_dataframe_columns(labels)
-        self._class_values = tuple(np.sort(self._class_values, axis=0))
+        
         if len(self.recordings.sample_rate.unique()) != 1:
             raise Exception(f"There are differing sampling rates used among the recordings. Found sampling rates: {self.recordings.sample_rate.unique()}")
+
         self.sample_rate = self.recordings.sample_rate.max()
-        
+        self.labels, self._class_values = utils.ensure_dataframe_columns(labels)
+        self._class_values = tuple(np.sort(self._class_values, axis=0))
+        self.batch_size = batch_size
         self.clip_duration = clip_duration
         self.clip_overlap = clip_overlap
         self.train_part = train_percentage
@@ -148,12 +176,22 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.nmels = nmels
         self.hop_length = hop_length
         self.specaugment = specaugment
-
+        self.num_workers = num_workers
+        self.max_mel_masks = max_mel_masks if max_mel_masks is not None else nmels // 8
+        self.max_time_mask_seconds = max_time_mask_seconds
+        self.specaugment_branching = specaugment_branching
+        self.seed = seed
         self._positive_label_value = True
         self._negative_label_value = False
-
-
         self.verbose = verbose
+        self.normalize = normalize
+        self.normalizer = None
+        self.mu, self.sigma = mu, sigma
+        self.normalize_limit = normalize_limit
+        self.logger = wandblogger
+        self.track_n_examples = track_n_examples
+        self.setup_complete = False
+
         if self.clipping_enabled:
             self.clips = self.get_clips()
             self.labeled_clips = self.apply_labels(self.clips, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
@@ -161,7 +199,115 @@ class GLIDERDatamodule(pl.LightningDataModule):
             self.labeled_recordings = self.apply_labels(self.recordings, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
         
         self.label_distributions = self.group_by_labels(self.audio)
-        self.seed = 20220621
+
+    def _track(self) -> None:
+        if self.logger is None:
+            return
+        self._track_subset("train", self.train, n_examples=self.track_n_examples)
+        self._track_subset("val", self.val, n_examples=self.track_n_examples)
+        self._track_subset("test", self.test, n_examples=self.track_n_examples)
+
+        distributions = self.label_distributions
+        n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
+
+        to_log = {
+            "loader_sizes": {
+                "train_loader_size": len(self.train_dataloader()),
+                "val_loader_size": len(self.val_dataloader()),
+                "test_loader_size": len(self.test_dataloader())
+            },
+            "augmented_sizes": {
+                "train": len(self.train),
+                "val": len(self.val),
+                "test": len(self.test)
+            },
+            "original_sizes": {
+                "train": len(self.train_df),
+                "val": len(self.val_df),
+                "test": len(self.test_df)
+            },
+            "label_distributions": n_per_label,
+            "n_recordings": len(self.recordings),
+            "n_audio": len(self.audio),
+            "class_values": self._class_values,
+            "batch_size": self.batch_size,
+            "clip_duration": self.clip_duration,
+            "clip_overlap": self.clip_overlap,
+            "train_part": self.train_part,
+            "val_part": self.val_part,
+            "nfft": self.nfft,
+            "nmels": self.nmels,
+            "hop_length": self.hop_length,
+            "specaugment": self.specaugment,
+            "num_workers": self.num_workers,
+            "max_mel_masks": self.max_mel_masks,
+            "max_time_mask_seconds": self.max_time_mask_seconds,
+            "specaugment_branching": self.specaugment_branching,
+            "seed": self.seed,
+            "positive_label_value": self._positive_label_value,
+            "negative_label_value": self._negative_label_value,
+            "verbose": self.verbose,   
+        }
+        self.logger.experiment.config.update(to_log)
+
+    def _track_subset(self, stage: str, dataset: AudioDataset, n_examples: int = 10) -> None:
+        if not self.setup_complete:
+            return
+        
+        slurm_procid = int(os.environ.get("SLURM_PROCID", default=-1))
+        if slurm_procid != 0 and slurm_procid != -1:
+            return
+
+        if n_examples <= 0 or len(dataset) < n_examples:
+            return
+        
+        indeces = np.random.random_integers(0, len(dataset) - 1, n_examples)
+
+        table = wandb.Table(columns=[
+            "audio", 
+            "spectrogram", 
+            "source_class_specific", 
+            "clip_classes",
+            "dataset_classes", 
+            "tensor_label", 
+            "filename",
+            "file_start_time",
+            "file_end_time",
+            "clip_offset_seconds",
+            "clip_duration_seconds",
+            "clip_index"
+        ])
+
+        for index in range(len(indeces)):
+            i = indeces[index]
+            X, Y = dataset[i]
+            audiodata = dataset.audiodata(i)
+            samples, sr = librosa.load(audiodata.filepath, sr=None, offset=audiodata.offset, duration=audiodata.duration_seconds)
+            audio = wandb.Audio(samples, sample_rate=sr)
+            spectrogram = wandb.Image(X, caption=f"{audiodata.filepath.name}")
+            source_class_specific = audiodata.source_class_specific
+            cls = audiodata[[*self._class_values]].to_dict()
+            clip_classes = ", ".join([key for key, value in cls.items() if value == self._positive_label_value])
+            print(clip_classes)
+            datetimeformat = "%c"
+
+            table.add_data(
+                audio, 
+                spectrogram, 
+                source_class_specific, 
+                clip_classes, 
+                self._class_values, 
+                str(Y.detach().numpy()),
+                audiodata.filepath.name,
+                audiodata.file_start_time.strftime(datetimeformat),
+                audiodata.file_end_time.strftime(datetimeformat),
+                audiodata.offset,
+                audiodata.duration_seconds,
+                i
+            )
+            if self.verbose:
+                print(f"Logging dataset example {index} / {len(indeces)}")
+        self.logger.experiment.log({f"{stage}_examples": table})
 
     def setup(self, stage: Optional[str] = None):
         subsets = [distribution["subset"] for distribution in self.label_distributions]
@@ -219,22 +365,69 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.test_df = test
 
         self.train = AudioDataset(
-            self.train_df, 
-            self._class_values, 
-            nmels=128, 
-            nfft=3200, 
-            hop_length=1280, 
-            positive_label_value=self._positive_label_value, 
+            data=self.train_df,
+            class_values=self._class_values,
+            nmels=self.nmels,
+            nfft=self.nfft,
+            hop_length=self.hop_length,
+            positive_label_value=self._positive_label_value,
             negative_label_value=self._negative_label_value
         )
-        indeces = rng.integers(0, len(self.train), 10)
-        for i in indeces:
-            self.train[i]
-            print()
+        if self.normalize:
+            if self.mu is None or self.sigma is None:
+                self.mu, self.sigma = utils.normalize(self.train, limit=int(len(self.train)*self.normalize_limit), randomize=self.seed)
+            self.normalizer = Normalize(mean=self.mu, std=self.sigma, inplace=False)
+            self.train.transforms = self.normalizer
+            
+        if self.specaugment:
+            self.train_audiodataset = self.train
+            self.train = AugmentedDataset(
+                self.train_audiodataset,
+                augment=SpecAugment(
+                    branching=self.specaugment_branching,
+                    nmels=self.nmels,
+                    hop_length=self.hop_length,
+                    max_time_mask_seconds=self.max_time_mask_seconds,
+                    sr=self.sample_rate,
+                    max_mel_masks=self.max_mel_masks,
+                    max_fails=int(len(self.train_audiodataset) * 0.01)
+                )
+            )
 
+        self.val = AudioDataset(
+            data=self.val_df,
+            class_values=self._class_values,
+            nmels=self.nmels,
+            nfft=self.nfft,
+            hop_length=self.hop_length,
+            positive_label_value=self._positive_label_value,
+            negative_label_value=self._negative_label_value,
+            transforms=self.normalizer
+        )
+        self.test = AudioDataset(
+            data=self.test_df,
+            class_values=self._class_values, 
+            nmels=self.nmels,
+            nfft=self.nfft,
+            hop_length=self.hop_length,
+            positive_label_value=self._positive_label_value,
+            negative_label_value=self._negative_label_value,
+            transforms=self.normalizer
+        )
+        if self.logger is not None:
+            self._track()
+
+    def train_dataloader(self) -> torch.utils.data.DataLoader:
+        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+
+    def val_dataloader(self) -> torch.utils.data.DataLoader:
+        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+
+    def test_dataloader(self) -> torch.utils.data.DataLoader:
+        return torch.utils.data.DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+    
     @property
     def audio(self) -> pd.DataFrame:
-        # return self.clips if self.clipping_enabled else self.recordings
         return self.labeled_clips if self.clipping_enabled else self.labeled_recordings
 
     @property
@@ -242,20 +435,23 @@ class GLIDERDatamodule(pl.LightningDataModule):
         return self.clip_duration is not None
 
     def apply_labels(self, audio_df: pd.DataFrame, positive_value: Any = True, negative_value: Any = False) -> pd.DataFrame:
+        div_cols = [col for col in self.labels.columns if col not in audio_df.columns and col != "source_class"]
+        for col in div_cols:
+            audio_df[col] = ""
+
         for cls in self._class_values:
             audio_df[cls] = negative_value
         for i in range(len(self.labels)):
             label = self.labels.iloc[i]
             audio = audio_df[(audio_df.start_time <= label.end_time) & (audio_df.end_time >= label.start_time)]
+            
             if len(audio) > 0:
                 audio_df.loc[audio.index, label.source_class] = positive_value
+                for col in div_cols:
+                    audio_df.loc[audio.index, col] = audio_df.loc[audio.index, col].astype(str) + f"{label[col]}, "
         return audio_df
 
     def get_clips(self):
-        # df = pd.read_csv("clips.csv")
-        # df.start_time = pd.to_datetime(df.start_time, errors="coerce")
-        # df.end_time = pd.to_datetime(df.end_time, errors="coerce")
-        # return df
         samples_per_clip = int(self.clip_duration * self.sample_rate)
         overlapping_samples = int(self.clip_overlap * self.sample_rate)
         clip_data = []
@@ -298,26 +494,8 @@ class GLIDERDatamodule(pl.LightningDataModule):
         samples, sr = librosa.load(recording.filepath, sr=None, offset=offset_seconds, duration=self.clip_duration)
         raise NotImplementedError
 
-    def _label_combinations(self, positive_value: Optional[Any] = True, negative_value: Optional[any] = False):
-        C = len(self._class_values)
-        N = 2**C
-        helper = np.full((N, C), fill_value=negative_value)
-        frequency = 1
-        for c in range(len(self._class_values)):
-            current = positive_value
-            for i in range(N):
-                if i % frequency == 0:
-                    current = negative_value if current == positive_value else positive_value
-                helper[i, c] = current
-            frequency *= 2
-        output = []
-        for i in range(N):
-            data = {self._class_values[c]:  helper[i, c] for c in range(len(self._class_values))}
-            output.append(data)
-        return output
-
     def group_by_labels(self, labeled_audio: pd.DataFrame):
-        combinations = self._label_combinations(positive_value=self._positive_label_value, negative_value=self._negative_label_value)
+        combinations = utils.label_combinations(class_values=self._class_values, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
         for combination in combinations:
             subset = labeled_audio[np.logical_and.reduce([(labeled_audio[k] == v) for k,v in combination.items()])]
             combination["subset"] = subset
@@ -360,6 +538,14 @@ def preload(args):
     print(f"Saving audiofiles metadata to: {output_path}")
     recordings.to_csv(output_path, index=False)
 
+import matplotlib.pyplot as plt
+
+
+def plot(id: int, spectrogram: torch.Tensor, labels: torch.Tensor):
+    plt.imshow(spectrogram.squeeze().detach().numpy(), aspect="auto")
+    plt.title(f"Id: {id} Labels: {labels.detach().numpy()}")
+    plt.show()
+
 if __name__ == "__main__":
     args = init()
     if args.command == "find":
@@ -371,8 +557,49 @@ if __name__ == "__main__":
             recordings=recordings,
             labels=labels,
             verbose=True,
-            clip_duration=10.0,
-            clip_overlap=4.0
+            clip_duration=20.0,
+            clip_overlap=0.0,
+            nfft=3200,
+            nmels=128,
+            hop_length=1280,
+            batch_size=8,
+            train_percentage=0.8,
+            val_percentage=0.1,
+            duplicate_error="raise",
+            specaugment=True,
+            max_time_mask_seconds=2.0,
+            specaugment_branching=3,
+            max_mel_masks=128//8,
+            num_workers=os.cpu_count(),
+            seed=42,
+            normalize=True,
+            mu=-47.5545,
+            sigma=13.5853
         )
         data.setup()
+        # logger = WandbLogger(
+        #     save_dir=str(config.HOME_PROJECT_DIR.absolute()),
+        #     offline=False,
+        #     project=os.environ.get("WANDB_PROJECT", "MISSING_PROJECT"), 
+        #     entity=os.environ.get("WANDB_ENTITY", "MISSING_ENTITY"),
+        #     config=vars(hyperparams), # These are added to wandb.init call as part of the config,
+        #     tags=hyperparams.tracking_tags,
+        #     notes=hyperparams.tracking_notes,
+        #     name=hyperparams.tracking_name
+        # )
+        d = data.train
+        indeces = np.random.randint(0, len(d), 10)
+        for i in indeces:
+            X, Y = d[i]
+            plot(i, X, Y)
+        
+        print(len(data.train_df))
+        print(len(data.train))
+        print(len(data.train_dataloader())*8)
+        print(len(data.val_df))
+        print(len(data.val))
+        print(len(data.val_dataloader())*8)
+        print(len(data.test_df))
+        print(len(data.test))
+        print(len(data.test_dataloader())*8)
 

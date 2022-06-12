@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-import pickle
 import datetime
+import hashlib
 import multiprocessing
 import pathlib
-from tabnanny import filename_only
-from typing import Iterable, Optional, Union, Dict
-from multiprocessing.pool import ThreadPool
-import hashlib
-
+import pickle
 import re
+from multiprocessing.pool import ThreadPool
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
+
+import librosa
 import numpy as np
 import pandas as pd
 from rich import print
 from tqdm import tqdm
-import librosa
+
 
 def typecheck_audiofile_directory(audiofile_directory):
     audiofile_directories = []
@@ -165,6 +165,132 @@ def ensure_recording_columns(recordings_df):
     for column in required_columns:
         if column not in recordings_df.columns:
             raise Exception(f"labels DataFrame is missing required column {column}")
+    recordings_df.filepath = recordings_df.filepath.apply(lambda filepath: pathlib.Path(filepath))
     recordings_df.start_time = pd.to_datetime(recordings_df.start_time, errors="coerce")
     recordings_df.end_time = pd.to_datetime(recordings_df.end_time, errors="coerce")
     return recordings_df
+
+def label_combinations(class_values: Iterable[str], positive_value: Optional[Any] = True, negative_value: Optional[any] = False):
+    C = len(class_values)
+    N = 2**C
+    helper = np.full((N, C), fill_value=negative_value)
+    frequency = 1
+    for c in range(len(class_values)):
+        current = positive_value
+        for i in range(N):
+            if i % frequency == 0:
+                current = negative_value if current == positive_value else positive_value
+            helper[i, c] = current
+        frequency *= 2
+    output = []
+    for i in range(N):
+        data = {class_values[c]:  helper[i, c] for c in range(len(class_values))}
+        output.append(data)
+    return output
+import torch
+import torch.utils.data
+
+
+def twopass(dataset, indeces):
+    values = np.array([])
+    mu = 0
+    n = 0
+    for i in indeces:
+        X, _ = dataset[i]
+        x = X.detach().numpy().flatten()
+        values = np.concatenate((values, x))
+        mu += x.sum()
+        n += len(x)
+
+    mu = mu / n
+    sigma = 0
+    n = 0
+    for i in indeces:
+        X, _ = dataset[i]
+        x = X.detach().numpy().flatten()
+        n += len(x)
+        sigma += np.sum((x - mu)**2)
+
+    sigma = (sigma / n)**(1/2)
+    return mu, sigma
+
+def welford(dataset, indeces):
+    mu, sigma, n = 0, 0, 0
+    values = np.array([])
+    for i in indeces:
+        X, _ = dataset[i]
+        x = X.detach().numpy().flatten()
+        for j in range(len(x)):
+            n += 1
+            newM = mu + (x[j] - mu) / n
+            newS = sigma + (x[j] - mu) * (x[j] - newM)
+            mu = newM
+            sigma = newS
+        values = np.concatenate((values, x))
+    
+    sigma = (sigma / (n - 1))**(1/2)
+    return mu, sigma
+
+def normalize(
+    dataset: Union[torch.utils.data.Dataset, Iterable[Tuple[torch.Tensor, torch.Tensor]]], 
+    limit: Optional[int] = None, 
+    randomize: Optional[Union[float, int, bool]] = True) -> Tuple[float, float]:
+    """Compute the arithmetic mean and standard deviation of input data.
+
+    Args:
+        dataset (Union[torch.utils.data.Dataset, Iterable[Tuple[torch.Tensor, torch.Tensor]]]): An iterable yielding X, Y (data, target) tuples. Stats are computed from X/data only.
+        limit (Optional[int], optional): The maximum number of examples to compute stats from, usefull if dataset is large such that iterating over all examples take a long time. Defaults to None.
+        randomize (Optional[int, float, bool], optional): Whether to draw random samples, if float or int will use the value as random seed
+
+    Returns:
+        Tuple[float, float]: Arithmetix mean, standard deviation of data
+    """
+    limit = len(dataset) if limit is None else limit
+    
+    indeces = np.arange(0, limit, step=1)
+    if randomize is not None:
+        if isinstance(randomize, (float, int)):
+            rng = np.random.default_rng(seed=randomize)
+            indeces = rng.integers(0, len(dataset), limit)
+        elif isinstance(randomize, bool) and randomize:
+            indeces = np.random.randint(0, len(dataset), size=limit)
+
+    mu, sigma, n = 0, 0, 0
+    for i in tqdm(indeces):
+        X, _ = dataset[i]
+        x = X.detach().numpy().flatten()
+        n += len(x)
+        mu += np.sum(x)
+        sigma += np.sum((x**2))
+    
+    mu = mu / n
+    sigma = ((sigma / n) - (mu ** 2))**(1/2)
+    return mu, sigma
+
+    """
+    Std = (1/N * Var)**(1/2)
+    Var = Sum((x - u)**2) = Sum(x**2) - 1/N * Sum(x)**2 = Sum(x**2) - Sum(x)/N * Sum(x) = 
+     
+    Std = (1/N * (Sum(x**2) - Sum(x)/N * Sum(x)))**(1/2) 
+        = (Sum(x**2)/N - Sum(x)/N * Sum(x) * 1/N)**(1/2)
+        = (Sum(x**2)/N - (Sum(x)/N)**2)(1/2)
+        = (Sum(x**2)/N - u**2)(1/2)
+    
+    Example:
+    (x1 - u)^2 + (x2 - u)^2 + (x3 - u)^2 =
+    (x1 - u)(x1 - u) + (x2 - u)(x2 - u) + (x3 - u)(x3 - u) =
+    
+    x1^2 - 2ux1 + u^2 + x2^2 - 2ux2 + u^2 + x3^2 - 2ux3 + u^2 =
+    
+    (x1^2 + x2^2 + x3^2) + (u^2 + u^2 + u^2) + (- 2ux1 - 2ux2 - 2ux3) =
+    (x1^2 + x2^2 + x3^2) + 3u^2 - ( 2ux1 + 2ux2 + 2ux3) =
+    (x1^2 + x2^2 + x3^2) + 3u^2 - 2u( x1 + x2 + x3) =
+
+    note: (x1 + x2 + x3) = 3 * u        <->        u = (x1 + x2 + x3) / 3
+    
+    (x1^2 + x2^2 + x3^2) + 3u^2 - 2u( x1 + x2 + x3) = (x1^2 + x2^2 + x3^2) + 3u^2 - 2u * 3u =
+    (x1^2 + x2^2 + x3^2) + 3u^2 - 6u^2 = 
+    (x1^2 + x2^2 + x3^2) - 3u^2 = 
+    Sum(x**2) - N (Sum(x)/N)**2 = Sum(x**2) - N * (Sum(x)/N) * (Sum(x) / N) = Sum(x**2) - N (Sum(x)**2/N**2) = Sum(x**2) - Sum(x)**2 / N
+    Sum(x**2) - 1/N * Sum(x)**2
+    """
