@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-from gc import callbacks
 import os
 import sys
 import pathlib
@@ -15,7 +14,7 @@ sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, sear
 import config
 
 from experiments.ResNet18.model import ResNet18LightningWrapper
-from datamodule.glider import GLIDERDatamodule, recordings, labels
+from datamodule import glider, recordings, labels
 
 def main(hyperparams):
     # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
@@ -36,7 +35,7 @@ def main(hyperparams):
         name=hyperparams.tracking_name
     )
 
-    dataset = GLIDERDatamodule(
+    dataset = glider.GLIDERDatamodule(
         recordings=recordings,
         labels=labels,
         verbose=True,
@@ -65,7 +64,6 @@ def main(hyperparams):
         logger.experiment.config.update(dict(
             slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}
         ))
-
 
     model = ResNet18LightningWrapper(
         learning_rate = hyperparams.learning_rate,

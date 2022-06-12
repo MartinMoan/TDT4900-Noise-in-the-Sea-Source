@@ -326,7 +326,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
                 i
             )
             if self.verbose:
-                print(f"Logging dataset example {index} / {len(indeces)}")
+                print(f"Logging {stage} dataset example {index} / {len(indeces)}")
         self.logger.experiment.log({f"{stage}_examples": table})
 
     def setup(self, stage: Optional[str] = None):
