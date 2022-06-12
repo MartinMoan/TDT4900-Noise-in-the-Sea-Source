@@ -425,13 +425,31 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.setup_complete = True
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+        return torch.utils.data.DataLoader(
+            self.train, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=True, 
+            sampler=torch.utils.data.RandomSampler(self.train, replacement=False)
+        )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
-        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+        return torch.utils.data.DataLoader(
+            self.val, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=True, 
+            sampler=torch.utils.data.RandomSampler(self.val, replacement=False)
+        )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
-        return torch.utils.data.DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+        return torch.utils.data.DataLoader(
+            self.test, 
+            batch_size=self.batch_size, 
+            num_workers=self.num_workers, 
+            pin_memory=True, 
+            sampler=torch.utils.data.RandomSampler(self.test, replacement=False)
+        )
     
     @property
     def audio(self) -> pd.DataFrame:
@@ -594,11 +612,10 @@ if __name__ == "__main__":
         #     notes=hyperparams.tracking_notes,
         #     name=hyperparams.tracking_name
         # )
-        d = data.train
+        d = data.train_dataloader()
         indeces = np.random.randint(0, len(d), 10)
-        for i in indeces:
-            X, Y = d[i]
-            plot(i, X, Y)
+        for i, (X, Y) in enumerate(d):
+            print(X.shape, Y, Y.shape)
         
         print(len(data.train_df))
         print(len(data.train))
