@@ -167,6 +167,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self.sample_rate = self.recordings.sample_rate.max()
         self.labels, self._class_values = utils.ensure_dataframe_columns(labels)
         self._class_values = tuple(np.sort(self._class_values, axis=0))
+        self.class_names = list(self._class_values) # This should be consumed by users, not self._class_values
         self.batch_size = batch_size
         self.clip_duration = clip_duration
         self.clip_overlap = clip_overlap

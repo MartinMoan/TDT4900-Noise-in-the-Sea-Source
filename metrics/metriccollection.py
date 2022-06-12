@@ -4,7 +4,7 @@ import ast
 from copy import copy
 import sys
 import pathlib
-from typing import Iterable, Optional, Dict, Any, List, Union, Mapping
+from typing import Iterable, Optional, Dict, Any, List, Union, Mapping, Tuple
 
 import git
 import torch
@@ -71,14 +71,14 @@ class Support(torchmetrics.Metric):
         return torch.tensor([getattr(self, f"num_target_class{c}") for c in range(self.num_classes)]).float().to(self.device)
 
 class GliderMetrics(torchmetrics.MetricCollection):
-    def __init__(self, num_classes: int, *args, missing_reset: str = "warn", class_names: Optional[Iterable[str]] = None,  **kwargs):
+    def __init__(self, num_classes: int, *args, missing_reset: str = "warn", class_names: Optional[Union[List[str], np.ndarray, Tuple[str, ...]]] = None,  **kwargs):
         if class_names is None:
             class_names = [f"class{i}" for i in range(num_classes)]
         
         if missing_reset not in ["warn", "fail", None]:
             raise ValueError(f"Argument 'missing_reset' has incorrect value, expected string with value 'warn', 'fail' or None but received {type(missing_reset)} with value {missing_reset}")
 
-        if not isinstance(class_names, (list, np.ndarray)):
+        if not isinstance(class_names, (list, np.ndarray, tuple)):
             raise TypeError(f"Argument 'class_names' has incorrect type, expected 'list' or 'np.ndarray' but received object with type {type(class_names)}")
 
         if len(class_names) != num_classes:
@@ -201,24 +201,56 @@ class GliderMetrics(torchmetrics.MetricCollection):
         super().reset()
         self._compute_called_since_last_reset = False
 
+def cls(preds, threshold=0.5):
+    classified = torch.clone(preds)
+    classified[classified > threshold] = 1
+    classified[classified <= threshold] = 0
+    return classified
+
+def support(target):
+    return torch.sum(target, dim=0)
+
+def confusion(target, classes):
+    TP = torch.sum(torch.logical_and(classes.bool(), target.bool()).int(), dim=0)
+    FN = torch.sum(torch.logical_and(torch.logical_not(classes.bool()), target.bool()).int(), dim=0)
+    TN = torch.sum(torch.logical_and(torch.logical_not(classes.bool()), torch.logical_not(target.bool())).int(), dim=0)
+    FP = torch.sum(torch.logical_and(classes.bool(), torch.logical_not(target.bool())).int(), dim=0)
+    return dict(TP=TP, FN=FN, TN=TN, FP=FP)
+
+def precision(target, preds, threshold=0.5):
+    # TP / (TP + FP)
+    c = cls(preds, threshold=threshold)
+    conf = confusion(target, c)
+    TP, FP = conf["TP"], conf["FP"]
+    return torch.div(TP, (TP + FP), out=torch.zeros_like(TP).float()).nan_to_num(0.0)
+
+def recall(target, preds, threshold=0.5):
+    # TP / (TP + FN)
+    c = cls(preds, threshold=threshold)
+    conf = confusion(target, c)
+    TP, FN = conf["TP"], conf["FN"]
+    return torch.div(TP, (TP + FN), out=torch.zeros_like(TP).float()).nan_to_num(0.0)
+
+def precision_recall_curve(targets, preds, n_thresholds=10):
+    # thresholds = np.linspace(0, 1, num=n_thresholds)
+    thresholds = torch.sort(preds, dim=0)
+    precisions = np.array([precision(targets, preds, threshold=threshold) for threshold in thresholds])
+    precisions = np.array([[prec[c] for prec in precisions] for c in range(targets.shape[1])])
+    recalls = np.array([recall(targets, preds, threshold=threshold) for threshold in thresholds])
+    recalls = np.array([[rec[c] for rec in recalls] for c in range(targets.shape[1])])
+    return precisions, recalls, thresholds
+
 if __name__ == "__main__":
+    import pytorch_lightning as pl
+    pl.seed_everything(42)
     from rich import print
     num_classes = 2
     size = 10
-
+    target = torch.randint(0, 2, size=(size, num_classes)).int()
+    preds = torch.sigmoid((torch.rand((size, num_classes)).float() * 2) - 1)
+    print(target)
+    print(preds)
     g = GliderMetrics(num_classes=num_classes, class_names=["Anthropogenic", "Biophonic"], missing_reset="warn")
-    
-    target = torch.randint(0, 2, (size, num_classes)).int()
-    preds = torch.rand((size, num_classes)).float()
 
-    g.update(preds, target)
-    print(g.compute(step="val"))
-
-    target = torch.randint(0, 2, (size, num_classes)).int()
-    preds = torch.rand((size, num_classes)).float()
-    g.update(preds, target)
-    print(g.compute(step="test"))
-
-    g.reset()
     g.update(preds, target)
     print(g.compute(step="val"))

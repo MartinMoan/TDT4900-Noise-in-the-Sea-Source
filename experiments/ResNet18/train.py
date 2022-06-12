@@ -60,7 +60,7 @@ def main(hyperparams):
         sigma=13.5853,
         wandblogger=logger,
     )
-    logger.experiment.config.update(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key})
+    logger.experiment.config.update(dict(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}))
 
     model = ResNet18LightningWrapper(
         learning_rate = hyperparams.learning_rate,
@@ -69,7 +69,7 @@ def main(hyperparams):
         n_model_outputs=2,
         input_fdim=fdim,
         input_tdim=tdim,
-        class_names=dataset.class_names()
+        class_names=dataset.class_names
     )
 
     checkpoints_dir = config.LIGHTNING_CHECKPOINT_PATH.joinpath("resnet18").absolute()

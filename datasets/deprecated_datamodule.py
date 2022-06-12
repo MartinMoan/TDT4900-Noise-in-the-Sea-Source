@@ -310,6 +310,9 @@ if __name__ == "__main__":
     )
     print(dataset)
     dataset.setup()
+    print(len(dataset.tensorset))
+    print()
+    exit()
     from rich import print
     print(dataset.loggables())
     print(dataset.class_names())

@@ -1,6 +1,8 @@
 import pathlib
 import pandas as pd
 
+from .glider import GLIDERDatamodule
+
 GLIDER_RECORDINGS_PATH = pathlib.Path(__file__).parent.joinpath("metadata", "metadata.csv")
 GLIDER_LABELS_PATH = pathlib.Path(__file__).parent.joinpath("metadata", "labels.csv")
 

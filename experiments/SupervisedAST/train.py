@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 import argparse
+from gc import callbacks
 import os
-import pathlib
 import sys
+import pathlib
 
 import git
-import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
-from datamodule.glider import GLIDERDatamodule, labels, recordings
+from datamodule import glider, recordings, labels
 from experiments.SupervisedAST.model import AstLightningWrapper, ModelSize
-
 
 def main(hyperparams):
     # Tracking issue: https://github.com/PyTorchLightning/pytorch-lightning/issues/11380
@@ -35,7 +35,7 @@ def main(hyperparams):
         name=hyperparams.tracking_name
     )
 
-    dataset = GLIDERDatamodule(
+    dataset = glider.GLIDERDatamodule(
         recordings=recordings,
         labels=labels,
         verbose=True,
@@ -59,7 +59,7 @@ def main(hyperparams):
         sigma=13.5853,
         wandblogger=logger,
     )
-    logger.experiment.config.update(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key})
+    logger.experiment.config.update(dict(slurm_environment_variables={key: value for key, value in os.environ.items() if "SLURM" in key}))
 
     model = AstLightningWrapper(
         learning_rate=hyperparams.learning_rate,
@@ -74,7 +74,7 @@ def main(hyperparams):
         imagenet_pretrain=hyperparams.imagenet_pretrain,
         audioset_pretrain=hyperparams.audioset_pretrain,
         model_size=hyperparams.model_size,
-        class_names=dataset.class_names(),
+        class_names=dataset.class_names,
         verbose=hyperparams.verbose
     )
 
