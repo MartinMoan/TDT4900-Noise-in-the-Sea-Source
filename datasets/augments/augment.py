@@ -13,7 +13,7 @@ import torch.linalg
 import torchaudio.transforms as transforms
 from interfaces import IAugment
 import matplotlib.pyplot as plt
-from sparse_image_warp import time_warp
+from .sparse_image_warp import time_warp
 
 def show_spect(spects: Iterable[torch.Tensor]):
     N = len(spects)

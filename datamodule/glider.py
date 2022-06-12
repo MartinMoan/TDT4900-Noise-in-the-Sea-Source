@@ -208,8 +208,12 @@ class GLIDERDatamodule(pl.LightningDataModule):
         self._track_subset("val", self.val, n_examples=self.track_n_examples)
         self._track_subset("test", self.test, n_examples=self.track_n_examples)
 
-        distributions = self.label_distributions
-        n_per_label = {label: len(indeces) for label, indeces in distributions.items()}
+        distributions = {}
+        for subset in self.label_distributions:
+            keys = [key for key in subset.keys() if key != "subset"]
+            label = ", ".join(keys)
+            distributions[label] = subset["subset"]
+        n_per_label = {label: len(subset) for label, subset in distributions.items()}
 
         to_log = {
             "loader_sizes": {
@@ -227,27 +231,29 @@ class GLIDERDatamodule(pl.LightningDataModule):
                 "val": len(self.val_df),
                 "test": len(self.test_df)
             },
-            "label_distributions": n_per_label,
-            "n_recordings": len(self.recordings),
-            "n_audio": len(self.audio),
-            "class_values": self._class_values,
-            "batch_size": self.batch_size,
-            "clip_duration": self.clip_duration,
-            "clip_overlap": self.clip_overlap,
-            "train_part": self.train_part,
-            "val_part": self.val_part,
-            "nfft": self.nfft,
-            "nmels": self.nmels,
-            "hop_length": self.hop_length,
-            "specaugment": self.specaugment,
-            "num_workers": self.num_workers,
-            "max_mel_masks": self.max_mel_masks,
-            "max_time_mask_seconds": self.max_time_mask_seconds,
-            "specaugment_branching": self.specaugment_branching,
-            "seed": self.seed,
-            "positive_label_value": self._positive_label_value,
-            "negative_label_value": self._negative_label_value,
-            "verbose": self.verbose,   
+            "dataset_parameters": {
+                "label_distributions": n_per_label,
+                "n_recordings": len(self.recordings),
+                "n_audio": len(self.audio),
+                "class_values": self._class_values,
+                "batch_size": self.batch_size,
+                "clip_duration": self.clip_duration,
+                "clip_overlap": self.clip_overlap,
+                "train_part": self.train_part,
+                "val_part": self.val_part,
+                "nfft": self.nfft,
+                "nmels": self.nmels,
+                "hop_length": self.hop_length,
+                "specaugment": self.specaugment,
+                "num_workers": self.num_workers,
+                "max_mel_masks": self.max_mel_masks,
+                "max_time_mask_seconds": self.max_time_mask_seconds,
+                "specaugment_branching": self.specaugment_branching,
+                "seed": self.seed,
+                "positive_label_value": self._positive_label_value,
+                "negative_label_value": self._negative_label_value,
+                "verbose": self.verbose
+            }
         }
         self.logger.experiment.config.update(to_log)
 
@@ -289,7 +295,6 @@ class GLIDERDatamodule(pl.LightningDataModule):
             source_class_specific = audiodata.source_class_specific
             cls = audiodata[[*self._class_values]].to_dict()
             clip_classes = ", ".join([key for key, value in cls.items() if value == self._positive_label_value])
-            print(clip_classes)
             datetimeformat = "%c"
 
             table.add_data(
