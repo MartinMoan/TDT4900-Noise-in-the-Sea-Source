@@ -36,168 +36,87 @@ from datasets.initdata import create_tensorset
 from datasets.glider.audiodata import AudioData
 from datasets.augments.augment import CombinedAugment, SpecAugment
 import matplotlib.pyplot as plt
+from datamodule import utils
 
-def typecheck_audiofile_directory(audiofile_directory):
-    audiofile_directories = []
-    if isinstance(audiofile_directory, (np.ndarray, list, tuple)):
-        for path in audiofile_directory:
-            if isinstance(path, pathlib.Path):
-                audiofile_directories.append(path)
-            elif isinstance(path, str):
-                path = pathlib.Path(path)
-                audiofile_directories.append(pathlib.Path(path))
-            else:
-                raise TypeError(f"audiofile path value has invalid type, expected string or pathlib.Path but received {type(path)}")
-    elif isinstance(audiofile_directory, pathlib.Path):
-        audiofile_directories = [audiofile_directory]
-    elif isinstance(audiofile_directory, str):
-        audiofile_directories = [pathlib.Path(audiofile_directory)]
-    else:
-        raise TypeError(f"audiofile_directory has incorrect type {type(audiofile_directory)}")
-    return audiofile_directories
-
-def ensure_dirs_exists(directories: Iterable[Union[pathlib.Path, str]]) -> None:
-    for dir in directories:
-        path = pathlib.Path(dir)
-        if not path.exists():
-            raise ValueError(f"Path {path} does not exists")
-        if not path.is_dir():
-            raise ValueError(f"Path {path} is not a directory.")
-    return directories
-
-def ensure_dataframe_columns(df: pd.DataFrame) -> None:    
-    required_columns = ["source_class", "start_time", "end_time"]
-    for column in required_columns:
-        if column not in df.columns:
-            raise Exception(f"labels DataFrame is missing required column {column}")
-    df.start_time = pd.to_datetime(df.start_time, errors="coerce")
-    df.end_time = pd.to_datetime(df.end_time, errors="coerce")
-    class_values = df.source_class.unique()
-    return df, class_values
-
-def list_audiofiles(path: pathlib.Path):
-    return list(path.glob("**/*.wav"))
-
-def get_audiofiles(directories: Iterable[pathlib.Path], verbose: bool = False) -> Iterable[pathlib.Path]:
-    output = []
-    if verbose:
-        print("Finding audiofiles...")
-        for dir in tqdm(directories):
-            output += list_audiofiles(dir)
-    else:
-        for dir in directories:
-            output += list_audiofiles(dir)
-    return output
-
-def parse_audio_filename(path: pathlib.Path) -> Dict[str, Union[datetime.datetime, pathlib.Path, Exception]]:
-    filename_information = re.search(r"([^_]+)_([0-9]{3})_([0-9]{6}_[0-9]{6})\.wav", path.name)
-    # dive_number = filename_information.group(1)
-    # identification_number = filename_information.group(2)
-    timestring = filename_information.group(3)
-    start_time = None
-    error = None
-    try:
-        start_time = datetime.datetime.strptime(timestring, "%y%m%d_%H%M%S")
-    except Exception as ex:
-        error = ex
-        start_time = datetime.datetime(year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    return dict(
-        filepath=path,
-        start_time=start_time,
-        error=error
-    )
-
-def parse_filenames(audiofiles: Iterable[pathlib.Path]) -> Iterable[Dict[str, Union[datetime.datetime, pathlib.Path, Exception]]]:
-    return [parse_audio_filename(path) for path in audiofiles]
-
-def get_info(filename_information):
-    if filename_information["error"] is not None:
-        return None
-
-    samples, sr = librosa.load(filename_information["filepath"], sr=None)
-    duration_seconds = len(samples) / sr
-    return dict(
-        filepath=filename_information["filepath"],
-        start_time=filename_information["start_time"],
-        end_time=filename_information["start_time"] + datetime.timedelta(seconds=duration_seconds),
-        sample_rate=sr,
-        num_samples=len(samples),
-        duration_seconds=duration_seconds
-    )
-    
-def chunk(iterable, func, position):
-    output = []
-    with tqdm(total=len(iterable), position=position, leave=False) as pbar:
-        for i in range(len(iterable)):
-            pbar.update(1)
-            try:
-                data = func(iterable[i])
-                if data is not None:
-                    output.append(data)
-            except Exception as ex:
-                print(f"An exception occured when reading the file {iterable[i]}, skipping file: {ex}")
-                continue
-        return output
-
-def get_audiofile_information(audiofiles: Iterable[pathlib.Path], processes: int = multiprocessing.cpu_count(), limit: Optional[int] = None) -> pd.DataFrame:
-    filename_info = parse_filenames(audiofiles)
-    max = limit if limit is not None else len(filename_info)
-    chunksize = max / processes
-    with ThreadPool(processes=processes) as pool:
-        tasks = []
-        print("Initializing jobs...")
-        for i in range(processes + 1):
-            start = int(i*chunksize)
-            stop = min(max, int((i+1)*chunksize))
-            task = pool.apply_async(chunk, args=(filename_info[start:stop], get_info, i))
-            tasks.append(task)
+class AudioDataset(torch.utils.data.Dataset):
+    def __init__(
+        self, 
+        data: pd.DataFrame, 
+        class_values: Tuple[str],
+        nmels: int,
+        nfft: int,
+        hop_length: int,
+        positive_label_value: Any = 1.0,
+        negative_label_value: Any = 0.0) -> None:
+        super().__init__()
+        required_columns = ["filepath", "offset", "duration_seconds"]
+        required_columns.extend(list(class_values))
+        for column in required_columns:
+            if column not in data.columns:
+                raise ValueError(f"Column '{column}' not found in DataFrame")
+        self.data = data
+        self.class_values = class_values
+        self.nmels = nmels
+        self.nfft = nfft
+        self.hop_length = hop_length
+        self.positive_label_value = positive_label_value
+        self.negative_label_value = negative_label_value
         
-        print(f"Performing {len(tasks)} jobs...")
-        result = np.array([])
-        for task in tasks:
-            result = np.concatenate((result, task.get()))
-        return pd.DataFrame(data=list(result))
+    def __len__(self) -> int:
+        return len(self.data)
 
-def get_metadata(audiofiles: Iterable[pathlib.Path], cache_dir: Optional[pathlib.Path] = None) -> pd.DataFrame:
-    if cache_dir is None:
-        cache_dir = pathlib.Path(__file__).parent.joinpath("metadata")
-        if not cache_dir.exists():
-            cache_dir.mkdir(parents=True, exist_ok=False)
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        audio = self.data.iloc[index]
+        print(index, self.data.index.values[index], len(self.data), np.max(self.data.index.values), audio)
+        samples, sr = librosa.load(audio.filepath, sr=None, offset=audio.offset, duration=audio.duration_seconds)
+        spectrogram = librosa.power_to_db(librosa.feature.melspectrogram(y=samples, sr=sr, n_mels=self.nmels, n_fft=self.nfft, hop_length=self.hop_length))
+        spectrogram = np.flip(spectrogram, axis=0)
+        spectrogram = torch.tensor(np.array(spectrogram), dtype=torch.float32, requires_grad=False)
+        spectrogram = spectrogram.view(1, *spectrogram.shape)
 
-    sorted_audiofiles = np.sort(audiofiles, axis=0)
-    hasher = hashlib.sha256()
-    hasher.update(repr(sorted_audiofiles).encode())
-    hash = hasher.hexdigest()
-    pickle_filename = f"{str(hash)}.pickle"
-    pickle_path = cache_dir.joinpath(pickle_filename).absolute()
-    cached_metadata_filepaths = [path for path in cache_dir.glob("**/*.pickle")]
+        idx = self.data.index.values[index]
+        # labels = self.data.iloc[index, [*self.class_values]]
+        # label = torch.tensor(labels.to_numpy(), dtype=torch.float32, requires_grad=False)
+        label = torch.tensor(
+            [1.0 if audio[classname] == self.positive_label_value else 0.0 for classname in self.class_values], 
+            dtype=torch.float32, 
+            requires_grad=False
+        )
+        return spectrogram, label
 
-    if pickle_path in cached_metadata_filepaths:
-        print(f"Loading from cache {pickle_path}")
-        with open(pickle_path, "rb") as binary_file:
-            return pickle.load(binary_file)
-    else:
-        output = get_audiofile_information(audiofiles=audiofiles)
-        with open(pickle_path, "wb") as binary_file:
-            pickle.dump(output, binary_file)
-            return output
+class AugmentedDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset: torch.utils.data.Dataset, augment: Optional[IAugment] = None) -> None:
+        super().__init__()
+        self.dataset = dataset
+        self.augment = augment
 
-def ensure_recording_columns(recordings_df):
-    required_columns = ["filepath", "start_time", "end_time"]
-    for column in required_columns:
-        if column not in recordings_df.columns:
-            raise Exception(f"labels DataFrame is missing required column {column}")
-    recordings_df.start_time = pd.to_datetime(recordings_df.start_time, errors="coerce")
-    recordings_df.end_time = pd.to_datetime(recordings_df.end_time, errors="coerce")
-    return recordings_df
+    def __len__(self) -> int:
+        return len(self.dataset) * self.augment.branching() + len(self.dataset)
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        real_idx = index // (self.augment.branching() + 1)
+        ai = int(index % (self.augment.branching()))
+        if index % (self.augment.branching() + 1) == 0:
+            return self.dataset[real_idx]
+        else:
+            data, label = self.dataset[real_idx]
+            augmented = self.augment(data, label)
+            return augmented[ai]
 
 class GLIDERDatamodule(pl.LightningDataModule):
     def __init__(
         self, 
         recordings: pd.DataFrame,
         labels: pd.DataFrame,
+        nfft: int,
+        nmels: int,
+        hop_length: int,
         clip_duration: Optional[Union[float, int]] = None,
         clip_overlap: Optional[Union[float, int]] = 0.0,
+        train_percentage: Optional[float] = 0.8,
+        val_percentage: Optional[float] = 0.1,
+        specaugment: Optional[bool] = True,
+        seed: Optional[Union[float, int]] = 42,
         verbose: bool = False,
         train_transforms=None, 
         val_transforms=None, 
@@ -205,42 +124,113 @@ class GLIDERDatamodule(pl.LightningDataModule):
         dims=None):
         super().__init__(train_transforms, val_transforms, test_transforms, dims)
 
-        self.recordings = ensure_recording_columns(recordings)
+        self.recordings = utils.ensure_recording_columns(recordings)
         duplicated = self.recordings.duplicated(subset=["filepath"])
         print(f"Found {len(self.recordings[duplicated])} duplicate files, dropping duplicates")
         self.recordings = self.recordings.drop_duplicates(subset=["filepath"], keep="first", inplace=False, ignore_index=True)
-        print(self.recordings["duration_seconds"].sum() / (clip_duration - clip_overlap))
+        
+        nonexisting_recordings = self.recordings.filepath.apply(lambda filepath: not pathlib.Path(filepath).exists())
+        if len(self.recordings[nonexisting_recordings]) > 0:
+            print(f"There are {len(self.recordings[nonexisting_recordings])} out of {len(self.recordings)} recordings that does not exists on the local filesystem. Dropping these recordings.")
+            self.recordings = self.recordings[~nonexisting_recordings]
 
-        self.labels, self.class_values = ensure_dataframe_columns(labels)
+        self.labels, self._class_values = utils.ensure_dataframe_columns(labels)
+        self._class_values = tuple(np.sort(self._class_values, axis=0))
         if len(self.recordings.sample_rate.unique()) != 1:
             raise Exception(f"There are differing sampling rates used among the recordings. Found sampling rates: {self.recordings.sample_rate.unique()}")
         self.sample_rate = self.recordings.sample_rate.max()
+        
         self.clip_duration = clip_duration
         self.clip_overlap = clip_overlap
+        self.train_part = train_percentage
+        self.val_part = val_percentage
+        self.nfft = nfft
+        self.nmels = nmels
+        self.hop_length = hop_length
+        self.specaugment = specaugment
+
         self._positive_label_value = True
         self._negative_label_value = False
+
+
+        self.verbose = verbose
         if self.clipping_enabled:
             self.clips = self.get_clips()
-            self.labeled_clips = self.apply_labels(self.clips)
+            self.labeled_clips = self.apply_labels(self.clips, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
         else:
             self.labeled_recordings = self.apply_labels(self.recordings, positive_value=self._positive_label_value, negative_value=self._negative_label_value)
         
         self.label_distributions = self.group_by_labels(self.audio)
-        self.train_part, self.val_part, self.test_part = 0.64, 0.16, 0.2
+        self.seed = 20220621
 
     def setup(self, stage: Optional[str] = None):
         subsets = [distribution["subset"] for distribution in self.label_distributions]
         d = [len(distribution["subset"]) for distribution in self.label_distributions]
         n_in_smallest_subset = np.min(d)
-        print(n_in_smallest_subset)
-        print(d)
-        print(len(self.audio))
-        print(np.sum(d))
-        n_for_training = int(n_in_smallest_subset * len(self.class_values) * self.train_part)
+        # Training set is balanced, with equal number of instances ber combination of labels
         n_for_training_per_class = int(n_in_smallest_subset * self.train_part)
-        training_clips = pd.concat([subset.iloc[:n_for_training_per_class] for subset in subsets])
-        print(training_clips)
+        # Validation and test sets should have the same distribution, and not be balanced
+        rng = np.random.default_rng(seed=self.seed)
+        train_indeces = np.array([])
+        for subset in subsets:
+            indeces = subset.index.values
+            for_training = rng.choice(indeces, size=n_for_training_per_class, replace=False)
+            train_indeces = np.concatenate((train_indeces, for_training))
+
+        train = self.audio.loc[train_indeces]
+        duplicate = train.duplicated(subset=["filepath", "start_time", "end_time", "offset"])
+        if len(train[duplicate]) > 0:
+            raise Exception(f"There are {len(train[duplicate])} duplicate clips in the training set")
+
+        remaining_distributions = [subset.loc[~subset.index.isin(train_indeces)] for subset in subsets]
+        # Draw self.val_part from each subset, and remaining goes to testing
+        validation_indeces = np.array([])
+        for subset in remaining_distributions:
+            indeces = subset.index.values
+            for_validation = rng.choice(indeces, size=int(len(subset) * self.val_part), replace=False)
+            validation_indeces = np.concatenate((validation_indeces, for_validation))
         
+        val = self.audio.loc[validation_indeces]
+        test = self.audio.loc[~self.audio.index.isin(validation_indeces) & ~self.audio.index.isin(train_indeces)]
+
+        total_in_splits = np.sum([len(train), len(val), len(test)])
+        if total_in_splits != len(self.audio):
+            raise Exception(f"Unexpected total number of examples in train, val and test splits. Expected {len(train)} train + {len(val)} val + {len(test)} test = {len(self.audio)}, but found {total_in_splits}")
+
+        duplicate = train.duplicated(subset=["filepath", "start_time", "end_time", "offset"])
+        if len(train[duplicate]) > 0:
+            raise Exception(f"There are {len(train[duplicate])} duplicated examples in train set")
+        
+        duplicate = val.duplicated(subset=["filepath", "start_time", "end_time", "offset"])
+        if len(val[duplicate]) > 0:
+            raise Exception(f"There are {len(val[duplicate])} duplicated examples in val set")
+        
+        duplicate = test.duplicated(subset=["filepath", "start_time", "end_time", "offset"])
+        if len(test[duplicate]) > 0:
+            raise Exception(f"There are {len(test[duplicate])} duplicated examples in test set")
+
+        combined = pd.concat((train, test, val), ignore_index=True)
+        duplicate = combined.duplicated(subset=["filepath", "start_time", "end_time", "offset"])
+        if len(combined[duplicate]) > 0:
+            raise Exception(f"There are {len(combined[duplicate])} duplicated examples in train, val and test sets (combined)")
+
+        self.train_df = train
+        self.val_df = val
+        self.test_df = test
+
+        self.train = AudioDataset(
+            self.train_df, 
+            self._class_values, 
+            nmels=128, 
+            nfft=3200, 
+            hop_length=1280, 
+            positive_label_value=self._positive_label_value, 
+            negative_label_value=self._negative_label_value
+        )
+        indeces = rng.integers(0, len(self.train), 10)
+        for i in indeces:
+            self.train[i]
+            print()
 
     @property
     def audio(self) -> pd.DataFrame:
@@ -252,7 +242,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
         return self.clip_duration is not None
 
     def apply_labels(self, audio_df: pd.DataFrame, positive_value: Any = True, negative_value: Any = False) -> pd.DataFrame:
-        for cls in self.class_values:
+        for cls in self._class_values:
             audio_df[cls] = negative_value
         for i in range(len(self.labels)):
             label = self.labels.iloc[i]
@@ -262,6 +252,10 @@ class GLIDERDatamodule(pl.LightningDataModule):
         return audio_df
 
     def get_clips(self):
+        # df = pd.read_csv("clips.csv")
+        # df.start_time = pd.to_datetime(df.start_time, errors="coerce")
+        # df.end_time = pd.to_datetime(df.end_time, errors="coerce")
+        # return df
         samples_per_clip = int(self.clip_duration * self.sample_rate)
         overlapping_samples = int(self.clip_overlap * self.sample_rate)
         clip_data = []
@@ -282,9 +276,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
         return pd.DataFrame(data=clip_data)
 
     def __len__(self) -> int:
-        if self.clipping_enabled:
-            return len(self.clips)
-        return len(self.recordings)
+        return len(self.audio)
 
     def _read_params(self, index: int) -> Tuple[pd.DataFrame, float]:
         if self.clipping_enabled:
@@ -307,11 +299,11 @@ class GLIDERDatamodule(pl.LightningDataModule):
         raise NotImplementedError
 
     def _label_combinations(self, positive_value: Optional[Any] = True, negative_value: Optional[any] = False):
-        C = len(self.class_values)
+        C = len(self._class_values)
         N = 2**C
         helper = np.full((N, C), fill_value=negative_value)
         frequency = 1
-        for c in range(len(self.class_values)):
+        for c in range(len(self._class_values)):
             current = positive_value
             for i in range(N):
                 if i % frequency == 0:
@@ -320,7 +312,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
             frequency *= 2
         output = []
         for i in range(N):
-            data = {self.class_values[c]:  helper[i, c] for c in range(len(self.class_values))}
+            data = {self._class_values[c]:  helper[i, c] for c in range(len(self._class_values))}
             output.append(data)
         return output
 
@@ -361,9 +353,9 @@ def preload(args):
     if output_path.suffix != ".csv":
         raise ValueError(f"Output path {output_path} is not .csv file")
 
-    filepaths = get_audiofiles([path], verbose=args.verbose)
+    filepaths = utils.get_audiofiles([path], verbose=args.verbose)
     print(f"Found {len(filepaths)} .wav files in local path: {path}")
-    recordings = get_audiofile_information(audiofiles=filepaths, processes=args.processes, limit=args.limit)
+    recordings = utils.get_audiofile_information(audiofiles=filepaths, processes=args.processes, limit=args.limit)
     print(recordings)
     print(f"Saving audiofiles metadata to: {output_path}")
     recordings.to_csv(output_path, index=False)
