@@ -368,9 +368,10 @@ class GLIDERDatamodule(pl.LightningDataModule):
         if len(combined[duplicate]) > 0:
             raise Exception(f"There are {len(combined[duplicate])} duplicated examples in train, val and test sets (combined)")
 
-        self.train_df = train.sample(frac=1, axis='index', replace=False) #Shuffles dataframe, important to avoid first batches to return same labels
-        self.val_df = val.sample(frac=1, axis='index', replace=False)
-        self.test_df = test.sample(frac=1, axis='index', replace=False)
+        random_state = np.random.RandomState(seed=self.seed)
+        self.train_df = train.sample(frac=1, axis='index', replace=False, random_state=random_state) #Shuffles dataframe, important to avoid first batches to return same labels
+        self.val_df = val.sample(frac=1, axis='index', replace=False, random_state=random_state)
+        self.test_df = test.sample(frac=1, axis='index', replace=False, random_state=random_state)
 
         self.train = AudioDataset(
             data=self.train_df,
