@@ -152,8 +152,8 @@ def init():
     num_nodes_default = int(os.environ.get("SLURM_NNODES", default=1))
     parser.add_argument("--num_nodes", type=int, default=num_nodes_default, help="The number of compute nodes to use during training. Defaults to the environment vairable 'SLURM_NNODES' if present. If not set and the environment variable is not found and the '--strategy' argument is 'ddp' or 'ddp2' will raise an exception, if other strategy is used will default to 'None'")
     
-    num_workers_default = int(os.environ.get("SLURM_CPUS_ON_NODE", default=0))
-    parser.add_argument("--num_workers", type=int, default=num_workers_default, help="The number of workers per node to use. Defaults to value of the 'SLURM_CPUS_ON_NODE' environment variable if available or 0 if not available. If 0 the data will be loaded from the main process (for each GPU)")
+    num_workers_default = int(os.environ.get("SLURM_CPUS_PER_TASK", default=0))
+    parser.add_argument("--num_workers", type=int, default=num_workers_default, help="The number of workers per node to use. Defaults to value of the 'SLURM_CPUS_PER_TASK' environment variable if available or 0 if not available. If 0 the data will be loaded from the main process (for each GPU)")
 
     parser.add_argument("--dev_run", action="store_true", default=False, help="If this flag is provided the PytorchLightning.Trainer instantiation will receive 'fast_dev_run=True'")
     parser.add_argument("--limit_train_batches", type=int, default=1.0, required=False, help="The number of instances of the training dataset to use. If not provided will use the entire training dataset.")
