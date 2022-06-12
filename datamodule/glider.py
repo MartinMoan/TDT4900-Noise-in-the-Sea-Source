@@ -424,6 +424,7 @@ class GLIDERDatamodule(pl.LightningDataModule):
             transforms=self.normalizer
         )
         self.setup_complete = True
+        self._track()
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
