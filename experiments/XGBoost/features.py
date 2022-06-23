@@ -14,8 +14,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy.stats import skew
-labels_path = pathlib.Path("/Users/martinmoan/TDT4900-Noise-in-the-Sea/code/datamodule/metadata/labels.csv")
-metadata_path = pathlib.Path("/Users/martinmoan/TDT4900-Noise-in-the-Sea/code/datamodule/metadata/metadata.csv")
+
+labels_path = pathlib.Path(__file__).parent.parent.parent.joinpath("datamodule", "metadata", "labels.csv")
+metadata_path = pathlib.Path(__file__).parent.parent.parent.joinpath("datamodule", "metadata", "metadata.csv")
 
 sys.path.insert(0, str(pathlib.Path(git.Repo(pathlib.Path(__file__).parent, search_parent_directories=True).working_dir)))
 import config
