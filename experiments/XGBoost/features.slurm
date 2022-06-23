@@ -16,4 +16,4 @@ source ~/.bashrc
 conda activate TDT4900
 conda info --envs
 
-srun features.py
+srun python features.py
